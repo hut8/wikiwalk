@@ -13,20 +13,44 @@ Install `mariadb-server`. You proably want `pv` too for progress when importing.
 
 Before trying to run anything, download the `page` and `pagelinks` tables, and make a database:
 
+### `page` table
+
 ```bash
 wget https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-page.sql.gz
-wget https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pagelinks.sql.gz
 mysql -e 'CREATE DATABASE wiki;'
 ```
 
-Then import these. It will take a very long time. The page table is relatively small, but the pagelinks table contains a bit over a billion rows (YMMV)
+Then import the page table.
 
 ```sh
 pv enwiki-latest-page.sql.gz | zcat | mysql wiki
+```
+
+Now create a `vertexes` table that is a stripped down version of the `page` table:
+
+```sql
+CREATE TABLE vertexes AS
+      SELECT page_id, page_namespace, page_title
+        FROM page;
+
+-- Then you can drop `page` if you want to save some space!
+DROP TABLE page;
+
+ALTER TABLE vertexes ADD PRIMARY KEY (page_id); -- 5 Minutes
+ALTER TABLE vertexes ADD INDEX page_title_index (page_title); -- 5 Minutes
+```
+
+### `pagelinks` table
+
+`pagelinks` is a huge table with a bit over a billion rows. Immediately after the pagelinks table is importing, you will quickly want to drop all the indexes and the primary key. Alternatively, you could try editing the dump to not include any keys/indexes, but this is easier. If you don't do this, it will take forever to import (well over a week), and will take over 100 GB more than it would without the indexes.
+
+```sh
+wget https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pagelinks.sql.gz
+# this will take around 7 or 8 hours
 pv enwiki-latest-pagelinks.sql.gz | zcat | mysql wiki
 ```
 
-Immediately after the pagelinks table is importing, you will quickly want to drop all the indexes and the primary key. Alternatively, you could try editing the dump to not include any keys/indexes, but this is easier. If you don't do this, it will take forever to import (well over a week), and will take over 100 GB more than it would without the indexes.
+As this is importing, as soon as possible, fire up a SQL REPL with `mysql wiki` and enter this:
 
 ```sql
 -- This will cause the inserts on pagelinks to block while the entire table is copied, so don't wait long to start it!
@@ -35,7 +59,7 @@ ALTER TABLE pagelinks DROP INDEX pl_namespace;
 ALTER TABLE pagelinks DROP INDEX pl_backlinks_namespace;
 ```
 
-Now create the main edges table:
+Wait until the pagelinks table is imported entirely. Now create the main edges table:
 
 ```sql
 CREATE TABLE `edges` (
@@ -43,4 +67,20 @@ CREATE TABLE `edges` (
   `dest_page_id` int(8) unsigned NOT NULL,
   PRIMARY KEY (`source_page_id`,`dest_page_id`)
 ) ENGINE=InnoDB;
+
+-- FIXME: Delete everything in irrelevant namespaces
+
+-- add a nullable column for the page being linked to. NULL indicates the page doesn't exist.
+ALTER TABLE pagelinks ADD COLUMN pl_to INT(8) unsigned NULL;
+
+-- populate the above column
+    UPDATE pagelinks pl
+INNER JOIN vertexes v
+        ON pl.pl_title = v.page_title
+      -- AND pl. = v.page_namespace
+       SET pl.pl_to = v.page_id
+     WHERE pl.pl_to IS NULL;
+
+-- ALTER TABLE pagelinks ADD INDEX pl_title_index (pl_title);
 ```
+
