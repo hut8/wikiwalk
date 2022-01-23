@@ -67,16 +67,9 @@ ALTER TABLE pagelinks DROP INDEX pl_namespace;
 ALTER TABLE pagelinks DROP INDEX pl_backlinks_namespace;
 ```
 
-Wait until the pagelinks table is imported entirely. Now create the main edges table:
+Wait until the pagelinks table is imported entirely. Clean up all the non-zero-namespace links (we don't care about talk pages, user pages, user talk pages, etc.):
 
 ```sql
-CREATE TABLE `edges` (
-  `source_page_id` int(8) unsigned NOT NULL,
-  `dest_page_id` int(8) unsigned NOT NULL,
-  PRIMARY KEY (`source_page_id`,`dest_page_id`)
-) ENGINE=InnoDB;
-
--- Delete everything in irrelevant namespaces
 DELETE FROM vertexes WHERE page_namespace <> 0;
 ALTER TABLE vertexes DROP COLUMN page_namespace;
 
@@ -95,9 +88,21 @@ DELETE FROM pagelinks WHERE pl_from_namespace <> 0;
 UNLOCK TABLES;
 COMMIT;
 ALTER TABLE pagelinks DROP INDEX pl_from_namespace_index;
-
-
-
 -- ALTER TABLE pagelinks ADD INDEX pl_title_index (pl_title);
 ```
 
+Populate the edges table
+
+```sql
+CREATE TABLE `edges` (
+  `source_page_id` int(8) unsigned NOT NULL,
+  `dest_page_id` int(8) unsigned NOT NULL,
+  PRIMARY KEY (`source_page_id`,`dest_page_id`)
+) ENGINE=InnoDB;
+
+INSERT INTO edges (source_page_id, dest_page_id)
+     SELECT pl.pl_from, v.page_id
+       FROM pagelinks pl
+ INNER JOIN vertexes v
+         ON v.page_title = pl.pl_title; 
+```
