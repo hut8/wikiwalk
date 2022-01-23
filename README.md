@@ -81,15 +81,22 @@ DELETE FROM vertexes WHERE page_namespace <> 0;
 ALTER TABLE vertexes DROP COLUMN page_namespace;
 
 ALTER TABLE pagelinks ADD INDEX pl_namespace_index (pl_namespace);
-ALTER TABLE pagelinks ADD INDEX pl_from_namespace_index (pl_from_namespace);
 
-SET @@AUTOCOMMIT=0; -- This and the next line avoid 
+SET @@AUTOCOMMIT=0;
 LOCK TABLES pagelinks WRITE;
 DELETE FROM pagelinks WHERE pl_from_namespace <> 0 OR pl_namespace <> 0;
 UNLOCK TABLES;
 COMMIT;
-
 ALTER TABLE pagelinks DROP INDEX pl_namespace_index;
+
+ALTER TABLE pagelinks ADD INDEX pl_from_namespace_index (pl_from_namespace);
+LOCK TABLES pagelinks WRITE;
+DELETE FROM pagelinks WHERE pl_from_namespace <> 0;
+UNLOCK TABLES;
+COMMIT;
+ALTER TABLE pagelinks DROP INDEX pl_from_namespace_index;
+
+
 
 -- ALTER TABLE pagelinks ADD INDEX pl_title_index (pl_title);
 ```
