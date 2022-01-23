@@ -11,7 +11,15 @@ wikipedia-speedrun 'Exploding animal' 'Cucumber'
 Install `mariadb-server`. You proably want `pv` too for progress when importing.
 ## Data setup
 
-Before trying to run anything, download the `page` and `pagelinks` tables, and make a database:
+Add this line to `/etc/mysql/mariadb.conf.d/50-server.conf`:
+
+```
+innodb_buffer_pool_size = 1G
+```
+
+Then restart mariadb: `sudo systemctl restart mysql`
+
+Download the `page` and `pagelinks` tables, and make a database:
 
 ### `page` table
 
@@ -68,18 +76,20 @@ CREATE TABLE `edges` (
   PRIMARY KEY (`source_page_id`,`dest_page_id`)
 ) ENGINE=InnoDB;
 
--- FIXME: Delete everything in irrelevant namespaces
+-- Delete everything in irrelevant namespaces
+DELETE FROM vertexes WHERE page_namespace <> 0;
+ALTER TABLE vertexes DROP COLUMN page_namespace;
 
--- add a nullable column for the page being linked to. NULL indicates the page doesn't exist.
-ALTER TABLE pagelinks ADD COLUMN pl_to INT(8) unsigned NULL;
+ALTER TABLE pagelinks ADD INDEX pl_namespace_index (pl_namespace);
+ALTER TABLE pagelinks ADD INDEX pl_from_namespace_index (pl_from_namespace);
 
--- populate the above column
-    UPDATE pagelinks pl
-INNER JOIN vertexes v
-        ON pl.pl_title = v.page_title
-      -- AND pl. = v.page_namespace
-       SET pl.pl_to = v.page_id
-     WHERE pl.pl_to IS NULL;
+SET @@AUTOCOMMIT=0; -- This and the next line avoid 
+LOCK TABLES pagelinks WRITE;
+DELETE FROM pagelinks WHERE pl_from_namespace <> 0 OR pl_namespace <> 0;
+UNLOCK TABLES;
+COMMIT;
+
+ALTER TABLE pagelinks DROP INDEX pl_namespace_index;
 
 -- ALTER TABLE pagelinks ADD INDEX pl_title_index (pl_title);
 ```
