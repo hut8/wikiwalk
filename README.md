@@ -77,9 +77,7 @@ ALTER TABLE vertexes DROP COLUMN page_namespace;
 -- Pagelinks cleanup
 ALTER TABLE pagelinks ADD INDEX pl_namespace_index (pl_namespace);
 DROP PROCEDURE IF EXISTS clean_pagelinks;
-
 DELIMITER $$
-
 CREATE PROCEDURE clean_pagelinks()
 BEGIN   
     REPEAT
@@ -89,18 +87,14 @@ BEGIN
         LIMIT 1000000;
     UNTIL ROW_COUNT() = 0 END REPEAT;
 END$$
-
+CALL clean_pagelinks();
 DELIMITER ;
-
 ALTER TABLE pagelinks DROP INDEX pl_namespace_index;
 
 -- Clean pagelinks in reverse (pl_from_namespace)
 ALTER TABLE pagelinks ADD INDEX pl_from_namespace_index (pl_from_namespace);
-
 DROP PROCEDURE IF EXISTS clean_pagelinks;
-
 DELIMITER $$
-
 CREATE PROCEDURE clean_pagelinks()
 BEGIN   
     REPEAT
@@ -110,11 +104,9 @@ BEGIN
         LIMIT 1000000;
     UNTIL ROW_COUNT() = 0 END REPEAT;
 END$$
-
 DELIMITER ;
-
+CALL clean_pagelinks();
 DROP PROCEDURE clean_pagelinks;
-
 ALTER TABLE pagelinks DROP INDEX pl_from_namespace_index;
 ```
 
@@ -127,9 +119,20 @@ CREATE TABLE `edges` (
   PRIMARY KEY (`source_page_id`,`dest_page_id`)
 ) ENGINE=InnoDB;
 
+-- This will probably take a week or so
 INSERT INTO edges (source_page_id, dest_page_id)
      SELECT pl.pl_from, v.page_id
        FROM pagelinks pl
  INNER JOIN vertexes v
-         ON v.page_title = pl.pl_title; 
+         ON v.page_title = pl.pl_title;
+
+-- To check on the progress of above, find the number of rows of pagelinks:
+SELECT COUNT(*) FROM pagelinks;
+-- 623551928 is the total on mine
+
+-- Allow reading from the middle of the INSERT:
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+-- Replace 623551928 with count of pagelinks from above
+-- Current time could help you to figure out the rate of inserts
+SELECT (COUNT(*)/623551928)*100, CURRENT_TIME() FROM edges; 
 ```
