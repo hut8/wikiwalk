@@ -79,7 +79,7 @@ ALTER TABLE pagelinks ADD INDEX pl_namespace_index (pl_namespace);
 DROP PROCEDURE IF EXISTS clean_pagelinks;
 DELIMITER $$
 CREATE PROCEDURE clean_pagelinks()
-BEGIN   
+BEGIN
     REPEAT
         DO SLEEP(1);
         DELETE FROM pagelinks
@@ -87,8 +87,8 @@ BEGIN
         LIMIT 1000000;
     UNTIL ROW_COUNT() = 0 END REPEAT;
 END$$
-CALL clean_pagelinks();
 DELIMITER ;
+CALL clean_pagelinks();
 ALTER TABLE pagelinks DROP INDEX pl_namespace_index;
 
 -- Clean pagelinks in reverse (pl_from_namespace)
@@ -96,7 +96,7 @@ ALTER TABLE pagelinks ADD INDEX pl_from_namespace_index (pl_from_namespace);
 DROP PROCEDURE IF EXISTS clean_pagelinks;
 DELIMITER $$
 CREATE PROCEDURE clean_pagelinks()
-BEGIN   
+BEGIN
     REPEAT
         DO SLEEP(1);
         DELETE FROM pagelinks
@@ -134,5 +134,5 @@ SELECT COUNT(*) FROM pagelinks;
 SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 -- Replace 623551928 with count of pagelinks from above
 -- Current time could help you to figure out the rate of inserts
-SELECT (COUNT(*)/623551928)*100, CURRENT_TIME() FROM edges; 
+SELECT (COUNT(*)/623551928)*100, CURRENT_TIME() FROM edges;
 ```
