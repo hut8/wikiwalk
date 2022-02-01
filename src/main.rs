@@ -14,14 +14,15 @@ use std::env;
 #[table_name = "vertexes"]
 // If table name is not specified, diesel pluralizes to vertexs
 pub struct Vertex {
-    pub id: u32,
+    pub id: i32,
     pub title: String,
 }
 
-#[derive(Queryable)]
+#[derive(Identifiable, Queryable, PartialEq, Debug)]
+#[primary_key(source_vertex_id, dest_vertex_id)]
 pub struct Edge {
-    pub source_vertex_id: u32,
-    pub dest_vertex_id: u32,
+    pub source_vertex_id: i32,
+    pub dest_vertex_id: i32,
 }
 
 pub fn establish_connection() -> PgConnection {
@@ -33,6 +34,11 @@ pub fn establish_connection() -> PgConnection {
 
 fn print_usage(exe: &str) {
     println!("Usage: {} 'Source Article' 'Destination Article'", exe);
+}
+
+fn load_vertex(name: &str, conn: &PgConnection) -> QueryResult<Vertex> {
+    use crate::vertexes::dsl::*;
+    vertexes.filter(title.eq(name)).first::<Vertex>(conn)
 }
 
 fn main() {
@@ -51,6 +57,8 @@ fn main() {
 
     let conn = establish_connection();
 
-    // let source_vertex = vertexes::filter(vertexes::title.eq(source_title)).first::<Vertex>(&conn);
-    // println!("{:#?}", source_vertex);
+    let source_vertex = load_vertex(source_title, &conn);
+    let dest_vertex = load_vertex(dest_title, &conn);
+    println!("{:#?}", source_vertex);
+    println!("{:#?}", dest_vertex);
 }

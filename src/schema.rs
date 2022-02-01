@@ -8,7 +8,7 @@ table! {
 table! {
     vertexes (id) {
         id -> Int4,
-        title -> Nullable<Varchar>,
+        title -> Varchar,
     }
 }
 
