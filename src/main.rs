@@ -2,12 +2,17 @@
 extern crate diesel;
 extern crate dotenv;
 
+pub mod schema;
+
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenv::dotenv;
+use schema::{edges, vertexes};
 use std::env;
 
-#[derive(Queryable)]
+#[derive(Identifiable, Queryable, PartialEq, Debug)]
+#[table_name = "vertexes"]
+// If table name is not specified, diesel pluralizes to vertexs
 pub struct Vertex {
     pub id: u32,
     pub title: String,
@@ -26,10 +31,6 @@ pub fn establish_connection() -> PgConnection {
     PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
 }
 
-fn page_id_by_name(name: &str) -> Option<u64> {
-    None
-}
-
 fn print_usage(exe: &str) {
     println!("Usage: {} 'Source Article' 'Destination Article'", exe);
 }
@@ -43,10 +44,13 @@ fn main() {
         print_usage(exe);
         return;
     }
-    let origin_title = &args[1];
+    let source_title = &args[1];
     let dest_title = &args[2];
 
-    println!("[{}] → [{}]", origin_title, dest_title);
+    println!("[{}] → [{}]", source_title, dest_title);
 
     let conn = establish_connection();
+
+    // let source_vertex = vertexes::filter(vertexes::title.eq(source_title)).first::<Vertex>(&conn);
+    // println!("{:#?}", source_vertex);
 }
