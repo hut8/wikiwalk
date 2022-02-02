@@ -61,7 +61,7 @@ fn print_usage(exe: &str) {
 
 fn load_vertex(name: &str, conn: &PgConnection) -> QueryResult<Vertex> {
     use crate::vertexes::dsl::*;
-    vertexes.filter(title.eq(name)).first::<Vertex>(conn)
+    vertexes.filter(title.ilike(name)).first::<Vertex>(conn)
 }
 
 fn load_neighbors(
