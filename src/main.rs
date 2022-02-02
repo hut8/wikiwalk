@@ -13,7 +13,7 @@ use std::env;
 use std::hash::{Hash, Hasher};
 // use std::process::exit;
 
-#[derive(Identifiable, Queryable, Debug)]
+#[derive(Identifiable, Queryable, Debug, Clone)]
 #[table_name = "vertexes"]
 // If table name is not specified, diesel pluralizes to vertexs
 pub struct Vertex {
@@ -35,7 +35,7 @@ impl PartialEq for Vertex {
 
 impl Eq for Vertex {}
 
-#[derive(Identifiable, Queryable, PartialEq, Debug, Associations)]
+#[derive(Identifiable, Queryable, PartialEq, Debug, Associations, Copy, Clone)]
 #[primary_key(source_vertex_id, dest_vertex_id)]
 #[belongs_to(Vertex, foreign_key = "source_vertex_id")]
 pub struct Edge {
@@ -64,23 +64,52 @@ fn load_vertex(name: &str, conn: &PgConnection) -> QueryResult<Vertex> {
     vertexes.filter(title.eq(name)).first::<Vertex>(conn)
 }
 
+fn load_neighbors(
+    source: &Vertex,
+    visited_ids: &mut HashSet<i32>,
+    conn: &PgConnection,
+) -> Vec<Vertex> {
+    use crate::vertexes::dsl::*;
+    use diesel::dsl::any;
+    let edges = Edge::belonging_to(source)
+        .load::<Edge>(conn)
+        .expect("load edges");
+    //let neighbors = vertexes.fil
+    let neighbor_ids: Vec<i32> = edges
+        .iter()
+        .map(|e| e.dest_vertex_id)
+        .filter(|x| !visited_ids.contains(x))
+        .collect();
+    // Now that we have encountered the neighbors, mark them as visited
+    visited_ids.extend(neighbor_ids.iter());
+    let neighbors = vertexes
+        .filter(id.eq(any(neighbor_ids)))
+        .load::<Vertex>(conn)
+        .expect("load neighbors");
+    println!("neighbors of [{}]: {}", source.title, neighbors.len());
+    neighbors
+}
+
 fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
     //let visited: HashSet<Vertex> = HashSet::from(&[source]);
     //let q: VecDeque<Vertex> = VecDeque::from(&[source]);
-    let mut visited: HashSet<&Vertex> = HashSet::new();
-    let mut q: VecDeque<&Vertex> = VecDeque::new();
+    let mut visited_ids: HashSet<i32> = HashSet::new();
+    let mut q: VecDeque<Vertex> = VecDeque::new();
 
-    q.push_back(source);
-    visited.insert(source);
+    q.push_back(source.clone());
+    visited_ids.insert(source.id);
 
     loop {
-        if let Some(current) = q.pop_back() {
-            // Load all edges
-            let edges = Edge::belonging_to(current)
-                .load::<Edge>(conn)
-                .expect("load edges");
-        } else {
-            break;
+        let current = q.pop_back();
+        match current {
+            Some(v) => {
+                let neighbors = load_neighbors(&v, &mut visited_ids, conn);
+                q.extend(neighbors);
+            }
+            None => {
+                println!("queue empty");
+                break;
+            }
         }
     }
 }
