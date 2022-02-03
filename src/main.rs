@@ -159,8 +159,8 @@ fn main() {
         print_usage(exe);
         return;
     }
-    let source_title = &args[1];
-    let dest_title = &args[2];
+    let source_title = &args[1].replace(" ", "_");
+    let dest_title = &args[2].replace(" ", "_");
 
     println!("[{}] → [{}]", source_title, dest_title);
 
