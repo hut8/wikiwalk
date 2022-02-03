@@ -86,12 +86,6 @@ fn load_neighbors(
         .filter(id.eq(any(neighbor_ids)))
         .load::<Vertex>(conn)
         .expect("load neighbors");
-    // println!(
-    //     "neighbors of [{}] [{}]: {}",
-    //     source.title,
-    //     source.id,
-    //     neighbors.len()
-    // );
     neighbors
 }
 
@@ -115,6 +109,11 @@ fn build_path<'a>(
     path
 }
 
+fn format_path(vertexes: Vec<Vertex>) -> String {
+    let titles: Vec<String> = vertexes.into_iter().map(|v| v.title).collect();
+    titles.join(" → ")
+}
+
 fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
     let mut visited_ids: HashSet<i32> = HashSet::new();
     let mut q: VecDeque<Vertex> = VecDeque::new();
@@ -128,12 +127,12 @@ fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
         let current = q.pop_front();
         match current {
             Some(v) => {
-                println!("→ {}", v.title);
+                println!("{} → ...", format_path(build_path(source, &v, &parents)));
                 // FIXME: Compare references better
                 if dest.id == v.id {
                     println!("found destination at {:#?}", dest);
-                    let id_path = build_path(source, dest, &parents);
-                    println!("path: {:#?}", id_path);
+                    let path = build_path(source, dest, &parents);
+                    println!("path: {}", format_path(path));
                     break;
                 }
                 let neighbors = load_neighbors(&v, &mut visited_ids, conn);
