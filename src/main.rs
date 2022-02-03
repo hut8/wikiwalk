@@ -114,6 +114,7 @@ fn format_path(vertexes: Vec<Vertex>) -> String {
     titles.join(" → ")
 }
 
+/// Breadth First Search from source to dest
 fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
     let mut visited_ids: HashSet<i32> = HashSet::new();
     let mut q: VecDeque<Vertex> = VecDeque::new();
@@ -137,6 +138,7 @@ fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
                 }
                 let neighbors = load_neighbors(&v, &mut visited_ids, conn);
                 for n in &neighbors {
+                    // TODO visited_ids should be populated here; not in load_neighbors
                     parents.insert(n.clone(), v.clone());
                 }
                 q.extend(neighbors);
