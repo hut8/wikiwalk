@@ -4,6 +4,7 @@ extern crate dotenv;
 
 pub mod schema;
 
+use clap::Parser;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenv::dotenv;
@@ -11,6 +12,7 @@ use schema::{edges, vertexes};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::hash::{Hash, Hasher};
+
 // use std::process::exit;
 
 #[derive(Identifiable, Queryable, Debug, Clone)]
@@ -53,10 +55,6 @@ pub fn establish_connection() -> PgConnection {
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
-}
-
-fn print_usage(exe: &str) {
-    println!("Usage: {} 'Source Article' 'Destination Article'", exe);
 }
 
 fn load_vertex(name: &str, conn: &PgConnection) -> QueryResult<Vertex> {
@@ -151,24 +149,38 @@ fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
     }
 }
 
+/// CLI Options
+#[derive(Parser)]
+#[clap(author, version, about, long_about = None)]
+struct Cli {
+    /// Source article
+    source: String,
+    /// Destination article
+    destination: String,
+    /// Verbose output
+    #[clap(short, long)]
+    verbose: bool,
+}
+
 fn main() {
     println!("Wikipedia Speedrun Computer");
-    let args: Vec<String> = env::args().collect();
-    let exe = &args[0];
+    let cli = Cli::parse();
+    // let args: Vec<String> = env::args().collect();
+    // let exe = &args[0];
 
-    if args.len() != 3 {
-        print_usage(exe);
-        return;
-    }
-    let source_title = &args[1].replace(" ", "_");
-    let dest_title = &args[2].replace(" ", "_");
+    // if args.len() != 3 {
+    //     print_usage(exe);
+    //     return;
+    // }
+    let source_title = cli.source.replace(" ", "_");
+    let dest_title = cli.destination.replace(" ", "_");
 
     println!("[{}] → [{}]", source_title, dest_title);
 
     let conn = establish_connection();
 
-    let source_vertex = load_vertex(source_title, &conn).expect("source not found");
-    let dest_vertex = load_vertex(dest_title, &conn).expect("destination not found");
+    let source_vertex = load_vertex(&source_title, &conn).expect("source not found");
+    let dest_vertex = load_vertex(&dest_title, &conn).expect("destination not found");
     println!("{:#?}", source_vertex);
     println!("{:#?}", dest_vertex);
 
