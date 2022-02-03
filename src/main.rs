@@ -8,7 +8,7 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenv::dotenv;
 use schema::{edges, vertexes};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::hash::{Hash, Hasher};
 // use std::process::exit;
@@ -86,28 +86,64 @@ fn load_neighbors(
         .filter(id.eq(any(neighbor_ids)))
         .load::<Vertex>(conn)
         .expect("load neighbors");
-    println!("neighbors of [{}]: {}", source.title, neighbors.len());
+    // println!(
+    //     "neighbors of [{}] [{}]: {}",
+    //     source.title,
+    //     source.id,
+    //     neighbors.len()
+    // );
     neighbors
 }
 
+fn build_path<'a>(
+    source: &'a Vertex,
+    dest: &'a Vertex,
+    parents: &'a HashMap<Vertex, Vertex>,
+) -> Vec<Vertex> {
+    let mut path: Vec<Vertex> = Vec::new();
+    let mut current = dest;
+    loop {
+        path.push(current.clone());
+        if current.id == source.id {
+            break;
+        }
+        current = parents
+            .get(&current)
+            .expect(&format!("parent not recorded for {:#?}", current));
+    }
+    path.reverse();
+    path
+}
+
 fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
-    //let visited: HashSet<Vertex> = HashSet::from(&[source]);
-    //let q: VecDeque<Vertex> = VecDeque::from(&[source]);
     let mut visited_ids: HashSet<i32> = HashSet::new();
     let mut q: VecDeque<Vertex> = VecDeque::new();
+    // parents - vertex -> which vertex came before
+    let mut parents: HashMap<Vertex, Vertex> = HashMap::new();
 
     q.push_back(source.clone());
     visited_ids.insert(source.id);
 
     loop {
-        let current = q.pop_back();
+        let current = q.pop_front();
         match current {
             Some(v) => {
+                println!("→ {}", v.title);
+                // FIXME: Compare references better
+                if dest.id == v.id {
+                    println!("found destination at {:#?}", dest);
+                    let id_path = build_path(source, dest, &parents);
+                    println!("path: {:#?}", id_path);
+                    break;
+                }
                 let neighbors = load_neighbors(&v, &mut visited_ids, conn);
+                for n in &neighbors {
+                    parents.insert(n.clone(), v.clone());
+                }
                 q.extend(neighbors);
             }
             None => {
-                println!("queue empty");
+                println!("No path from {} to {}", source.title, dest.title);
                 break;
             }
         }
