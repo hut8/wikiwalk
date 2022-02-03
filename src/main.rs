@@ -113,7 +113,7 @@ fn format_path(vertexes: Vec<Vertex>) -> String {
 }
 
 /// Breadth First Search from source to dest
-fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
+fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
     let mut visited_ids: HashSet<i32> = HashSet::new();
     let mut q: VecDeque<Vertex> = VecDeque::new();
     // parents - vertex -> which vertex came before
@@ -126,10 +126,11 @@ fn bfs(source: &Vertex, dest: &Vertex, conn: &PgConnection) {
         let current = q.pop_front();
         match current {
             Some(v) => {
-                println!("{} → ...", format_path(build_path(source, &v, &parents)));
+                if verbose {
+                    println!("{} → ...", format_path(build_path(source, &v, &parents)));
+                }
                 // FIXME: Compare references better
                 if dest.id == v.id {
-                    println!("found destination at {:#?}", dest);
                     let path = build_path(source, dest, &parents);
                     println!("path: {}", format_path(path));
                     break;
@@ -184,5 +185,5 @@ fn main() {
     println!("{:#?}", source_vertex);
     println!("{:#?}", dest_vertex);
 
-    bfs(&source_vertex, &dest_vertex, &conn);
+    bfs(&source_vertex, &dest_vertex, cli.verbose, &conn);
 }
