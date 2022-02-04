@@ -31,7 +31,12 @@ mysql -e 'CREATE DATABASE wiki;'
 Then import the page table.
 
 ```sh
-pv enwiki-latest-page.sql.gz | zcat | mysql wiki
+mysql wiki < sql/page-definition.sql
+# use tail to skip DDL below
+pv enwiki-latest-page.sql.gz |
+    zcat |
+    tail -n +46 |
+    mysql wiki
 ```
 
 Now create a `vertexes` table that is a stripped down version of the `page` table:
@@ -39,7 +44,9 @@ Now create a `vertexes` table that is a stripped down version of the `page` tabl
 ```sql
 CREATE TABLE vertexes AS
       SELECT page_id, page_namespace, page_title
-        FROM page;
+        FROM page
+       WHERE page_is_redirect = 0
+         AND page_namespace = 0;
 
 -- Then you can drop `page` if you want to save some space!
 DROP TABLE page;
