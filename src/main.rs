@@ -164,15 +164,8 @@ struct Cli {
 }
 
 fn main() {
-    println!("Wikipedia Speedrun Computer");
     let cli = Cli::parse();
-    // let args: Vec<String> = env::args().collect();
-    // let exe = &args[0];
 
-    // if args.len() != 3 {
-    //     print_usage(exe);
-    //     return;
-    // }
     let source_title = cli.source.replace(" ", "_");
     let dest_title = cli.destination.replace(" ", "_");
 
