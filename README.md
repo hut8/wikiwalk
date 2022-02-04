@@ -114,8 +114,7 @@ Populate the edges table
 ```sql
 CREATE TABLE `edges` (
   `source_page_id` int(8) unsigned NOT NULL,
-  `dest_page_id` int(8) unsigned NOT NULL,
-  PRIMARY KEY (`source_page_id`,`dest_page_id`)
+  `dest_page_id` int(8) unsigned NOT NULL
 ) ENGINE=InnoDB;
 
 -- This will probably take a week or so
@@ -123,7 +122,8 @@ INSERT INTO edges (source_page_id, dest_page_id)
      SELECT pl.pl_from, v.page_id
        FROM pagelinks pl
  INNER JOIN vertexes v
-         ON v.page_title = pl.pl_title;
+         ON v.page_title = pl.pl_title
+      WHERE pl.pl_namespace = 0 AND pl.pl_from_namespace = 0;
 
 -- Allow reading from the middle of the INSERT:
 SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
