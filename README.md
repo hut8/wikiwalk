@@ -134,4 +134,41 @@ SELECT COUNT(*) FROM pagelinks;
 -- Replace 623551928 with count of pagelinks from above
 -- Current time could help you to figure out the rate of inserts
 SELECT (COUNT(*)/623551928)*100, CURRENT_TIME() FROM edges;
+
+-- Export these tables to TSV files
+      SELECT source_page_id, dest_page_id
+        FROM edges
+    ORDER BY source_page_id, dest_page_id
+INTO OUTFILE '/mnt/storage/data/edges.txt';
+
+      SELECT page_id, page_title
+        FROM vertexes
+    ORDER BY page_id
+INTO OUTFILE '/mnt/storage/data/vertexes.txt';
+```
+
+### Import into Postgres:
+
+``` sql
+CREATE TABLE vertexes (
+    id integer NOT NULL,
+    title character varying NOT NULL
+);
+CREATE TABLE edges (
+    source_vertex_id integer NOT NULL,
+    dest_vertex_id integer NOT NULL
+);
+```
+
+``` bash
+pv vertexes.txt.xz | xzcat | psql --dbname=wiki --command='COPY vertexes (id, title) FROM STDIN'
+pv edges.txt.xz | xzcat | psql --dbname=wiki --command='COPY edges (source_vertex_id, dest_vertex_id) FROM STDIN'
+```
+
+```sql
+ALTER TABLE ONLY vertexes
+    ADD CONSTRAINT vertexes_pkey PRIMARY KEY (id);
+CREATE INDEX vertexes_title_idx ON public.vertexes USING btree (title);
+ALTER TABLE ONLY edges
+    ADD CONSTRAINT edges_pkey PRIMARY KEY (source_vertex_id, dest_vertex_id);
 ```
