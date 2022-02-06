@@ -116,6 +116,10 @@ fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
     let mut q: VecDeque<Vertex> = VecDeque::new();
     // parents - vertex -> which vertex came before
     let mut parents: HashMap<Vertex, Vertex> = HashMap::new();
+    let mut graph: HashMap<i32, Vertex> = HashMap::new();
+
+    graph.insert(source.id, source.clone());
+    graph.insert(dest.id, dest.clone());
 
     q.push_back(source.clone());
     visited_ids.insert(source.id);
