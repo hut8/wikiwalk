@@ -135,7 +135,6 @@ fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
                 }
                 let neighbors = load_neighbors(&v, &mut visited_ids, conn);
                 for n in &neighbors {
-                    // TODO visited_ids should be populated here; not in load_neighbors
                     parents.insert(n.clone(), v.clone());
                     // Now that we have encountered the neighbors, mark them as visited
                     visited_ids.insert(n.id);
