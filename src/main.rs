@@ -78,8 +78,6 @@ fn load_neighbors(
         .map(|e| e.dest_vertex_id)
         .filter(|x| !visited_ids.contains(x))
         .collect();
-    // Now that we have encountered the neighbors, mark them as visited
-    visited_ids.extend(neighbor_ids.iter());
     let neighbors = vertexes
         .filter(id.eq(any(neighbor_ids)))
         .load::<Vertex>(conn)
@@ -139,6 +137,8 @@ fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
                 for n in &neighbors {
                     // TODO visited_ids should be populated here; not in load_neighbors
                     parents.insert(n.clone(), v.clone());
+                    // Now that we have encountered the neighbors, mark them as visited
+                    visited_ids.insert(n.id);
                 }
                 q.extend(neighbors);
             }

@@ -138,13 +138,17 @@ SELECT (COUNT(*)/623551928)*100, CURRENT_TIME() FROM edges;
 -- Export these tables to TSV files
       SELECT source_page_id, dest_page_id
         FROM edges
-    ORDER BY source_page_id, dest_page_id
 INTO OUTFILE '/mnt/storage/data/edges.txt';
 
       SELECT page_id, page_title
         FROM vertexes
     ORDER BY page_id
 INTO OUTFILE '/mnt/storage/data/vertexes.txt';
+```
+
+``` bash
+xz /mnt/storage/data/vertexes.txt &
+xz /mnt/storage/data/edges.txt
 ```
 
 ### Import into Postgres:
