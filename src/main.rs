@@ -147,7 +147,11 @@ fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
                         ))
                     );
                 } else {
-                    sp.message(format!("Computing path - visited {}", visited_count));
+                    sp.message(format!(
+                        "Computing path - visited {} pages, queue size {}",
+                        visited_count,
+                        q.len()
+                    ));
                 }
                 if dest.id == vertex_id {
                     let path = build_path(source, dest, &parents, &graph);
