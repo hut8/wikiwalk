@@ -12,7 +12,10 @@ use schema::{edges, vertexes};
 use spinners::{Spinner, Spinners};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
+use std::fs::File;
 use std::hash::{Hash, Hasher};
+use std::io::prelude::*;
+use std::path::Path;
 
 // use std::process::exit;
 
@@ -51,6 +54,82 @@ pub struct Link<'a> {
     pub dest: &'a Vertex,
 }
 
+/// Writes appropriate null-terminated list of 4-byte values to al_file
+/// Each 4-byte value is a LE representation
+pub fn build_adjacency_list(al_file: &mut File, vertex_id: i32, conn: &PgConnection) -> u64 {
+    use crate::edges::dsl::*;
+    let edge_ids: Vec<i32> = edges
+        .filter(source_vertex_id.eq(vertex_id))
+        .select(dest_vertex_id)
+        .load::<i32>(conn)
+        .unwrap();
+    if edge_ids.len() == 0 {
+        // No outgoing edges or no such vertex
+        return 0;
+    }
+
+    // Position at which we are writing the thing.
+    let al_position = al_file.stream_position().unwrap();
+    println!(
+        "writing vertex {} list with {} edges {}",
+        vertex_id,
+        edge_ids.len(),
+        al_position
+    );
+    for neighbor in edge_ids.iter() {
+        let neighbor_bytes = neighbor.to_le_bytes();
+        al_file.write(&neighbor_bytes).unwrap();
+    }
+    // Null terminator
+    al_file.write(&(0i32).to_le_bytes()).unwrap();
+    al_position
+}
+
+// vertex_al_ix format: array of i64
+// each element is indexed by page id
+// each value is the offset into the vertex_al file
+//      where that vertex's adjacency list is found
+pub fn build_database(conn: &PgConnection) {
+    use crate::vertexes::dsl::*;
+    use diesel::dsl::max;
+    let max_page_id: i32 = vertexes
+        .select(max(id))
+        .get_result::<Option<i32>>(conn)
+        .expect("could not find max id")
+        .unwrap();
+    let home = dirs::home_dir().unwrap();
+    let data_dir = home.join("wpsr");
+    std::fs::create_dir_all(&data_dir).unwrap();
+
+    let vertex_al_ix_path = data_dir.join("vertex_al_ix");
+    let vertex_al_path = data_dir.join("vertex_al");
+    if vertex_al_path.exists() && vertex_al_ix_path.exists() {
+        println!("vertex_al and vertex_al_ix exist... skipping");
+        return;
+    }
+
+    let mut vertex_al_ix_file = match File::create(&vertex_al_ix_path) {
+        Err(why) => panic!("couldn't create {:?}: {}", vertex_al_ix_path, why),
+        Ok(file) => file,
+    };
+    let mut vertex_al_file = match File::create(&vertex_al_path) {
+        Err(why) => panic!("couldn't create {:?}: {}", vertex_al_path, why),
+        Ok(file) => file,
+    };
+
+    println!(
+        "building vertex_al_ix at {} - {} vertexes",
+        vertex_al_ix_path.to_str().unwrap(),
+        max_page_id
+    );
+    for n in 0..max_page_id {
+        let vertex_al_offset: u64 = build_adjacency_list(&mut vertex_al_file, n, conn);
+        vertex_al_ix_file
+            .write(&vertex_al_offset.to_le_bytes())
+            .unwrap();
+    }
+}
+
 pub fn establish_connection() -> PgConnection {
     dotenv().ok();
 
@@ -73,7 +152,6 @@ fn load_neighbors(
     let edges = Edge::belonging_to(source)
         .load::<Edge>(conn)
         .expect("load edges");
-    //let neighbors = vertexes.fil
     let neighbor_ids: Vec<i32> = edges
         .iter()
         .map(|e| e.dest_vertex_id)
@@ -199,6 +277,8 @@ fn main() {
     println!("[{}] → [{}]", source_title, dest_title);
 
     let conn = establish_connection();
+
+    build_database(&conn);
 
     let source_vertex = load_vertex(&source_title, &conn).expect("source not found");
     let dest_vertex = load_vertex(&dest_title, &conn).expect("destination not found");
