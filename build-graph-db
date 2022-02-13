@@ -15,6 +15,11 @@ def main():
     al_ix_file = open('vertex_al_ix', 'w')
     al_file = open('vertex_al', 'w')
     src = csv.reader(sys.stdin, delimiter='\t')
+    # 0 is used as a null value in the index to denote
+    # there is no list to point to. so we cannot have a
+    # valid list at 0. this puts a magic number at the 0
+    # position so our real lists start at 4
+    al_ix_file.write(index_rec.pack(1337))
     last_id = 0
     for vid, edges_str in src:
         vid = int(vid)
@@ -29,8 +34,12 @@ def main():
         for edge in edges:
             al_file.write(edge_rec.pack(edge))
         if len(edges) == 0:
+            # optimization: existing vertexes with no edges
+            # get no entry in database
             al_ix_file.write(index_rec.pack(0))
         else:
+            # record beginning of adjacency list in index
+            # and add null terminator
             al_ix_file.write(index_rec.pack(al_pos))
             al_file.write(edge_rec.pack(0))
 
