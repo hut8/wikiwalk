@@ -16,8 +16,8 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 use std::path::Path;
-
-// use std::process::exit;
+use memmap2::MmapOptions;
+use std::io::Write;
 
 #[derive(Identifiable, Queryable, Debug, Clone)]
 #[table_name = "vertexes"]
@@ -54,20 +54,21 @@ pub struct Link<'a> {
     pub dest: &'a Vertex,
 }
 
+
 /// Writes appropriate null-terminated list of 4-byte values to al_file
 /// Each 4-byte value is a LE representation
 pub fn build_adjacency_list(al_file: &mut File, vertex_id: i32, conn: &PgConnection) -> u64 {
     use crate::edges::dsl::*;
     let edge_ids: Vec<i32> = edges
-        .filter(source_vertex_id.eq(vertex_id))
-        .select(dest_vertex_id)
-        .load::<i32>(conn)
-        .unwrap();
+    .filter(source_vertex_id.eq(vertex_id))
+    .select(dest_vertex_id)
+    .load::<i32>(conn)
+    .unwrap();
     if edge_ids.len() == 0 {
         // No outgoing edges or no such vertex
         return 0;
     }
-
+    
     // Position at which we are writing the thing.
     let al_position = al_file.stream_position().unwrap();
     println!(
@@ -94,21 +95,21 @@ pub fn build_database(conn: &PgConnection) {
     use crate::vertexes::dsl::*;
     use diesel::dsl::max;
     let max_page_id: i32 = vertexes
-        .select(max(id))
-        .get_result::<Option<i32>>(conn)
-        .expect("could not find max id")
-        .unwrap();
+    .select(max(id))
+    .get_result::<Option<i32>>(conn)
+    .expect("could not find max id")
+    .unwrap();
     let home = dirs::home_dir().unwrap();
     let data_dir = home.join("wpsr");
     std::fs::create_dir_all(&data_dir).unwrap();
-
+    
     let vertex_al_ix_path = data_dir.join("vertex_al_ix");
     let vertex_al_path = data_dir.join("vertex_al");
     if vertex_al_path.exists() && vertex_al_ix_path.exists() {
         println!("vertex_al and vertex_al_ix exist... skipping");
         return;
     }
-
+    
     let mut vertex_al_ix_file = match File::create(&vertex_al_ix_path) {
         Err(why) => panic!("couldn't create {:?}: {}", vertex_al_ix_path, why),
         Ok(file) => file,
@@ -117,24 +118,24 @@ pub fn build_database(conn: &PgConnection) {
         Err(why) => panic!("couldn't create {:?}: {}", vertex_al_path, why),
         Ok(file) => file,
     };
-
+    
     println!(
         "building vertex_al_ix at {} - {} vertexes",
         vertex_al_ix_path.to_str().unwrap(),
         max_page_id
     );
-
+    
     for n in 0..max_page_id {
         let vertex_al_offset: u64 = build_adjacency_list(&mut vertex_al_file, n, conn);
         vertex_al_ix_file
-            .write(&vertex_al_offset.to_le_bytes())
-            .unwrap();
+        .write(&vertex_al_offset.to_le_bytes())
+        .unwrap();
     }
 }
 
 pub fn establish_connection() -> PgConnection {
     dotenv().ok();
-
+    
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
 }
@@ -144,6 +145,31 @@ fn load_vertex(name: &str, conn: &PgConnection) -> QueryResult<Vertex> {
     vertexes.filter(title.ilike(name)).first::<Vertex>(conn)
 }
 
+pub struct GraphDB {
+    pub mmap_ix: memmap2::Mmap,
+    pub mmap_al: memmap2::Mmap,
+}
+
+impl GraphDB {
+    pub fn new(path_ix: &str, path_al: &str) -> Result<GraphDB, std::io::Error> {
+        let file_ix = File::open(path_ix)?;
+        let file_al = File::open(path_al)?;
+        let mmap_ix = unsafe { MmapOptions::new().map(&file_ix)? };
+        let mmap_al = unsafe { MmapOptions::new().map(&file_al)? };
+        Ok(GraphDB{
+            mmap_ix, mmap_al
+        })
+    }
+
+    pub fn load_neighbors(&self, vertex_id: u32) -> Vec<u32> {
+        let al_offset: u64 = 0;
+        let neighbors: Vec<u32> = Vec::new();
+        neighbors
+    }
+}
+
+
+
 fn load_neighbors(
     source: &Vertex,
     visited_ids: &mut HashSet<i32>,
@@ -152,17 +178,17 @@ fn load_neighbors(
     use crate::vertexes::dsl::*;
     use diesel::dsl::any;
     let edges = Edge::belonging_to(source)
-        .load::<Edge>(conn)
-        .expect("load edges");
+    .load::<Edge>(conn)
+    .expect("load edges");
     let neighbor_ids: Vec<i32> = edges
-        .iter()
-        .map(|e| e.dest_vertex_id)
-        .filter(|x| !visited_ids.contains(x))
-        .collect();
+    .iter()
+    .map(|e| e.dest_vertex_id)
+    .filter(|x| !visited_ids.contains(x))
+    .collect();
     let neighbors = vertexes
-        .filter(id.eq(any(neighbor_ids)))
-        .load::<Vertex>(conn)
-        .expect("load neighbors");
+    .filter(id.eq(any(neighbor_ids)))
+    .load::<Vertex>(conn)
+    .expect("load neighbors");
     neighbors
 }
 
@@ -180,8 +206,8 @@ fn build_path<'a>(
             break;
         }
         let next_id = parents
-            .get(&current.id)
-            .expect(&format!("parent not recorded for {:#?}", current));
+        .get(&current.id)
+        .expect(&format!("parent not recorded for {:#?}", current));
         current = graph.get(&next_id).unwrap();
     }
     path.reverse();
@@ -200,17 +226,17 @@ fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
     // parents = vertex id -> which vertex id came before
     let mut parents: HashMap<i32, i32> = HashMap::new();
     let mut graph: HashMap<i32, Vertex> = HashMap::new();
-
+    
     graph.insert(source.id, source.clone());
     graph.insert(dest.id, dest.clone());
-
+    
     q.push_back(source.id);
     visited_ids.insert(source.id);
-
+    
     let sp = Spinner::new(&Spinners::Dots9, "Computing path".into());
-
+    
     let mut visited_count = 0;
-
+    
     loop {
         let current = q.pop_front();
         match current {
@@ -239,7 +265,7 @@ fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
                     break;
                 }
                 let neighbors =
-                    load_neighbors(graph.get(&vertex_id).unwrap(), &mut visited_ids, conn);
+                load_neighbors(graph.get(&vertex_id).unwrap(), &mut visited_ids, conn);
                 for n in &neighbors {
                     parents.insert(n.id, vertex_id);
                     visited_ids.insert(n.id);
@@ -253,7 +279,7 @@ fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
             }
         }
     }
-
+    
     sp.stop();
 }
 
@@ -272,18 +298,18 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-
+    
     let source_title = cli.source.replace(" ", "_");
     let dest_title = cli.destination.replace(" ", "_");
-
+    
     println!("[{}] → [{}]", source_title, dest_title);
-
+    
     let conn = establish_connection();
-
+    
     build_database(&conn);
-
+    
     let source_vertex = load_vertex(&source_title, &conn).expect("source not found");
     let dest_vertex = load_vertex(&dest_title, &conn).expect("destination not found");
-
+    
     bfs(&source_vertex, &dest_vertex, cli.verbose, &conn);
 }

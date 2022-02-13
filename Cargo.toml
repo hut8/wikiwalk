@@ -13,3 +13,5 @@ dirs = "4.0"
 dotenv = "0.15.0"
 indicatif = "0.16.2"
 spinners = "2.0.0"
+memmap2 = "*"
+
