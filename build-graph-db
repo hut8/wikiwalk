@@ -2,6 +2,7 @@
 import struct
 import csv
 import sys
+import os.path
 
 MAX_VERTEX = 69959490
 
@@ -12,8 +13,8 @@ def proc_vertex(al_ix_file, al_file, src, vid):
     pass
 
 def main():
-    al_ix_file = open('vertex_al_ix', 'w')
-    al_file = open('vertex_al', 'w')
+    al_ix_file = open(os.path.expanduser('~/wspr/vertex_al_ix'), 'w')
+    al_file = open(os.path.expanduser('~/wspr/vertex_al'), 'w')
     src = csv.reader(sys.stdin, delimiter='\t')
     # 0 is used as a null value in the index to denote
     # there is no list to point to. so we cannot have a
