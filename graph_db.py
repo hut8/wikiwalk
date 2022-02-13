@@ -10,8 +10,8 @@ from tqdm import tqdm
 
 MAX_VERTEX = 69959490
 
-index_rec = struct.Struct('Q')
-edge_rec = struct.Struct('L')
+index_rec = struct.Struct('>Q')
+edge_rec = struct.Struct('>L')
 
 class TestVertedDB(unittest.TestCase):
     def test_build_vertex_db(self):
@@ -24,6 +24,8 @@ class TestVertedDB(unittest.TestCase):
             build_vertex_db(src, al_ix_file, al_file, progress=False)
 
             # assertions
+            self.assertEqual(edge_rec.size, 4, "edge rec should be 32 bits")
+            self.assertEqual(index_rec.size, 8, "index rec should be 64 bits")
             al_ix_file = open(al_ix_path, 'rb')
             al_ix_data = al_ix_file.read()
             al_file = open(al_file_path, 'rb')
@@ -32,7 +34,7 @@ class TestVertedDB(unittest.TestCase):
             (magic,) = edge_rec.unpack(al_data[0:4])
             self.assertEqual(1337, magic, "first record in al should be 1337")
             # 1 should point to 6 and 7
-            vertex_1_ix = index_rec.unpack(
+            (vertex_1_ix,) = index_rec.unpack(
                 al_ix_data[(index_rec.size*1):(index_rec.size*2)]
             )
             (vertex_1_edge_1,) = edge_rec.unpack(
@@ -68,7 +70,7 @@ def build_vertex_db(src, al_ix_file, al_file, progress=True):
     # there is no list to point to. so we cannot have a
     # valid list at 0. this puts a magic number at the 0
     # position so our real lists start at 4
-    al_ix_file.write(index_rec.pack(1337))
+    al_file.write(edge_rec.pack(1337))
     last_id = 0
     # pb = tqdm(total=6446923)
     pb = tqdm(total=MAX_VERTEX)
@@ -122,11 +124,10 @@ def main():
 if __name__ == '__main__':
     main()
 
-TEST_SRC="""
-1	6,7
+TEST_SRC="""1	6,7
 4	9
 5	4
-6
+6	4
 7	9
 9	1,4,5
 """
