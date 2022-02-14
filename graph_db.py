@@ -71,7 +71,7 @@ def build_vertex_db(src, al_ix_file, al_file, progress=True):
     # valid list at 0. this puts a magic number at the 0
     # position so our real lists start at 4
     al_file.write(edge_rec.pack(1337))
-    last_id = 0
+    last_id = None
     # pb = tqdm(total=6446923)
     pb = tqdm(total=MAX_VERTEX)
     if not progress:
@@ -79,10 +79,21 @@ def build_vertex_db(src, al_ix_file, al_file, progress=True):
     for vid, edges_str in src:
         vid = int(vid)
         edges = [int(x) for x in edges_str.split(',')]
+        if last_id is None:
+            last_id = -1
         # if this isn't sorted, we're in big trouble
         assert(last_id < vid)
-        # zero pad between last id and tgis id
-        for _ in range(last_id, vid):
+         # don't write zero padding for existing record
+        last_id += 1
+        # zero pad between last id and this id
+        # if last_id and vid are the same (because of increment),
+        # nothing gets written
+        for null_id in range(last_id, vid):
+            actual_index_offset = al_ix_file.tell()
+            expected_index_offset = 8 * null_id # 64-bit entries
+            errmsg = f"padding from {last_id} to {vid} (current: {null_id}) with zeroes at wrong place: " +\
+                f"expected: {expected_index_offset}; actual: {actual_index_offset}"
+            assert actual_index_offset == expected_index_offset, errmsg
             al_ix_file.write(index_rec.pack(0))
             pb.update(1)
         last_id = vid
@@ -90,6 +101,11 @@ def build_vertex_db(src, al_ix_file, al_file, progress=True):
         al_pos = al_file.tell()
         for edge in edges:
             al_file.write(edge_rec.pack(edge))
+        expected_index_offset = 8 * vid # 64-bit entries
+        # bail if we're about to write the offset to the wrong place
+        actual_index_offset = al_ix_file.tell()
+        errmsg = f"about to write index record for {vid} at {actual_index_offset} instead of {expected_index_offset}"
+        assert expected_index_offset == actual_index_offset, errmsg
         if len(edges) == 0:
             # optimization: existing vertexes with no edges
             # get no entry in database
