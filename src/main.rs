@@ -211,7 +211,7 @@ impl GraphDB {
                         self.visited_ids.len(),
                         self.q.len()
                     ));
-                    self.visited_ids.insert(src);
+                    self.visited_ids.insert(current);
                     if current == dest {
                         sp.stop();
                         let path = self.build_path(src, dest);
