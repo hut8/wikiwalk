@@ -171,6 +171,52 @@ impl GraphDB {
         })
     }
 
+    fn build_path(&self, source: u32, dest: u32) -> Vec<u32> {
+        let mut path: Vec<u32> = Vec::new();
+        let mut current = dest;
+        loop {
+            path.push(current);
+            if current == source {
+                break;
+            }
+            current = *self
+                .parents
+                .get(&current)
+                .expect(&format!("parent not recorded for {:#?}", current));
+        }
+        path.reverse();
+        path
+    }
+
+    pub fn bfs(&mut self, src: u32, dest: u32) -> Option<Vec<u32>> {
+        self.q.push_back(src);
+
+        loop {
+            match self.q.pop_front() {
+                Some(current) => {
+                    self.visited_ids.insert(src);
+                    if current == dest {
+                        let path = self.build_path(src, dest);
+                        println!("found path: {:?}", path);
+                        return Some(path);
+                    }
+                    let neighbors = self.load_neighbors(current);
+                    let next_neighbors: Vec<u32> = neighbors
+                        .into_iter()
+                        .filter(|x| !self.visited_ids.contains(x))
+                        .collect();
+                    for &n in next_neighbors.iter() {
+                        self.parents.insert(n, current);
+                        self.q.push_back(n);
+                    }
+                }
+                None => {
+                    return None;
+                }
+            }
+        }
+    }
+
     pub fn load_neighbors(&self, vertex_id: u32) -> Vec<u32> {
         let mut neighbors: Vec<u32> = Vec::new();
         let ix_position: usize = ((u32::BITS / 8) * vertex_id) as usize;
