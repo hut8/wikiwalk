@@ -90,7 +90,6 @@ pub fn build_adjacency_list(al_file: &mut File, vertex_id: i32, conn: &PgConnect
 // each value is the offset into the vertex_al file
 //      where that vertex's adjacency list is found
 pub fn build_database(conn: &PgConnection) {
-    use crate::edges::dsl::*;
     use crate::vertexes::dsl::*;
     use diesel::dsl::max;
     let max_page_id: i32 = vertexes
