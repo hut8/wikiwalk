@@ -18,7 +18,6 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 use std::io::Write;
-use std::path::Path;
 
 #[derive(Identifiable, Queryable, Debug, Clone)]
 #[table_name = "vertexes"]
@@ -161,7 +160,7 @@ impl GraphDB {
         let mmap_al = unsafe { MmapOptions::new().map(&file_al)? };
         let visited_ids = HashSet::new();
         let parents = HashMap::new();
-        let mut q: VecDeque<u32> = VecDeque::new();
+        let q: VecDeque<u32> = VecDeque::new();
         Ok(GraphDB {
             mmap_ix,
             mmap_al,
@@ -298,7 +297,11 @@ fn main() {
     let dest_vertex = load_vertex(&dest_title, &conn).expect("destination not found");
 
     match graphdb.bfs(source_vertex.id as u32, dest_vertex.id as u32) {
-        Some(path) => {}
+        Some(path) => {
+            let vertex_path = load_vertexes(path, &conn);
+            let formatted_path = format_path(vertex_path);
+            println!("{}", formatted_path);
+        }
         None => {
             println!("no path found");
         }
