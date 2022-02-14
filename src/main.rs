@@ -247,15 +247,22 @@ impl GraphDB {
         buf.copy_from_slice(&self.mmap_ix[ix_position..ix_position + 8]);
         // println!("buf from ix = {:?}", buf);
         let mut al_offset: usize = u64::from_be_bytes(buf) as usize;
+        if al_offset == 0 {
+            // println!("vertex {} has no neighbors", vertex_id);
+            return neighbors;
+        }
         let mut vbuf: [u8; 4] = [0; 4];
         loop {
+            // println!("looking at al_offset = {}", al_offset);
             vbuf.copy_from_slice(&self.mmap_al[al_offset..al_offset + 4]);
+            // println!("vbuf from al = {:?}", vbuf);
             let i: u32 = u32::from_be_bytes(vbuf);
+            // println!("vbuf -> int = {:?}", i);
             if i == 0 {
                 break;
             }
             neighbors.push(i);
-            al_offset += 8;
+            al_offset += 4;
         }
         neighbors
     }
