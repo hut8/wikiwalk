@@ -214,7 +214,6 @@ impl GraphDB {
                     if current == dest {
                         sp.stop();
                         let path = self.build_path(src, dest);
-                        println!("found path: {:?}", path);
                         return Some(path);
                     }
                     let neighbors = self.load_neighbors(current);
@@ -325,10 +324,10 @@ fn main() {
         Some(path) => {
             let vertex_path = load_vertexes(path, &conn);
             let formatted_path = format_path(vertex_path);
-            println!("{}", formatted_path);
+            println!("\n{}", formatted_path);
         }
         None => {
-            println!("no path found");
+            println!("\nno path found");
         }
     }
 }
