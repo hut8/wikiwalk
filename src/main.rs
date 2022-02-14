@@ -246,117 +246,16 @@ impl GraphDB {
     }
 }
 
-fn load_neighbors(
-    source: &Vertex,
-    visited_ids: &mut HashSet<i32>,
-    conn: &PgConnection,
-) -> Vec<Vertex> {
-    use crate::vertexes::dsl::*;
-    use diesel::dsl::any;
-    let edges = Edge::belonging_to(source)
-        .load::<Edge>(conn)
-        .expect("load edges");
-    let neighbor_ids: Vec<i32> = edges
-        .iter()
-        .map(|e| e.dest_vertex_id)
-        .filter(|x| !visited_ids.contains(x))
-        .collect();
-    let neighbors = vertexes
-        .filter(id.eq(any(neighbor_ids)))
-        .load::<Vertex>(conn)
-        .expect("load neighbors");
-    neighbors
-}
-
-fn build_path<'a>(
-    source: &'a Vertex,
-    dest: &'a Vertex,
-    parents: &'a HashMap<i32, i32>,
-    graph: &'a HashMap<i32, Vertex>,
-) -> Vec<Vertex> {
-    let mut path: Vec<Vertex> = Vec::new();
-    let mut current = dest;
-    loop {
-        path.push(current.clone());
-        if current.id == source.id {
-            break;
-        }
-        let next_id = parents
-            .get(&current.id)
-            .expect(&format!("parent not recorded for {:#?}", current));
-        current = graph.get(&next_id).unwrap();
-    }
-    path.reverse();
-    path
-}
-
 fn format_path(vertexes: Vec<Vertex>) -> String {
     let titles: Vec<String> = vertexes.into_iter().map(|v| v.title).collect();
     titles.join(" → ")
 }
 
-/// Breadth First Search from source to dest
-fn bfs(source: &Vertex, dest: &Vertex, verbose: bool, conn: &PgConnection) {
-    let mut visited_ids: HashSet<i32> = HashSet::new();
-    let mut q: VecDeque<i32> = VecDeque::new();
-    // parents = vertex id -> which vertex id came before
-    let mut parents: HashMap<i32, i32> = HashMap::new();
-    let mut graph: HashMap<i32, Vertex> = HashMap::new();
-
-    graph.insert(source.id, source.clone());
-    graph.insert(dest.id, dest.clone());
-
-    q.push_back(source.id);
-    visited_ids.insert(source.id);
-
-    let sp = Spinner::new(&Spinners::Dots9, "Computing path".into());
-
-    let mut visited_count = 0;
-
-    loop {
-        let current = q.pop_front();
-        match current {
-            Some(vertex_id) => {
-                visited_count += 1;
-                if verbose {
-                    println!(
-                        "{} → ...",
-                        format_path(build_path(
-                            source,
-                            graph.get(&vertex_id).unwrap(),
-                            &parents,
-                            &graph
-                        ))
-                    );
-                } else {
-                    sp.message(format!(
-                        "Computing path - visited {} pages, queue size {}",
-                        visited_count,
-                        q.len()
-                    ));
-                }
-                if dest.id == vertex_id {
-                    let path = build_path(source, dest, &parents, &graph);
-                    println!("\npath: {}", format_path(path));
-                    break;
-                }
-                let neighbors =
-                    load_neighbors(graph.get(&vertex_id).unwrap(), &mut visited_ids, conn);
-                for n in &neighbors {
-                    parents.insert(n.id, vertex_id);
-                    visited_ids.insert(n.id);
-                    graph.insert(n.id, n.clone());
-                    q.push_back(n.id);
-                }
-            }
-            None => {
-                println!("No path from {} to {}", source.title, dest.title);
-                break;
-            }
-        }
-    }
-
-    sp.stop();
+fn load_vertexes(ids: Vec<u32>, conn: &PgConnection) -> Vec<Vertex> {
+    use crate::vertexes::dsl::*;
+    ids.into_iter()
+        .map(|x| vertexes.find(x as i32).first::<Vertex>(conn).unwrap())
+        .collect()
 }
 
 /// CLI Options
@@ -398,7 +297,10 @@ fn main() {
     let source_vertex = load_vertex(&source_title, &conn).expect("source not found");
     let dest_vertex = load_vertex(&dest_title, &conn).expect("destination not found");
 
-    graphdb.bfs(source_vertex.id as u32, dest_vertex.id as u32);
-
-    bfs(&source_vertex, &dest_vertex, cli.verbose, &conn);
+    match graphdb.bfs(source_vertex.id as u32, dest_vertex.id as u32) {
+        Some(path) => {}
+        None => {
+            println!("no path found");
+        }
+    }
 }
