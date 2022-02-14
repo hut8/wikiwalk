@@ -211,7 +211,6 @@ impl GraphDB {
                         self.visited_ids.len(),
                         self.q.len()
                     ));
-                    self.visited_ids.insert(current);
                     if current == dest {
                         sp.stop();
                         let path = self.build_path(src, dest);
@@ -225,6 +224,7 @@ impl GraphDB {
                         .collect();
                     for &n in next_neighbors.iter() {
                         self.parents.insert(n, current);
+                        self.visited_ids.insert(n);
                         self.q.push_back(n);
                     }
                 }
@@ -318,6 +318,8 @@ fn main() {
 
     let source_vertex = load_vertex(&source_title, &conn).expect("source not found");
     let dest_vertex = load_vertex(&dest_title, &conn).expect("destination not found");
+
+    println!("{:#?}\n{:#?}", source_vertex, dest_vertex);
 
     match graphdb.bfs(source_vertex.id as u32, dest_vertex.id as u32) {
         Some(path) => {
