@@ -7,6 +7,7 @@ pub mod schema;
 use clap::Parser;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
+use dirs;
 use dotenv::dotenv;
 use memmap2::MmapOptions;
 use schema::{edges, vertexes};
@@ -326,10 +327,23 @@ fn main() {
 
     let conn = establish_connection();
 
-    build_database(&conn);
+    // build_database(&conn);
+
+    let home_dir = dirs::home_dir().unwrap();
+    let data_dir = home_dir.join("wpsr");
+    let vertex_al_path = data_dir.join("vertex_al");
+    let vertex_ix_path = data_dir.join("vertex_ix");
+
+    let mut graphdb = GraphDB::new(
+        vertex_ix_path.to_str().unwrap(),
+        vertex_al_path.to_str().unwrap(),
+    )
+    .unwrap();
 
     let source_vertex = load_vertex(&source_title, &conn).expect("source not found");
     let dest_vertex = load_vertex(&dest_title, &conn).expect("destination not found");
+
+    graphdb.bfs(source_vertex.id as u32, dest_vertex.id as u32);
 
     bfs(&source_vertex, &dest_vertex, cli.verbose, &conn);
 }
