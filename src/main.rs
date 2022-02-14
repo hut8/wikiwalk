@@ -189,13 +189,21 @@ impl GraphDB {
     }
 
     pub fn bfs(&mut self, src: u32, dest: u32) -> Option<Vec<u32>> {
+        let sp = Spinner::new(&Spinners::Dots9, "Computing path".into());
+
         self.q.push_back(src);
 
         loop {
             match self.q.pop_front() {
                 Some(current) => {
+                    sp.message(format!(
+                        "Computing path - visited {} pages, queue size {}",
+                        self.visited_ids.len(),
+                        self.q.len()
+                    ));
                     self.visited_ids.insert(src);
                     if current == dest {
+                        sp.stop();
                         let path = self.build_path(src, dest);
                         println!("found path: {:?}", path);
                         return Some(path);
@@ -211,6 +219,7 @@ impl GraphDB {
                     }
                 }
                 None => {
+                    sp.stop();
                     return None;
                 }
             }
