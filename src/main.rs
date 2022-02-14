@@ -18,6 +18,7 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 #[derive(Identifiable, Queryable, Debug, Clone)]
 #[table_name = "vertexes"]
@@ -176,8 +177,31 @@ impl GraphDB {
         assert!(magic == 1337);
     }
 
+    fn check_ix(&mut self) {
+        // read index file and ensure that all 64-bit entries
+        // point to within range
+        let max_sz: u64 = (self.mmap_al.len() - 4) as u64;
+        let mut buf: [u8; 8] = [0; 8];
+        let mut position: usize = 0;
+        while position <= (self.mmap_ix.len() - 8) {
+            buf.copy_from_slice(&self.mmap_ix[position..position + 8]);
+            let value: u64 = u64::from_be_bytes(buf);
+            if value > max_sz {
+                let msg = format!(
+                    "check_ix: at index file: {}, got pointer to {} in AL file (maximum: {})",
+                    position, value, max_sz
+                );
+                panic!("{}", msg);
+            }
+            position += 8;
+        }
+    }
+
     fn check_db(&mut self) {
         self.check_al();
+        println!("checking index file");
+        self.check_ix();
+        println!("done");
     }
 
     fn build_path(&self, source: u32, dest: u32) -> Vec<u32> {
@@ -201,8 +225,8 @@ impl GraphDB {
         self.check_db();
         let sp = Spinner::new(&Spinners::Dots9, "Computing path".into());
 
+        let start_time = Instant::now();
         self.q.push_back(src);
-
         loop {
             match self.q.pop_front() {
                 Some(current) => {
@@ -214,6 +238,8 @@ impl GraphDB {
                     if current == dest {
                         sp.stop();
                         let path = self.build_path(src, dest);
+                        let elapsed = start_time.elapsed();
+                        println!("\nelapsed time: {} seconds", elapsed.as_secs());
                         return Some(path);
                     }
                     let neighbors = self.load_neighbors(current);
@@ -229,6 +255,8 @@ impl GraphDB {
                 }
                 None => {
                     sp.stop();
+                    let elapsed = start_time.elapsed();
+                    println!("\nelapsed time: {} seconds", elapsed.as_secs());
                     return None;
                 }
             }
