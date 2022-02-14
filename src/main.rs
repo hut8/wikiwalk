@@ -169,6 +169,17 @@ impl GraphDB {
         })
     }
 
+    fn check_al(&mut self) {
+        let mut buf: [u8; 4] = [0; 4];
+        buf.copy_from_slice(&self.mmap_al[0..4]);
+        let magic: u32 = u32::from_be_bytes(buf);
+        assert!(magic == 1337);
+    }
+
+    fn check_db(&mut self) {
+        self.check_al();
+    }
+
     fn build_path(&self, source: u32, dest: u32) -> Vec<u32> {
         let mut path: Vec<u32> = Vec::new();
         let mut current = dest;
@@ -187,6 +198,7 @@ impl GraphDB {
     }
 
     pub fn bfs(&mut self, src: u32, dest: u32) -> Option<Vec<u32>> {
+        self.check_db();
         let sp = Spinner::new(&Spinners::Dots9, "Computing path".into());
 
         self.q.push_back(src);
