@@ -308,7 +308,7 @@ fn main() {
     let home_dir = dirs::home_dir().unwrap();
     let data_dir = home_dir.join("wpsr");
     let vertex_al_path = data_dir.join("vertex_al");
-    let vertex_ix_path = data_dir.join("vertex_ix");
+    let vertex_ix_path = data_dir.join("vertex_al_ix");
 
     let mut graphdb = GraphDB::new(
         vertex_ix_path.to_str().unwrap(),
