@@ -238,9 +238,14 @@ impl GraphDB {
 
     pub fn load_neighbors(&self, vertex_id: u32) -> Vec<u32> {
         let mut neighbors: Vec<u32> = Vec::new();
-        let ix_position: usize = ((u32::BITS / 8) * vertex_id) as usize;
+        let ix_position: usize = ((u64::BITS / 8) * vertex_id) as usize;
+        // println!(
+        //     "load_neighbors for {} from ix position: {}",
+        //     vertex_id, ix_position
+        // );
         let mut buf: [u8; 8] = [0; 8];
         buf.copy_from_slice(&self.mmap_ix[ix_position..ix_position + 8]);
+        // println!("buf from ix = {:?}", buf);
         let mut al_offset: usize = u64::from_be_bytes(buf) as usize;
         let mut vbuf: [u8; 4] = [0; 4];
         loop {
