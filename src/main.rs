@@ -1,30 +1,21 @@
-#[macro_use]
-extern crate diesel;
 extern crate dotenv;
 
-pub mod schema;
-
-use clap::Parser;
-use diesel::pg::PgConnection;
-use diesel::prelude::*;
+use clap::{Parser, SubCommand, Subcommand};
 use dirs;
-use dotenv::dotenv;
+use indicatif::ProgressIterator;
 use memmap2::MmapOptions;
-use schema::{edges, vertexes};
 use spinners::{Spinner, Spinners};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::env;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::prelude::*;
-use std::io::Write;
-use std::time::{Duration, Instant};
+use std::io::{prelude::*, BufWriter};
+use std::io::{BufReader, Write};
+use std::path::PathBuf;
+use std::time::Instant;
 
-#[derive(Identifiable, Queryable, Debug, Clone)]
-#[table_name = "vertexes"]
-// If table name is not specified, diesel pluralizes to vertexs
+#[derive(Debug, Clone)]
 pub struct Vertex {
-    pub id: i32,
+    pub id: u32,
     pub title: String,
 }
 
@@ -42,12 +33,10 @@ impl PartialEq for Vertex {
 
 impl Eq for Vertex {}
 
-#[derive(Identifiable, Queryable, PartialEq, Debug, Associations, Copy, Clone)]
-#[primary_key(source_vertex_id, dest_vertex_id)]
-#[belongs_to(Vertex, foreign_key = "source_vertex_id")]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub struct Edge {
-    pub source_vertex_id: i32,
-    pub dest_vertex_id: i32,
+    pub source_vertex_id: u32,
+    pub dest_vertex_id: u32,
 }
 
 pub struct Link<'a> {
@@ -55,107 +44,229 @@ pub struct Link<'a> {
     pub dest: &'a Vertex,
 }
 
-/// Writes appropriate null-terminated list of 4-byte values to al_file
-/// Each 4-byte value is a LE representation
-pub fn build_adjacency_list(al_file: &mut File, vertex_id: i32, conn: &PgConnection) -> u64 {
-    use crate::edges::dsl::*;
-    let edge_ids: Vec<i32> = edges
-        .filter(source_vertex_id.eq(vertex_id))
-        .select(dest_vertex_id)
-        .load::<i32>(conn)
-        .unwrap();
-    if edge_ids.len() == 0 {
-        // No outgoing edges or no such vertex
-        return 0;
+struct GraphDBBuilder {
+    // inputs
+    pub page_path: PathBuf,
+    pub pagelinks_path: PathBuf,
+    // outputs
+    vertex_path: PathBuf,
+    pub ix_path: PathBuf,
+    pub al_path: PathBuf,
+    al_file: File,
+    ix_file: File,
+    vertex_file: File,
+}
+
+impl GraphDBBuilder {
+    pub fn new(
+        page: PathBuf,
+        pagelinks: PathBuf,
+        ix_path: PathBuf,
+        al_path: PathBuf,
+        vertex_path: PathBuf,
+    ) -> GraphDBBuilder {
+        let ix_file = match File::create(&ix_path) {
+            Err(why) => panic!("couldn't create {:?}: {}", &ix_path, why),
+            Ok(file) => file,
+        };
+        let al_file = match File::create(&al_path) {
+            Err(why) => panic!("couldn't create {:?}: {}", &al_path, why),
+            Ok(file) => file,
+        };
+        let vertex_file = match File::create(&vertex_path) {
+            Err(why) => panic!("couldn't create {:?}: {}", &vertex_path, why),
+            Ok(file) => file,
+        };
+
+        GraphDBBuilder {
+            page_path: page,
+            pagelinks_path: pagelinks,
+            ix_path,
+            al_path,
+            vertex_path,
+            al_file,
+            ix_file,
+            vertex_file,
+        }
     }
 
-    // Position at which we are writing the thing.
-    let al_position = al_file.stream_position().unwrap();
-    println!(
-        "writing vertex {} list with {} edges {}",
-        vertex_id,
-        edge_ids.len(),
+    pub fn build_database(&mut self) {
+        log::info!("loading page.sql");
+        let mut vertexes = self.dump_load_vertexes().unwrap();
+        log::debug!("finding max index");
+        vertexes.sort_by(|x, y| x.id.cmp(&y.id));
+        let max_page = vertexes.last().unwrap();
+        log::debug!("max page: {:#?}", max_page);
+
+        log::debug!("writing vertexes to {}", self.vertex_path.display());
+        self.build_vertex_file(&vertexes);
+
+        let title_map = self.build_title_map(&vertexes);
+        let edge_map = self.build_edge_map(&title_map);
+
+        log::debug!(
+            "building al [{}] and ix [{}] - {} vertexes",
+            self.al_path.to_str().unwrap(),
+            self.ix_path.to_str().unwrap(),
+            max_page.id,
+        );
+
+        for n in 0..max_page.id {
+            let vertex_al_offset: u64 = self.build_adjacency_list(n, &edge_map);
+            self.ix_file.write(&vertex_al_offset.to_le_bytes()).unwrap();
+            if n % 1000 == 0 {
+                log::debug!("-> wrote {} entries", n);
+            }
+        }
+        self.ix_file.flush().unwrap();
+        self.al_file.flush().unwrap();
+        log::info!("database build complete")
+    }
+
+    fn build_vertex_file(&mut self, vertexes: &Vec<Vertex>) {
+        let mut writer = BufWriter::new(&self.vertex_file);
+        for v in vertexes.iter() {
+            write!(&mut writer, "{}\t{}\n", v.id, v.title).unwrap();
+        }
+        writer.flush().unwrap()
+    }
+
+    fn build_title_map(&mut self, vertexes: &Vec<Vertex>) -> HashMap<String, u32> {
+        let mut m = HashMap::new();
+        for v in vertexes.iter() {
+            m.insert(v.title.clone(), v.id);
+        }
+        m
+    }
+
+    // builds outgoing edges
+    fn build_edge_map(&mut self, title_map: &HashMap<String, u32>) -> HashMap<u32, Vec<u32>> {
+        let mut m = HashMap::new();
+        for edge in self.dump_load_edges(&title_map).unwrap().iter() {
+            if !m.contains_key(&edge.source_vertex_id) {
+                m.insert(edge.source_vertex_id, vec![]);
+            }
+            m.get_mut(&edge.source_vertex_id)
+                .unwrap()
+                .push(edge.dest_vertex_id);
+        }
+        m
+    }
+
+    // load edges from the pagelinks.sql dump
+    fn dump_load_edges(
+        &mut self,
+        title_map: &HashMap<String, u32>,
+    ) -> Result<Vec<Edge>, parse_mediawiki_sql::utils::Error> {
+        use parse_mediawiki_sql::{
+            field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
+            utils::memory_map,
+        };
+        let pagelinks_sql = unsafe { memory_map(&self.pagelinks_path)? };
+        let links = iterate_sql_insertions(&pagelinks_sql)
+            .filter_map(
+                |PageLink {
+                     from,
+                     from_namespace,
+                     namespace,
+                     title,
+                 }| {
+                    if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
+                        Some((from, title))
+                    } else {
+                        None
+                    }
+                },
+            )
+            .collect::<Vec<_>>();
+        log::info!("loaded pagelinks");
+
+        log::info!("linking via title");
+        let edges = links
+            .into_iter()
+            .filter_map(|pl| match title_map.get(&pl.1 .0) {
+                Some(dest_id) => Some(Edge {
+                    source_vertex_id: pl.0 .0,
+                    dest_vertex_id: *dest_id,
+                }),
+                None => None,
+            });
+        Ok(edges.collect())
+    }
+
+    // load vertexes from the pages.sql dump
+    fn dump_load_vertexes(&mut self) -> Result<Vec<Vertex>, parse_mediawiki_sql::utils::Error> {
+        use parse_mediawiki_sql::{
+            field_types::PageNamespace, iterate_sql_insertions, schemas::Page, utils::memory_map,
+        };
+        let page_sql = unsafe { memory_map(&self.page_path)? };
+        let vertexes = iterate_sql_insertions(&page_sql)
+            .filter_map(
+                |Page {
+                     id,
+                     namespace,
+                     title,
+                     ..
+                 }| {
+                    if namespace == PageNamespace(0) {
+                        Some(Vertex {
+                            id: id.0,
+                            title: title.0,
+                        })
+                    } else {
+                        None
+                    }
+                },
+            )
+            .collect::<Vec<_>>();
+        Ok(vertexes)
+    }
+
+    /// Writes appropriate null-terminated list of 4-byte values to al_file
+    /// Each 4-byte value is a LE representation
+    pub fn build_adjacency_list(
+        &mut self,
+        vertex_id: u32,
+        edge_map: &HashMap<u32, Vec<u32>>,
+    ) -> u64 {
+        let edge_ids = edge_map.get(&vertex_id).unwrap();
+        if edge_ids.len() == 0 {
+            // No outgoing edges or no such vertex
+            return 0;
+        }
+
+        // Position at which we are writing the thing.
+        let al_position = self.al_file.stream_position().unwrap();
+        log::debug!(
+            "writing vertex {} list with {} edges {}",
+            vertex_id,
+            edge_ids.len(),
+            al_position
+        );
+        for neighbor in edge_ids.iter() {
+            let neighbor_bytes = neighbor.to_le_bytes();
+            self.al_file.write(&neighbor_bytes).unwrap();
+        }
+        // Null terminator
+        self.al_file.write(&(0i32).to_le_bytes()).unwrap();
         al_position
-    );
-    for neighbor in edge_ids.iter() {
-        let neighbor_bytes = neighbor.to_le_bytes();
-        al_file.write(&neighbor_bytes).unwrap();
     }
-    // Null terminator
-    al_file.write(&(0i32).to_le_bytes()).unwrap();
-    al_position
-}
-
-// vertex_al_ix format: array of i64
-// each element is indexed by page id
-// each value is the offset into the vertex_al file
-//      where that vertex's adjacency list is found
-pub fn build_database(conn: &PgConnection) {
-    use crate::vertexes::dsl::*;
-    use diesel::dsl::max;
-    let max_page_id: i32 = vertexes
-        .select(max(id))
-        .get_result::<Option<i32>>(conn)
-        .expect("could not find max id")
-        .unwrap();
-    let home = dirs::home_dir().unwrap();
-    let data_dir = home.join("wpsr");
-    std::fs::create_dir_all(&data_dir).unwrap();
-
-    let vertex_al_ix_path = data_dir.join("vertex_al_ix");
-    let vertex_al_path = data_dir.join("vertex_al");
-    if vertex_al_path.exists() && vertex_al_ix_path.exists() {
-        println!("vertex_al and vertex_al_ix exist... skipping");
-        return;
-    }
-
-    let mut vertex_al_ix_file = match File::create(&vertex_al_ix_path) {
-        Err(why) => panic!("couldn't create {:?}: {}", vertex_al_ix_path, why),
-        Ok(file) => file,
-    };
-    let mut vertex_al_file = match File::create(&vertex_al_path) {
-        Err(why) => panic!("couldn't create {:?}: {}", vertex_al_path, why),
-        Ok(file) => file,
-    };
-
-    println!(
-        "building vertex_al_ix at {} - {} vertexes",
-        vertex_al_ix_path.to_str().unwrap(),
-        max_page_id
-    );
-
-    for n in 0..max_page_id {
-        let vertex_al_offset: u64 = build_adjacency_list(&mut vertex_al_file, n, conn);
-        vertex_al_ix_file
-            .write(&vertex_al_offset.to_le_bytes())
-            .unwrap();
-    }
-}
-
-pub fn establish_connection() -> PgConnection {
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
-}
-
-fn load_vertex(name: &str, conn: &PgConnection) -> QueryResult<Vertex> {
-    use crate::vertexes::dsl::*;
-    vertexes.filter(title.ilike(name)).first::<Vertex>(conn)
 }
 
 pub struct GraphDB {
     pub mmap_ix: memmap2::Mmap,
     pub mmap_al: memmap2::Mmap,
+    pub vertex_file: File,
     pub visited_ids: HashSet<u32>,
     pub parents: HashMap<u32, u32>,
     pub q: VecDeque<u32>,
 }
 
 impl GraphDB {
-    pub fn new(path_ix: &str, path_al: &str) -> Result<GraphDB, std::io::Error> {
+    pub fn new(path_ix: &str, path_al: &str, path_vertex: &str) -> Result<GraphDB, std::io::Error> {
         let file_ix = File::open(path_ix)?;
         let file_al = File::open(path_al)?;
+        let vertex_file = File::open(path_vertex)?;
         let mmap_ix = unsafe { MmapOptions::new().map(&file_ix)? };
         let mmap_al = unsafe { MmapOptions::new().map(&file_al)? };
         let visited_ids = HashSet::new();
@@ -164,9 +275,53 @@ impl GraphDB {
         Ok(GraphDB {
             mmap_ix,
             mmap_al,
+            vertex_file,
             visited_ids,
             parents,
             q,
+        })
+    }
+
+    pub fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
+        let canon_title = title.to_lowercase();
+        log::debug!("loading vertex: {}", canon_title);
+        self.vertex_file.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let reader = BufReader::new(&self.vertex_file);
+        reader.lines().find_map(|l| {
+            let parts = l.as_ref().unwrap().split("\t").collect::<Vec<&str>>();
+            if parts.len() != 2 {
+                panic!("invalid line in vertex file: {}", l.unwrap());
+            }
+            if parts[1] == canon_title {
+                let vertex_id: u32 = parts[0].parse().unwrap();
+                Some(Vertex {
+                    id: vertex_id,
+                    title: parts[1].to_owned(),
+                })
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn find_vertex_by_id(&mut self, id: u32) -> Option<Vertex> {
+        log::debug!("loading vertex: id={}", id);
+        self.vertex_file.seek(std::io::SeekFrom::Start(0)).unwrap();
+        let reader = BufReader::new(&self.vertex_file);
+        reader.lines().find_map(|l| {
+            let parts = l.as_ref().unwrap().split("\t").collect::<Vec<&str>>();
+            if parts.len() != 2 {
+                panic!("invalid line in vertex file: {}", l.unwrap());
+            }
+            let record_id: u32 = parts[0].parse().unwrap();
+            if record_id == id {
+                Some(Vertex {
+                    id,
+                    title: parts[1].to_owned(),
+                })
+            } else {
+                None
+            }
         })
     }
 
@@ -223,20 +378,18 @@ impl GraphDB {
 
     pub fn bfs(&mut self, src: u32, dest: u32) -> Option<Vec<u32>> {
         self.check_db();
-        let sp = Spinner::new(&Spinners::Dots9, "Computing path".into());
+        let mut sp = Spinner::new(Spinners::Dots9, "Computing path".into());
 
         let start_time = Instant::now();
         self.q.push_back(src);
         loop {
             match self.q.pop_front() {
                 Some(current) => {
-                    sp.message(format!(
-                        "Computing path - visited {} pages, queue size {}",
-                        self.visited_ids.len(),
-                        self.q.len()
-                    ));
                     if current == dest {
-                        sp.stop();
+                        sp.stop_with_message(format!(
+                            "Computed path - visited {} pages",
+                            self.visited_ids.len()
+                        ));
                         let path = self.build_path(src, dest);
                         let elapsed = start_time.elapsed();
                         println!("\nelapsed time: {} seconds", elapsed.as_secs());
@@ -300,62 +453,96 @@ fn format_path(vertexes: Vec<Vertex>) -> String {
     titles.join(" → ")
 }
 
-fn load_vertexes(ids: Vec<u32>, conn: &PgConnection) -> Vec<Vertex> {
-    use crate::vertexes::dsl::*;
-    ids.into_iter()
-        .map(|x| vertexes.find(x as i32).first::<Vertex>(conn).unwrap())
-        .collect()
-}
-
 /// CLI Options
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Cli {
-    /// Source article
-    source: String,
-    /// Destination article
-    destination: String,
     /// Verbose output
     #[clap(short, long)]
     verbose: bool,
+    /// Path to database
+    #[clap(short, long)]
+    data_path: Option<PathBuf>,
+    /// Command to execute
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Build the database from a MediaWiki Dump
+    /// https://dumps.wikimedia.org/enwiki/latest/
+    Build {
+        /// Path to page.sql
+        page: PathBuf,
+        /// Path to pagelinks.sql
+        pagelinks: PathBuf,
+    },
+    /// Find the shortest path
+    Run {
+        /// Source article
+        source: String,
+        /// Destination article
+        destination: String,
+    },
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    let source_title = cli.source.replace(" ", "_");
-    let dest_title = cli.destination.replace(" ", "_");
-
-    println!("[{}] → [{}]", source_title, dest_title);
-
-    let conn = establish_connection();
-
-    // build_database(&conn);
-
     let home_dir = dirs::home_dir().unwrap();
-    let data_dir = home_dir.join("wpsr");
+    let default_data_dir = home_dir.join("speedrun-data");
+    let data_dir = cli.data_path.unwrap_or(default_data_dir);
+
+    std::fs::create_dir_all(&data_dir).unwrap();
+    let vertex_path = data_dir.join("vertexes");
     let vertex_al_path = data_dir.join("vertex_al");
     let vertex_ix_path = data_dir.join("vertex_al_ix");
 
-    let mut graphdb = GraphDB::new(
-        vertex_ix_path.to_str().unwrap(),
-        vertex_al_path.to_str().unwrap(),
-    )
-    .unwrap();
-
-    let source_vertex = load_vertex(&source_title, &conn).expect("source not found");
-    let dest_vertex = load_vertex(&dest_title, &conn).expect("destination not found");
-
-    println!("{:#?}\n{:#?}", source_vertex, dest_vertex);
-
-    match graphdb.bfs(source_vertex.id as u32, dest_vertex.id as u32) {
-        Some(path) => {
-            let vertex_path = load_vertexes(path, &conn);
-            let formatted_path = format_path(vertex_path);
-            println!("\n{}", formatted_path);
+    match cli.command {
+        Command::Build { page, pagelinks } => {
+            let mut gddb =
+                GraphDBBuilder::new(page, pagelinks, vertex_ix_path, vertex_al_path, vertex_path);
+            log::info!("building database");
+            gddb.build_database();
         }
-        None => {
-            println!("\nno path found");
+        Command::Run {
+            source,
+            destination,
+        } => {
+            let mut gdb = GraphDB::new(
+                vertex_ix_path.to_str().unwrap(),
+                vertex_al_path.to_str().unwrap(),
+                vertex_path.to_str().unwrap(),
+            )
+            .unwrap();
+            let source_title = source.replace(" ", "_").to_lowercase();
+            let dest_title = destination.replace(" ", "_").to_lowercase();
+
+            log::info!("speedrun: [{}] → [{}]", source_title, dest_title);
+
+            let source_vertex = gdb
+                .find_vertex_by_title(source_title)
+                .expect("source not found");
+            let dest_vertex = gdb
+                .find_vertex_by_title(dest_title)
+                .expect("destination not found");
+
+            log::info!("speedrun: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
+
+            match gdb.bfs(source_vertex.id as u32, dest_vertex.id as u32) {
+                Some(path) => {
+                    let vertex_path = path
+                        .iter()
+                        .map(|vid| gdb.find_vertex_by_id(*vid).unwrap())
+                        .collect();
+                    let formatted_path = format_path(vertex_path);
+                    println!("\n{}", formatted_path);
+                }
+                None => {
+                    println!("\nno path found");
+                }
+            }
         }
     }
 }

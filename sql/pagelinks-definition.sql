@@ -29,3 +29,14 @@ CREATE TABLE `pagelinks` (
   `pl_from_namespace` int(11) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=binary;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+DELIMITER $$
+CREATE TRIGGER namespace_check
+BEFORE INSERT ON pagelinks
+FOR EACH ROW
+BEGIN
+  IF new.pl_namespace <> 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insert into ignored namespace';
+  END IF;
+END$$
+DELIMITER ;

@@ -6,12 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = "3"
 clap = { version = "3.0", features = ["derive"] }
-diesel = { version = "1.4.4", features = ["postgres"] }
 dirs = "4.0"
 dotenv = "0.15.0"
-indicatif = "0.16.2"
-spinners = "2.0.0"
+indicatif = "0.17.1"
+log = "*"
+spinners = "4.1.0"
 memmap2 = "*"
-
+parse-mediawiki-sql = { version = "=0.9.0", features = ["utils"] }
