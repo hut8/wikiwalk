@@ -14,6 +14,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
+mod dump;
+
 #[derive(Debug, Clone)]
 pub struct Vertex {
     pub id: u32,
@@ -43,19 +45,6 @@ pub struct Edge {
 pub struct Link<'a> {
     pub source: &'a Vertex,
     pub dest: &'a Vertex,
-}
-
-// given an mmap and a start index, find the next newline
-// if there is no next newline, return the last possible index
-fn next_newline_ix(m: &Mmap, start: usize) -> usize {
-    let mut current = start;
-    while current < m.len() {
-        if m[current] == b'\n' {
-            break;
-        }
-        current += 1;
-    }
-    current
 }
 
 struct GraphDBBuilder {
@@ -106,7 +95,7 @@ impl GraphDBBuilder {
 
     pub fn build_database(&mut self) {
         log::info!("loading page.sql");
-        let mut vertexes = self.dump_load_vertexes();
+        let mut vertexes = self.load_vertexes_dump();
         log::debug!("finding max index");
         vertexes.sort_by(|x, y| x.id.cmp(&y.id));
         let max_page = vertexes.last().unwrap();
@@ -114,6 +103,7 @@ impl GraphDBBuilder {
 
         log::debug!("writing vertexes to {}", self.vertex_path.display());
         self.build_vertex_file(&vertexes);
+        log::debug!("writing vertexes complete");
 
         let title_map = self.build_title_map(&vertexes);
         let edge_map = self.build_edge_map(&title_map);
@@ -154,9 +144,11 @@ impl GraphDBBuilder {
     }
 
     // builds outgoing edges
-    fn build_edge_map(&mut self, title_map: &HashMap<String, u32>) -> HashMap<u32, Vec<u32>> {
+    fn build_edge_map(&self, title_map: &HashMap<String, u32>) -> HashMap<u32, Vec<u32>> {
         let mut m = HashMap::new();
-        for edge in self.dump_load_edges(&title_map).unwrap().iter() {
+        log::debug!("loading edges from dump");
+        let edges = Self::load_edges_dump(&self.pagelinks_path, &title_map);
+        for edge in edges.iter() {
             if !m.contains_key(&edge.source_vertex_id) {
                 m.insert(edge.source_vertex_id, vec![]);
             }
@@ -168,16 +160,51 @@ impl GraphDBBuilder {
     }
 
     // load edges from the pagelinks.sql dump
-    fn dump_load_edges(
-        &mut self,
+    fn load_edges_dump(
+        path: &PathBuf,
         title_map: &HashMap<String, u32>,
-    ) -> Result<Vec<Edge>, parse_mediawiki_sql::utils::Error> {
+    ) -> Vec<Edge> {
         use parse_mediawiki_sql::{
-            field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
             utils::memory_map,
         };
-        let pagelinks_sql = unsafe { memory_map(&self.pagelinks_path)? };
-        let links = iterate_sql_insertions(&pagelinks_sql)
+        let pagelinks_sql = unsafe { Arc::new(memory_map(path).unwrap()) };
+
+        let chunks = dump::dump_chunks(&pagelinks_sql);
+        let mut threads = Vec::new();
+
+        for chunk in chunks.into_iter() {
+            let pagelinks_ref = Arc::clone(&pagelinks_sql);
+            let t = thread::spawn(move || Self::load_edges_dump_chunk(&pagelinks_ref[chunk]));
+            threads.push(t);
+        }
+
+        let mut links = Vec::new();
+        for t in threads.into_iter() {
+            log::debug!("joining on thread {:#?}", t);
+            let mut res = t.join().unwrap();
+            links.append(&mut res);
+        }
+        log::info!("loaded pagelinks");
+
+        log::info!("linking via title");
+        let edges = links
+            .into_iter()
+            .filter_map(|pl| match title_map.get(&pl.1 .0) {
+                Some(dest_id) => Some(Edge {
+                    source_vertex_id: pl.0 .0,
+                    dest_vertex_id: *dest_id,
+                }),
+                None => None,
+            });
+        edges.collect()
+    }
+
+    fn load_edges_dump_chunk(chunk: &[u8]) -> Vec<(parse_mediawiki_sql::field_types::PageId, parse_mediawiki_sql::field_types::PageTitle)> {
+        use parse_mediawiki_sql::{
+            field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
+        };
+
+        let links = iterate_sql_insertions(&chunk)
             .filter_map(
                 |PageLink {
                      from,
@@ -193,55 +220,24 @@ impl GraphDBBuilder {
                 },
             )
             .collect::<Vec<_>>();
-        log::info!("loaded pagelinks");
-
-        log::info!("linking via title");
-        let edges = links
-            .into_iter()
-            .filter_map(|pl| match title_map.get(&pl.1 .0) {
-                Some(dest_id) => Some(Edge {
-                    source_vertex_id: pl.0 .0,
-                    dest_vertex_id: *dest_id,
-                }),
-                None => None,
-            });
-        Ok(edges.collect())
+            links
     }
 
     // load vertexes from the pages.sql dump
-    fn dump_load_vertexes(&mut self) ->Vec<Vertex> {
+    fn load_vertexes_dump(&mut self) ->Vec<Vertex> {
         // let pb = ProgressBar::new(1024);
         use parse_mediawiki_sql::{
             utils::memory_map,
         };
 
         let page_sql = unsafe { Arc::new(memory_map(&self.page_path).unwrap()) };
-        let sql_len = page_sql.len();
-        let cpu_count = num_cpus::get();
-        let chunk_size = sql_len / cpu_count;
-        log::debug!(
-            "sql-length={} cores={} chunk_sz={}",
-            sql_len,
-            cpu_count,
-            chunk_size
-        );
-        let mut chunk_start: usize = 0;
-        let mut threads  = Vec::new();
-        for i in 0..cpu_count {
-            let far_end = chunk_start + chunk_size;
-            let chunk_end = if far_end <= sql_len { far_end } else { sql_len };
-            let range_end = next_newline_ix(&page_sql, chunk_end);
-            log::debug!(
-                "chunk {}: {} -> chunk_end={} range_end={}",
-                i,
-                chunk_start,
-                chunk_end,
-                range_end
-            );
+        let chunks = dump::dump_chunks(&page_sql);
+        let mut threads = Vec::new();
+
+        for chunk in chunks.into_iter() {
             let page_ref = Arc::clone(&page_sql);
-            let t = thread::spawn(move || Self::load_vertex_dump_chunk(&page_ref[chunk_start..range_end]));
+            let t = thread::spawn(move || Self::load_vertex_dump_chunk(&page_ref[chunk]));
             threads.push(t);
-            chunk_start = range_end + 1;
         }
 
         let mut vertexes: Vec<Vertex> = Vec::new();
