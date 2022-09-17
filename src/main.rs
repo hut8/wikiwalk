@@ -2,7 +2,6 @@ use clap::{Parser, Subcommand};
 use dirs;
 use indicatif::ProgressIterator;
 use memmap2::{Mmap, MmapOptions};
-use num_cpus;
 use spinners::{Spinner, Spinners};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
@@ -96,7 +95,7 @@ impl GraphDBBuilder {
     pub fn build_database(&mut self) {
         log::info!("loading page.sql");
         let mut vertexes = self.load_vertexes_dump();
-        log::debug!("finding max index");
+        log::debug!("sorting and finding max index");
         vertexes.sort_by(|x, y| x.id.cmp(&y.id));
         let max_page = vertexes.last().unwrap();
         log::debug!("max page: {:#?}", max_page);
@@ -105,7 +104,9 @@ impl GraphDBBuilder {
         self.build_vertex_file(&vertexes);
         log::debug!("writing vertexes complete");
 
+        log::debug!("building title map");
         let title_map = self.build_title_map(&vertexes);
+        log::debug!("building edge map");
         let edge_map = self.build_edge_map(&title_map);
 
         log::debug!(
