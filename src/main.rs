@@ -1,9 +1,8 @@
-extern crate dotenv;
-
-use clap::{Parser, SubCommand, Subcommand};
+use clap::{Parser, Subcommand};
 use dirs;
 use indicatif::ProgressIterator;
-use memmap2::MmapOptions;
+use memmap2::{Mmap, MmapOptions};
+use num_cpus;
 use spinners::{Spinner, Spinners};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
@@ -11,6 +10,8 @@ use std::hash::{Hash, Hasher};
 use std::io::{prelude::*, BufWriter};
 use std::io::{BufReader, Write};
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::thread;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
@@ -42,6 +43,19 @@ pub struct Edge {
 pub struct Link<'a> {
     pub source: &'a Vertex,
     pub dest: &'a Vertex,
+}
+
+// given an mmap and a start index, find the next newline
+// if there is no next newline, return the last possible index
+fn next_newline_ix(m: &Mmap, start: usize) -> usize {
+    let mut current = start;
+    while current < m.len() {
+        if m[current] == b'\n' {
+            break;
+        }
+        current += 1;
+    }
+    current
 }
 
 struct GraphDBBuilder {
@@ -92,7 +106,7 @@ impl GraphDBBuilder {
 
     pub fn build_database(&mut self) {
         log::info!("loading page.sql");
-        let mut vertexes = self.dump_load_vertexes().unwrap();
+        let mut vertexes = self.dump_load_vertexes();
         log::debug!("finding max index");
         vertexes.sort_by(|x, y| x.id.cmp(&y.id));
         let max_page = vertexes.last().unwrap();
@@ -195,12 +209,55 @@ impl GraphDBBuilder {
     }
 
     // load vertexes from the pages.sql dump
-    fn dump_load_vertexes(&mut self) -> Result<Vec<Vertex>, parse_mediawiki_sql::utils::Error> {
+    fn dump_load_vertexes(&mut self) ->Vec<Vertex> {
+        // let pb = ProgressBar::new(1024);
         use parse_mediawiki_sql::{
-            field_types::PageNamespace, iterate_sql_insertions, schemas::Page, utils::memory_map,
+            utils::memory_map,
         };
-        let page_sql = unsafe { memory_map(&self.page_path)? };
-        let vertexes = iterate_sql_insertions(&page_sql)
+
+        let page_sql = unsafe { Arc::new(memory_map(&self.page_path).unwrap()) };
+        let sql_len = page_sql.len();
+        let cpu_count = num_cpus::get();
+        let chunk_size = sql_len / cpu_count;
+        log::debug!(
+            "sql-length={} cores={} chunk_sz={}",
+            sql_len,
+            cpu_count,
+            chunk_size
+        );
+        let mut chunk_start: usize = 0;
+        let mut threads  = Vec::new();
+        for i in 0..cpu_count {
+            let far_end = chunk_start + chunk_size;
+            let chunk_end = if far_end <= sql_len { far_end } else { sql_len };
+            let range_end = next_newline_ix(&page_sql, chunk_end);
+            log::debug!(
+                "chunk {}: {} -> chunk_end={} range_end={}",
+                i,
+                chunk_start,
+                chunk_end,
+                range_end
+            );
+            let page_ref = Arc::clone(&page_sql);
+            let t = thread::spawn(move || Self::load_vertex_dump_chunk(&page_ref[chunk_start..range_end]));
+            threads.push(t);
+            chunk_start = range_end + 1;
+        }
+
+        let mut vertexes: Vec<Vertex> = Vec::new();
+        for t in threads.into_iter() {
+            log::debug!("joining on thread {:#?}", t);
+            let mut res = t.join().unwrap().unwrap();
+            vertexes.append(&mut res);
+        }
+        vertexes
+    }
+
+    fn load_vertex_dump_chunk(chunk: &[u8]) -> Result<Vec<Vertex>, parse_mediawiki_sql::utils::Error> {
+        use parse_mediawiki_sql::{
+            field_types::PageNamespace, iterate_sql_insertions, schemas::Page,
+        };
+        let vertexes = iterate_sql_insertions(chunk)
             .filter_map(
                 |Page {
                      id,
@@ -474,8 +531,10 @@ enum Command {
     /// https://dumps.wikimedia.org/enwiki/latest/
     Build {
         /// Path to page.sql
+        #[clap(long)]
         page: PathBuf,
         /// Path to pagelinks.sql
+        #[clap(long)]
         pagelinks: PathBuf,
     },
     /// Find the shortest path
@@ -488,12 +547,21 @@ enum Command {
 }
 
 fn main() {
+    stderrlog::new()
+        .module(module_path!())
+        .quiet(false)
+        .verbosity(4)
+        //    .timestamp(ts)
+        .init()
+        .unwrap();
+
+    log::info!("Wikipedia Speedrun");
     let cli = Cli::parse();
 
     let home_dir = dirs::home_dir().unwrap();
     let default_data_dir = home_dir.join("speedrun-data");
     let data_dir = cli.data_path.unwrap_or(default_data_dir);
-
+    log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
     let vertex_path = data_dir.join("vertexes");
     let vertex_al_path = data_dir.join("vertex_al");
@@ -501,15 +569,16 @@ fn main() {
 
     match cli.command {
         Command::Build { page, pagelinks } => {
+            log::info!("building database");
             let mut gddb =
                 GraphDBBuilder::new(page, pagelinks, vertex_ix_path, vertex_al_path, vertex_path);
-            log::info!("building database");
             gddb.build_database();
         }
         Command::Run {
             source,
             destination,
         } => {
+            log::info!("computing path");
             let mut gdb = GraphDB::new(
                 vertex_ix_path.to_str().unwrap(),
                 vertex_al_path.to_str().unwrap(),
