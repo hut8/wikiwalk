@@ -97,8 +97,7 @@ impl GraphDBBuilder {
         let mut vertexes = self.load_vertexes_dump();
         log::debug!("sorting and finding max index");
         vertexes.sort_by(|x, y| x.id.cmp(&y.id));
-        let max_page = vertexes.last().unwrap();
-        log::debug!("max page: {:#?}", max_page);
+        let max_page_id = vertexes.last().unwrap().id;
 
         log::debug!("writing vertexes to {}", self.vertex_path.display());
         self.build_vertex_file(&vertexes);
@@ -106,6 +105,8 @@ impl GraphDBBuilder {
 
         log::debug!("building title map");
         let title_map = self.build_title_map(&vertexes);
+        drop(vertexes);
+
         log::debug!("building edge map");
         let edge_map = self.build_edge_map(&title_map);
 
@@ -113,10 +114,10 @@ impl GraphDBBuilder {
             "building al [{}] and ix [{}] - {} vertexes",
             self.al_path.to_str().unwrap(),
             self.ix_path.to_str().unwrap(),
-            max_page.id,
+            max_page_id,
         );
 
-        for n in 0..max_page.id {
+        for n in 0..max_page_id {
             let vertex_al_offset: u64 = self.build_adjacency_list(n, &edge_map);
             self.ix_file.write(&vertex_al_offset.to_le_bytes()).unwrap();
             if n % 1000 == 0 {
@@ -181,7 +182,6 @@ impl GraphDBBuilder {
 
         let mut links = Vec::new();
         for t in threads.into_iter() {
-            log::debug!("joining on thread {:#?}", t);
             let mut res = t.join().unwrap();
             links.append(&mut res);
         }
@@ -243,7 +243,6 @@ impl GraphDBBuilder {
 
         let mut vertexes: Vec<Vertex> = Vec::new();
         for t in threads.into_iter() {
-            log::debug!("joining on thread {:#?}", t);
             let mut res = t.join().unwrap().unwrap();
             vertexes.append(&mut res);
         }
