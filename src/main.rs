@@ -1,21 +1,31 @@
 use clap::{Parser, Subcommand};
 use dirs;
 use indicatif::ProgressIterator;
-use memmap2::{Mmap, MmapOptions};
+use memmap2::{Mmap, MmapMut, MmapOptions};
+use memory_stats::memory_stats;
+use parse_mediawiki_sql::schemas::Page;
+use sea_orm::sea_query::TableCreateStatement;
+use sea_orm::entity::prelude::*;
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, Database, DbBackend, DbConn, DeriveColumn, EntityTrait, EnumIter,
+    QueryFilter, QuerySelect, Schema, Set,
+};
+use serde::{Deserialize, Serialize};
 use spinners::{Spinner, Spinners};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{prelude::*, BufWriter};
+use std::io::{self, prelude::*, BufWriter, SeekFrom};
 use std::io::{BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::thread;
 use std::time::Instant;
+use std::{future, mem, thread};
 
 mod dump;
+mod schema;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Vertex {
     pub id: u32,
     pub title: String,
@@ -57,6 +67,14 @@ struct GraphDBBuilder {
     al_file: File,
     ix_file: File,
     vertex_file: File,
+
+    // process directory
+    process_path: PathBuf,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
+enum QueryAs {
+    MaxVertexId,
 }
 
 impl GraphDBBuilder {
@@ -66,6 +84,7 @@ impl GraphDBBuilder {
         ix_path: PathBuf,
         al_path: PathBuf,
         vertex_path: PathBuf,
+        process_path: PathBuf,
     ) -> GraphDBBuilder {
         let ix_file = match File::create(&ix_path) {
             Err(why) => panic!("couldn't create {:?}: {}", &ix_path, why),
@@ -89,26 +108,33 @@ impl GraphDBBuilder {
             al_file,
             ix_file,
             vertex_file,
+            process_path,
         }
     }
 
-    pub fn build_database(&mut self) {
+    /// load vertexes from page.sql and put them in a sqlite file
+    pub async fn build_database(&mut self) {
+        let db_path = self.process_path.join("wikipedia-speedrun.db");
+        let db: DbConn = Database::connect(format!("sqlite://{}", db_path.to_string_lossy()))
+            .await
+            .expect("db connect");
+
         log::info!("loading page.sql");
-        let mut vertexes = self.load_vertexes_dump();
-        log::debug!("sorting and finding max index");
-        vertexes.sort_by(|x, y| x.id.cmp(&y.id));
-        let max_page_id = vertexes.last().unwrap().id;
+        self.load_vertexes_dump(db.clone()).await;
 
-        log::debug!("writing vertexes to {}", self.vertex_path.display());
-        self.build_vertex_file(&vertexes);
-        log::debug!("writing vertexes complete");
+        log::debug!("finding max index");
 
-        log::debug!("building title map");
-        let title_map = self.build_title_map(&vertexes);
-        drop(vertexes);
+        let max_page_id = schema::vertex::Entity::find()
+            .select_only()
+            .column_as(schema::vertex::Column::Id.max(), QueryAs::MaxVertexId)
+            .into_values::<_, QueryAs>()
+            .one(&db)
+            .await
+            .expect("query max id")
+            .unwrap();
 
         log::debug!("building edge map");
-        let edge_map = self.build_edge_map(&title_map);
+        let edge_map = self.build_edge_map(db.clone()).await;
 
         log::debug!(
             "building al [{}] and ix [{}] - {} vertexes",
@@ -129,28 +155,12 @@ impl GraphDBBuilder {
         log::info!("database build complete")
     }
 
-    fn build_vertex_file(&mut self, vertexes: &Vec<Vertex>) {
-        let mut writer = BufWriter::new(&self.vertex_file);
-        for v in vertexes.iter() {
-            write!(&mut writer, "{}\t{}\n", v.id, v.title).unwrap();
-        }
-        writer.flush().unwrap()
-    }
-
-    fn build_title_map(&mut self, vertexes: &Vec<Vertex>) -> HashMap<String, u32> {
-        let mut m = HashMap::new();
-        for v in vertexes.iter() {
-            m.insert(v.title.clone(), v.id);
-        }
-        m
-    }
-
     // builds outgoing edges
-    fn build_edge_map(&self, title_map: &HashMap<String, u32>) -> HashMap<u32, Vec<u32>> {
+    async fn build_edge_map(&self, db: DbConn) -> HashMap<u32, Vec<u32>> {
         let mut m = HashMap::new();
         log::debug!("loading edges from dump");
-        let edges = Self::load_edges_dump(&self.pagelinks_path, &title_map);
-        for edge in edges.iter() {
+        let edges = Self::load_edges_dump(&self.pagelinks_path, db);
+        for edge in edges.await.iter() {
             if !m.contains_key(&edge.source_vertex_id) {
                 m.insert(edge.source_vertex_id, vec![]);
             }
@@ -162,13 +172,8 @@ impl GraphDBBuilder {
     }
 
     // load edges from the pagelinks.sql dump
-    fn load_edges_dump(
-        path: &PathBuf,
-        title_map: &HashMap<String, u32>,
-    ) -> Vec<Edge> {
-        use parse_mediawiki_sql::{
-            utils::memory_map,
-        };
+    async fn load_edges_dump(path: &PathBuf, db: DbConn) -> Vec<Edge> {
+        use parse_mediawiki_sql::utils::memory_map;
         let pagelinks_sql = unsafe { Arc::new(memory_map(path).unwrap()) };
 
         let chunks = dump::dump_chunks(&pagelinks_sql);
@@ -188,19 +193,37 @@ impl GraphDBBuilder {
         log::info!("loaded pagelinks");
 
         log::info!("linking via title");
-        let edges = links
+        let edges = links.into_iter().map(|pl| {
+            let db = db.clone();
+            async move {
+                let res = schema::vertex::Entity::find()
+                    .filter(schema::vertex::Column::Title.eq(pl.1 .0))
+                    .one(&db)
+                    .await
+                    .expect("query vertex by title");
+                match res {
+                    Some(dest) => Some(Edge {
+                        source_vertex_id: pl.0 .0,
+                        dest_vertex_id: dest.id,
+                    }),
+                    None => None,
+                }
+            }
+        });
+        let res = futures::future::join_all(edges)
+            .await
             .into_iter()
-            .filter_map(|pl| match title_map.get(&pl.1 .0) {
-                Some(dest_id) => Some(Edge {
-                    source_vertex_id: pl.0 .0,
-                    dest_vertex_id: *dest_id,
-                }),
-                None => None,
-            });
-        edges.collect()
+            .filter_map(|p| p)
+            .collect();
+        res
     }
 
-    fn load_edges_dump_chunk(chunk: &[u8]) -> Vec<(parse_mediawiki_sql::field_types::PageId, parse_mediawiki_sql::field_types::PageTitle)> {
+    fn load_edges_dump_chunk(
+        chunk: &[u8],
+    ) -> Vec<(
+        parse_mediawiki_sql::field_types::PageId,
+        parse_mediawiki_sql::field_types::PageTitle,
+    )> {
         use parse_mediawiki_sql::{
             field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
         };
@@ -221,39 +244,51 @@ impl GraphDBBuilder {
                 },
             )
             .collect::<Vec<_>>();
-            links
+        links
     }
 
     // load vertexes from the pages.sql dump
-    fn load_vertexes_dump(&mut self) ->Vec<Vertex> {
-        // let pb = ProgressBar::new(1024);
-        use parse_mediawiki_sql::{
-            utils::memory_map,
-        };
+    async fn load_vertexes_dump(&mut self, db: DbConn) {
+        use parse_mediawiki_sql::utils::memory_map;
+
+        if let Some(usage) = memory_stats() {
+            println!("Current physical memory usage: {}", usage.physical_mem);
+            println!("Current virtual memory usage: {}", usage.virtual_mem);
+        } else {
+            println!("Couldn't get the current memory usage :(");
+        }
 
         let page_sql = unsafe { Arc::new(memory_map(&self.page_path).unwrap()) };
         let chunks = dump::dump_chunks(&page_sql);
         let mut threads = Vec::new();
 
+        let schema = Schema::new(DbBackend::Sqlite);
+        let stmt: TableCreateStatement = schema.create_table_from_entity(schema::vertex::Entity);
+        let result = db
+            .execute(db.get_database_backend().build(&stmt))
+            .await
+            .expect("create table");
+
         for chunk in chunks.into_iter() {
             let page_ref = Arc::clone(&page_sql);
-            let t = thread::spawn(move || Self::load_vertex_dump_chunk(&page_ref[chunk]));
+            let db_ref = db.clone();
+            let t = thread::spawn(move || Self::load_vertex_dump_chunk(db_ref, &page_ref[chunk]));
             threads.push(t);
         }
 
-        let mut vertexes: Vec<Vertex> = Vec::new();
         for t in threads.into_iter() {
-            let mut res = t.join().unwrap().unwrap();
-            vertexes.append(&mut res);
+            t.join().unwrap().unwrap();
+            log::debug!("thread joined");
         }
-        vertexes
     }
 
-    fn load_vertex_dump_chunk(chunk: &[u8]) -> Result<Vec<Vertex>, parse_mediawiki_sql::utils::Error> {
-        use parse_mediawiki_sql::{
-            field_types::PageNamespace, iterate_sql_insertions, schemas::Page,
-        };
-        let vertexes = iterate_sql_insertions(chunk)
+    fn load_vertex_dump_chunk(
+        db: DbConn,
+        chunk: &[u8],
+    ) -> Result<(), parse_mediawiki_sql::utils::Error> {
+        use parse_mediawiki_sql::{field_types::PageNamespace, iterate_sql_insertions};
+
+        iterate_sql_insertions(chunk)
             .filter_map(
                 |Page {
                      id,
@@ -271,8 +306,19 @@ impl GraphDBBuilder {
                     }
                 },
             )
-            .collect::<Vec<_>>();
-        Ok(vertexes)
+            .map(|v| {
+                let vertex_model = schema::vertex::ActiveModel {
+                    title: Set(v.title),
+                    ..Default::default()
+                };
+                schema::vertex::Entity::insert(vertex_model).exec(&db)
+            })
+            .for_each(|f| {
+                async move {
+                    f.await;
+                };
+            });
+        Ok(())
     }
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
@@ -563,11 +609,20 @@ fn main() {
     let vertex_al_path = data_dir.join("vertex_al");
     let vertex_ix_path = data_dir.join("vertex_al_ix");
 
+    // directory used for processing import
     match cli.command {
         Command::Build { page, pagelinks } => {
             log::info!("building database");
-            let mut gddb =
-                GraphDBBuilder::new(page, pagelinks, vertex_ix_path, vertex_al_path, vertex_path);
+            let process_path: PathBuf = data_dir.join("process");
+            std::fs::create_dir_all(&process_path).unwrap();
+            let mut gddb = GraphDBBuilder::new(
+                page,
+                pagelinks,
+                vertex_ix_path,
+                vertex_al_path,
+                vertex_path,
+                process_path,
+            );
             gddb.build_database();
         }
         Command::Run {
