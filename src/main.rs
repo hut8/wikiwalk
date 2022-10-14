@@ -7,7 +7,7 @@ use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::TableCreateStatement;
 use sea_orm::{
     ColumnTrait, ConnectionTrait, Database, DbBackend, DbConn, DeriveColumn, EntityTrait, EnumIter,
-    QueryFilter, QuerySelect, Schema, Set,
+    QueryFilter, QuerySelect, Schema, Set, Statement, DatabaseBackend, TransactionTrait,
 };
 use spinners::{Spinner, Spinners};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -105,11 +105,9 @@ impl GraphDBBuilder {
     /// load vertexes from page.sql and put them in a sqlite file
     pub async fn build_database(&mut self) {
         let db_path = self.process_path.join("wikipedia-speedrun.db");
-        let conn_str = format!("sqlite:///{}?mode=rwc",db_path.to_string_lossy());
+        let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
         log::debug!("using database: {}", conn_str);
-        let db: DbConn = Database::connect(conn_str)
-            .await
-            .expect("db connect");
+        let db: DbConn = Database::connect(conn_str).await.expect("db connect");
 
         log::info!("loading page.sql");
         self.load_vertexes_dump(db.clone()).await;
@@ -260,6 +258,27 @@ impl GraphDBBuilder {
             .await
             .expect("create table");
 
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "PRAGMA synchronous = OFF".to_owned(),
+        ))
+        .await
+        .expect("set sync pragma");
+
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "PRAGMA journal_mode = MEMORY".to_owned(),
+        ))
+        .await
+        .expect("set journal_mode pragma");
+
+        // db.execute(Statement::from_string(
+        //     DatabaseBackend::Sqlite,
+        //     "BEGIN TRANSACTION".to_owned(),
+        // ))
+        // .await
+        // .expect("begin transaction");
+
         for chunk in chunks.into_iter() {
             let page_ref = Arc::clone(&page_sql);
             let db_ref = db.clone();
@@ -275,6 +294,7 @@ impl GraphDBBuilder {
 
     async fn load_vertex_dump_chunk(db: DbConn, map: Arc<Mmap>, range: Range<usize>) {
         use parse_mediawiki_sql::{field_types::PageNamespace, iterate_sql_insertions};
+        let txn = db.begin().await.expect("start transaction");
 
         let chunk = &map[range];
         let mut iterator = iterate_sql_insertions(chunk);
@@ -302,10 +322,11 @@ impl GraphDBBuilder {
                 ..Default::default()
             };
             schema::vertex::Entity::insert(vertex_model)
-                .exec(&db)
+                .exec(&txn)
                 .await
                 .expect("insert vertex");
         }
+        txn.commit().await.expect("commit txn");
     }
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
