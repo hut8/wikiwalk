@@ -1,26 +1,25 @@
 use clap::{Parser, Subcommand};
 use dirs;
-use indicatif::ProgressIterator;
-use memmap2::{Mmap, MmapMut, MmapOptions};
+use memmap2::{Mmap, MmapOptions};
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::schemas::Page;
-use sea_orm::sea_query::TableCreateStatement;
 use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::TableCreateStatement;
 use sea_orm::{
     ColumnTrait, ConnectionTrait, Database, DbBackend, DbConn, DeriveColumn, EntityTrait, EnumIter,
     QueryFilter, QuerySelect, Schema, Set,
 };
-use serde::{Deserialize, Serialize};
 use spinners::{Spinner, Spinners};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{self, prelude::*, BufWriter, SeekFrom};
+use std::io::prelude::*;
 use std::io::{BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::ops::Range;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 use std::time::Instant;
-use std::{future, mem, thread};
 
 mod dump;
 mod schema;
@@ -61,12 +60,10 @@ struct GraphDBBuilder {
     pub page_path: PathBuf,
     pub pagelinks_path: PathBuf,
     // outputs
-    vertex_path: PathBuf,
     pub ix_path: PathBuf,
     pub al_path: PathBuf,
     al_file: File,
     ix_file: File,
-    vertex_file: File,
 
     // process directory
     process_path: PathBuf,
@@ -83,7 +80,6 @@ impl GraphDBBuilder {
         pagelinks: PathBuf,
         ix_path: PathBuf,
         al_path: PathBuf,
-        vertex_path: PathBuf,
         process_path: PathBuf,
     ) -> GraphDBBuilder {
         let ix_file = match File::create(&ix_path) {
@@ -94,20 +90,14 @@ impl GraphDBBuilder {
             Err(why) => panic!("couldn't create {:?}: {}", &al_path, why),
             Ok(file) => file,
         };
-        let vertex_file = match File::create(&vertex_path) {
-            Err(why) => panic!("couldn't create {:?}: {}", &vertex_path, why),
-            Ok(file) => file,
-        };
 
         GraphDBBuilder {
             page_path: page,
             pagelinks_path: pagelinks,
             ix_path,
             al_path,
-            vertex_path,
             al_file,
             ix_file,
-            vertex_file,
             process_path,
         }
     }
@@ -115,7 +105,9 @@ impl GraphDBBuilder {
     /// load vertexes from page.sql and put them in a sqlite file
     pub async fn build_database(&mut self) {
         let db_path = self.process_path.join("wikipedia-speedrun.db");
-        let db: DbConn = Database::connect(format!("sqlite://{}", db_path.to_string_lossy()))
+        let conn_str = format!("sqlite:///{}?mode=rwc",db_path.to_string_lossy());
+        log::debug!("using database: {}", conn_str);
+        let db: DbConn = Database::connect(conn_str)
             .await
             .expect("db connect");
 
@@ -264,61 +256,56 @@ impl GraphDBBuilder {
 
         let schema = Schema::new(DbBackend::Sqlite);
         let stmt: TableCreateStatement = schema.create_table_from_entity(schema::vertex::Entity);
-        let result = db
-            .execute(db.get_database_backend().build(&stmt))
+        db.execute(db.get_database_backend().build(&stmt))
             .await
             .expect("create table");
 
         for chunk in chunks.into_iter() {
             let page_ref = Arc::clone(&page_sql);
             let db_ref = db.clone();
-            let t = thread::spawn(move || Self::load_vertex_dump_chunk(db_ref, &page_ref[chunk]));
+            let t = thread::spawn(move || Self::load_vertex_dump_chunk(db_ref, page_ref, chunk));
             threads.push(t);
         }
 
         for t in threads.into_iter() {
-            t.join().unwrap().unwrap();
+            t.join().unwrap().await;
             log::debug!("thread joined");
         }
     }
 
-    fn load_vertex_dump_chunk(
-        db: DbConn,
-        chunk: &[u8],
-    ) -> Result<(), parse_mediawiki_sql::utils::Error> {
+    async fn load_vertex_dump_chunk(db: DbConn, map: Arc<Mmap>, range: Range<usize>) {
         use parse_mediawiki_sql::{field_types::PageNamespace, iterate_sql_insertions};
 
-        iterate_sql_insertions(chunk)
-            .filter_map(
-                |Page {
-                     id,
-                     namespace,
-                     title,
-                     ..
-                 }| {
-                    if namespace == PageNamespace(0) {
-                        Some(Vertex {
-                            id: id.0,
-                            title: title.0,
-                        })
-                    } else {
-                        None
-                    }
-                },
-            )
-            .map(|v| {
-                let vertex_model = schema::vertex::ActiveModel {
-                    title: Set(v.title),
-                    ..Default::default()
-                };
-                schema::vertex::Entity::insert(vertex_model).exec(&db)
-            })
-            .for_each(|f| {
-                async move {
-                    f.await;
-                };
-            });
-        Ok(())
+        let chunk = &map[range];
+        let mut iterator = iterate_sql_insertions(chunk);
+        let vertexes = iterator.filter_map(
+            |Page {
+                 id,
+                 namespace,
+                 title,
+                 ..
+             }| {
+                if namespace == PageNamespace(0) {
+                    Some(Vertex {
+                        id: id.0,
+                        title: title.0,
+                    })
+                } else {
+                    None
+                }
+            },
+        );
+
+        for v in vertexes {
+            let vertex_model = schema::vertex::ActiveModel {
+                title: Set(v.title),
+                ..Default::default()
+            };
+            schema::vertex::Entity::insert(vertex_model)
+                .exec(&db)
+                .await
+                .expect("insert vertex");
+        }
     }
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
@@ -588,7 +575,8 @@ enum Command {
     },
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     stderrlog::new()
         .module(module_path!())
         .quiet(false)
@@ -601,7 +589,7 @@ fn main() {
     let cli = Cli::parse();
 
     let home_dir = dirs::home_dir().unwrap();
-    let default_data_dir = home_dir.join("speedrun-data");
+    let default_data_dir = home_dir.join("data").join("speedrun-data");
     let data_dir = cli.data_path.unwrap_or(default_data_dir);
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
@@ -613,17 +601,9 @@ fn main() {
     match cli.command {
         Command::Build { page, pagelinks } => {
             log::info!("building database");
-            let process_path: PathBuf = data_dir.join("process");
-            std::fs::create_dir_all(&process_path).unwrap();
-            let mut gddb = GraphDBBuilder::new(
-                page,
-                pagelinks,
-                vertex_ix_path,
-                vertex_al_path,
-                vertex_path,
-                process_path,
-            );
-            gddb.build_database();
+            let mut gddb =
+                GraphDBBuilder::new(page, pagelinks, vertex_ix_path, vertex_al_path, data_dir);
+            gddb.build_database().await;
         }
         Command::Run {
             source,
