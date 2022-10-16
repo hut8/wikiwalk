@@ -1,21 +1,21 @@
 use clap::{Parser, Subcommand};
 use dirs;
-use memmap2::{Mmap, MmapOptions};
+use indicatif::ProgressStyle;
+use memmap2::MmapOptions;
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::schemas::Page;
 use sea_orm::entity::prelude::*;
-use sea_orm::sea_query::TableCreateStatement;
+use sea_orm::sea_query::{Table, TableCreateStatement, TableDropStatement};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, Database, DbBackend, DbConn, DeriveColumn, EntityTrait, EnumIter,
-    QueryFilter, QuerySelect, Schema, Set, Statement, DatabaseBackend, TransactionTrait,
+    ColumnTrait, ConnectionTrait, Database, DatabaseBackend, DbBackend, DbConn, DeriveColumn,
+    EntityTrait, EnumIter, QueryFilter, QuerySelect, Schema, Set, Statement, TransactionTrait,
 };
 use spinners::{Spinner, Spinners};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
-use std::io::{BufReader, Write};
-use std::ops::Range;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -67,6 +67,9 @@ struct GraphDBBuilder {
 
     // process directory
     process_path: PathBuf,
+
+    // approximate size
+    vertex_count: u32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
@@ -91,6 +94,7 @@ impl GraphDBBuilder {
             Ok(file) => file,
         };
 
+        let vertex_count = 6546390;
         GraphDBBuilder {
             page_path: page,
             pagelinks_path: pagelinks,
@@ -99,6 +103,7 @@ impl GraphDBBuilder {
             al_file,
             ix_file,
             process_path,
+            vertex_count,
         }
     }
 
@@ -241,6 +246,11 @@ impl GraphDBBuilder {
     async fn load_vertexes_dump(&mut self, db: DbConn) {
         use parse_mediawiki_sql::utils::memory_map;
 
+        let progress = indicatif::ProgressBar::new(self.vertex_count.into());
+        progress.set_style(
+            ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
+        );
+
         if let Some(usage) = memory_stats() {
             println!("Current physical memory usage: {}", usage.physical_mem);
             println!("Current virtual memory usage: {}", usage.virtual_mem);
@@ -248,15 +258,9 @@ impl GraphDBBuilder {
             println!("Couldn't get the current memory usage :(");
         }
 
-        let page_sql = unsafe { Arc::new(memory_map(&self.page_path).unwrap()) };
-        let chunks = dump::dump_chunks(&page_sql);
-        let mut threads = Vec::new();
+        let page_sql = unsafe { memory_map(&self.page_path).unwrap() };
 
-        let schema = Schema::new(DbBackend::Sqlite);
-        let stmt: TableCreateStatement = schema.create_table_from_entity(schema::vertex::Entity);
-        db.execute(db.get_database_backend().build(&stmt))
-            .await
-            .expect("create table");
+        self.create_vertex_table(db.clone()).await;
 
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
@@ -272,40 +276,19 @@ impl GraphDBBuilder {
         .await
         .expect("set journal_mode pragma");
 
-        // db.execute(Statement::from_string(
-        //     DatabaseBackend::Sqlite,
-        //     "BEGIN TRANSACTION".to_owned(),
-        // ))
-        // .await
-        // .expect("begin transaction");
-
-        for chunk in chunks.into_iter() {
-            let page_ref = Arc::clone(&page_sql);
-            let db_ref = db.clone();
-            let t = thread::spawn(move || Self::load_vertex_dump_chunk(db_ref, page_ref, chunk));
-            threads.push(t);
-        }
-
-        for t in threads.into_iter() {
-            t.join().unwrap().await;
-            log::debug!("thread joined");
-        }
-    }
-
-    async fn load_vertex_dump_chunk(db: DbConn, map: Arc<Mmap>, range: Range<usize>) {
         use parse_mediawiki_sql::{field_types::PageNamespace, iterate_sql_insertions};
         let txn = db.begin().await.expect("start transaction");
 
-        let chunk = &map[range];
-        let mut iterator = iterate_sql_insertions(chunk);
+        let mut iterator = iterate_sql_insertions(&page_sql);
         let vertexes = iterator.filter_map(
             |Page {
                  id,
                  namespace,
+                 is_redirect,
                  title,
                  ..
              }| {
-                if namespace == PageNamespace(0) {
+                if namespace == PageNamespace(0) && !is_redirect {
                     Some(Vertex {
                         id: id.0,
                         title: title.0,
@@ -325,8 +308,39 @@ impl GraphDBBuilder {
                 .exec(&txn)
                 .await
                 .expect("insert vertex");
+            progress.inc(1);
         }
-        txn.commit().await.expect("commit txn");
+        txn.commit().await.expect("commit");
+        progress.finish();
+    }
+
+    pub async fn create_vertex_table(&self, db: DbConn) {
+        let count = schema::vertex::Entity::find().count(&db).await;
+        let schema = Schema::new(DbBackend::Sqlite);
+        let create_stmt: TableCreateStatement =
+            schema.create_table_from_entity(schema::vertex::Entity);
+        match count {
+            Ok(count) => {
+                log::debug!("rows present: {}", count);
+                if count != self.vertex_count as usize {
+                    log::debug!("wrong row count; expected {}", self.vertex_count);
+                    let stmt = Table::drop()
+                        .table(schema::vertex::Entity.table_ref())
+                        .to_owned();
+                    db.execute(db.get_database_backend().build(&stmt))
+                        .await
+                        .expect("drop table");
+                    db.execute(db.get_database_backend().build(&create_stmt))
+                        .await
+                        .expect("create table");
+                }
+            }
+            Err(_) => {
+                db.execute(db.get_database_backend().build(&create_stmt))
+                    .await
+                    .expect("create table");
+            }
+        }
     }
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
@@ -363,17 +377,16 @@ impl GraphDBBuilder {
 pub struct GraphDB {
     pub mmap_ix: memmap2::Mmap,
     pub mmap_al: memmap2::Mmap,
-    pub vertex_file: File,
+    pub db: DbConn,
     pub visited_ids: HashSet<u32>,
     pub parents: HashMap<u32, u32>,
     pub q: VecDeque<u32>,
 }
 
 impl GraphDB {
-    pub fn new(path_ix: &str, path_al: &str, path_vertex: &str) -> Result<GraphDB, std::io::Error> {
+    pub fn new(path_ix: &str, path_al: &str, db: DbConn) -> Result<GraphDB, std::io::Error> {
         let file_ix = File::open(path_ix)?;
         let file_al = File::open(path_al)?;
-        let vertex_file = File::open(path_vertex)?;
         let mmap_ix = unsafe { MmapOptions::new().map(&file_ix)? };
         let mmap_al = unsafe { MmapOptions::new().map(&file_al)? };
         let visited_ids = HashSet::new();
@@ -382,54 +395,43 @@ impl GraphDB {
         Ok(GraphDB {
             mmap_ix,
             mmap_al,
-            vertex_file,
+            db,
             visited_ids,
             parents,
             q,
         })
     }
 
-    pub fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
+    pub async fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
         let canon_title = title.to_lowercase();
         log::debug!("loading vertex: {}", canon_title);
-        self.vertex_file.seek(std::io::SeekFrom::Start(0)).unwrap();
-        let reader = BufReader::new(&self.vertex_file);
-        reader.lines().find_map(|l| {
-            let parts = l.as_ref().unwrap().split("\t").collect::<Vec<&str>>();
-            if parts.len() != 2 {
-                panic!("invalid line in vertex file: {}", l.unwrap());
-            }
-            if parts[1] == canon_title {
-                let vertex_id: u32 = parts[0].parse().unwrap();
-                Some(Vertex {
-                    id: vertex_id,
-                    title: parts[1].to_owned(),
-                })
-            } else {
-                None
-            }
-        })
+        let vertex_model = schema::vertex::Entity::find()
+            .filter(schema::vertex::Column::Title.eq(title))
+            .one(&self.db)
+            .await
+            .expect("find vertex by title");
+        match vertex_model {
+            Some(v) => Some(Vertex {
+                id: v.id,
+                title: v.title,
+            }),
+            None => None,
+        }
     }
 
-    pub fn find_vertex_by_id(&mut self, id: u32) -> Option<Vertex> {
+    pub async fn find_vertex_by_id(&self, id: u32) -> Option<Vertex> {
         log::debug!("loading vertex: id={}", id);
-        self.vertex_file.seek(std::io::SeekFrom::Start(0)).unwrap();
-        let reader = BufReader::new(&self.vertex_file);
-        reader.lines().find_map(|l| {
-            let parts = l.as_ref().unwrap().split("\t").collect::<Vec<&str>>();
-            if parts.len() != 2 {
-                panic!("invalid line in vertex file: {}", l.unwrap());
-            }
-            let record_id: u32 = parts[0].parse().unwrap();
-            if record_id == id {
-                Some(Vertex {
-                    id,
-                    title: parts[1].to_owned(),
-                })
-            } else {
-                None
-            }
-        })
+        let vertex_model = schema::vertex::Entity::find_by_id(id)
+            .one(&self.db)
+            .await
+            .expect("find vertex by title");
+        match vertex_model {
+            Some(v) => Some(Vertex {
+                id: v.id,
+                title: v.title,
+            }),
+            None => None,
+        }
     }
 
     fn check_al(&mut self) {
@@ -614,7 +616,6 @@ async fn main() {
     let data_dir = cli.data_path.unwrap_or(default_data_dir);
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
-    let vertex_path = data_dir.join("vertexes");
     let vertex_al_path = data_dir.join("vertex_al");
     let vertex_ix_path = data_dir.join("vertex_al_ix");
 
@@ -630,11 +631,16 @@ async fn main() {
             source,
             destination,
         } => {
+            let db_path = data_dir.join("wikipedia-speedrun.db");
+            let conn_str = format!("sqlite:///{}?mode=ro", db_path.to_string_lossy());
+            log::debug!("using database: {}", conn_str);
+            let db: DbConn = Database::connect(conn_str).await.expect("db connect");
+
             log::info!("computing path");
             let mut gdb = GraphDB::new(
                 vertex_ix_path.to_str().unwrap(),
                 vertex_al_path.to_str().unwrap(),
-                vertex_path.to_str().unwrap(),
+                db,
             )
             .unwrap();
             let source_title = source.replace(" ", "_").to_lowercase();
@@ -644,18 +650,22 @@ async fn main() {
 
             let source_vertex = gdb
                 .find_vertex_by_title(source_title)
+                .await
                 .expect("source not found");
             let dest_vertex = gdb
                 .find_vertex_by_title(dest_title)
+                .await
                 .expect("destination not found");
 
             log::info!("speedrun: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
 
             match gdb.bfs(source_vertex.id as u32, dest_vertex.id as u32) {
                 Some(path) => {
-                    let vertex_path = path
-                        .iter()
-                        .map(|vid| gdb.find_vertex_by_id(*vid).unwrap())
+                    let vertex_path = path.into_iter().map(|vid| gdb.find_vertex_by_id(vid));
+                    let vertex_path = futures::future::join_all(vertex_path)
+                        .await
+                        .into_iter()
+                        .map(|v| v.expect("vertex not found"))
                         .collect();
                     let formatted_path = format_path(vertex_path);
                     println!("\n{}", formatted_path);
