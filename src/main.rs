@@ -291,10 +291,12 @@ impl GraphDBBuilder {
             }
         }
 
+        let draw_target = ProgressDrawTarget::stderr_with_hz(0.1);
         let progress = indicatif::ProgressBar::new(self.vertex_count.into());
         progress.set_style(
             ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
         );
+        progress.set_draw_target(draw_target);
 
         if let Some(usage) = memory_stats() {
             println!("Current physical memory usage: {}", usage.physical_mem);
