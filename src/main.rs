@@ -1,13 +1,15 @@
 use clap::{Parser, Subcommand};
 use dirs;
-use futures::channel::mpsc::{self, UnboundedSender};
-use futures::stream::{self, StreamExt};
-use indicatif::ProgressStyle;
+use futures::channel::mpsc::{self, Sender};
+use futures::stream::StreamExt;
+use futures::SinkExt;
+use indicatif::{ProgressDrawTarget, ProgressStyle};
 use memmap2::{Mmap, MmapOptions};
 use memory_stats::memory_stats;
+use parse_mediawiki_sql::field_types::{PageId, PageTitle};
 use parse_mediawiki_sql::schemas::Page;
 use sea_orm::entity::prelude::*;
-use sea_orm::sea_query::{Table, TableCreateStatement};
+use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, Database, DatabaseBackend, DbBackend, DbConn, DeriveColumn,
     EntityTrait, EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
@@ -59,6 +61,12 @@ pub struct Edge {
 pub struct Link<'a> {
     pub source: &'a Vertex,
     pub dest: &'a Vertex,
+}
+
+/// Intermediate type of only fields necessary to create an Edge
+pub struct WPPageLink {
+    pub source_page_id: PageId,
+    pub dest_page_title: PageTitle,
 }
 
 struct GraphDBBuilder {
@@ -186,9 +194,10 @@ impl GraphDBBuilder {
         let pagelinks_sql = unsafe { Arc::new(memory_map(path).unwrap()) };
 
         let chunks = dump::dump_chunks(&pagelinks_sql);
-        // let mut threads = Vec::new();
-        let (tx, rx) = mpsc::unbounded::<Edge>();
+        let mut threads = Vec::new();
+        let (pagelink_tx, pagelink_rx) = std::sync::mpsc::sync_channel::<WPPageLink>(65535);
 
+        // because the parsing is CPU-bound, spawn multiple threads to parse the SQL
         for chunk in chunks.into_iter() {
             log::debug!(
                 "spawning thread for edge loading: {} -> {}",
@@ -196,29 +205,55 @@ impl GraphDBBuilder {
                 chunk.end
             );
             let pagelinks_ref = Arc::clone(&pagelinks_sql);
-            let db = db.clone();
-            let tx = tx.clone();
-            let t =
-                thread::spawn(move || Self::load_edges_dump_chunk(pagelinks_ref, chunk, db, tx));
-            //threads.push(t);
+            let tx = pagelink_tx.clone();
+            let t = thread::spawn(move || Self::load_edges_dump_chunk(pagelinks_ref, chunk, tx));
+            threads.push(t);
         }
 
-        // let mut links = Vec::new();
-        // for t in threads.into_iter() {
-        //     let mut res = t.join().unwrap().await;
-        //     log::debug!("joined edge loading thread");
-        //     links.append(&mut res);
-        // }
-        let links = rx.collect::<Vec<Edge>>().await;
-        log::info!("loaded pagelinks");
+        // the WPPageLinks will be resolved to edges using async functions, and therefore will not get
+        // their own thread
+        let (edge_tx, edge_rx) = mpsc::channel::<Edge>(65535);
+        let resolver = Self::resolve_edges(db.clone(), pagelink_rx, edge_tx);
+
+        for t in threads.into_iter() {
+            t.join().unwrap();
+            log::debug!("joined edge loading thread");
+        }
+
+        resolver.await;
+        let links = edge_rx.collect::<Vec<Edge>>().await;
+        log::info!("loaded pagelinks: {}", links.len());
         links
     }
 
-    async fn load_edges_dump_chunk(
+    async fn resolve_edges(
+        db: DbConn,
+        rx: std::sync::mpsc::Receiver<WPPageLink>,
+        mut tx: Sender<Edge>,
+    ) {
+        for pl in rx.into_iter() {
+            let res = schema::vertex::Entity::find()
+                .filter(schema::vertex::Column::Title.eq(pl.dest_page_title.0))
+                .one(&db)
+                .await
+                .expect("query vertex by title");
+            if let Some(dest) = res {
+                let edge = Edge {
+                    source_vertex_id: pl.source_page_id.0,
+                    dest_vertex_id: dest.id,
+                };
+                tx.send(edge).await.expect("edge send");
+            }
+        }
+    }
+
+    /// Load one chunk via parse_mediawiki_sql
+    /// This is heavily CPU-bound and therefore does not belong in an async function.
+    /// The results of parsing are passed directly to tx to the consumer
+    fn load_edges_dump_chunk(
         sql_map: Arc<Mmap>,
         range: Range<usize>,
-        db: DbConn,
-        tx: UnboundedSender<Edge>,
+        tx: std::sync::mpsc::SyncSender<WPPageLink>,
     ) {
         let chunk: &[u8] = &sql_map[range];
         use parse_mediawiki_sql::{
@@ -234,42 +269,27 @@ impl GraphDBBuilder {
                  title,
              }| {
                 if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
-                    Some((from, title))
+                    Some(WPPageLink {
+                        source_page_id: from,
+                        dest_page_title: title,
+                    })
                 } else {
                     None
                 }
             },
         );
-        let links_stream = futures::stream::iter(links);
 
-        let query_stream = links_stream
-            .for_each(|pl| {
-                let db = db.clone();
-                let tx = tx.clone();
-                async move {
-                    let res = schema::vertex::Entity::find()
-                        .filter(schema::vertex::Column::Title.eq(pl.1 .0))
-                        .one(&db)
-                        .await
-                        .expect("query vertex by title");
-                    match res {
-                        Some(dest) => {
-                            let edge = Edge {
-                                source_vertex_id: pl.0 .0,
-                                dest_vertex_id: dest.id,
-                            };
-                            tx.unbounded_send(edge).expect("transmit edge");
-                        }
-                        _ => (),
-                    };
-                }
-            })
-            .await;
+        links.for_each(|link| {
+            tx.send(link).expect("send page link");
+        });
     }
 
     // load vertexes from the pages.sql dump
     async fn load_vertexes_dump(&mut self, db: DbConn) {
         use parse_mediawiki_sql::utils::memory_map;
+
+        // If everything is already imported, skip importation
+        // Otherwise, drop the table if it exists, then create it
         let count = schema::vertex::Entity::find().count(&db).await;
         match count {
             Ok(count) => {
