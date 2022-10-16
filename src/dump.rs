@@ -1,4 +1,4 @@
-use std::{sync::Arc, ops::Range};
+use std::ops::Range;
 
 // Utitilies for working with dumps
 use memmap2::Mmap;
