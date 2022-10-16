@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use dirs;
 use indicatif::ProgressStyle;
-use memmap2::MmapOptions;
+use memmap2::{Mmap, MmapOptions};
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::schemas::Page;
 use sea_orm::entity::prelude::*;
@@ -16,6 +16,7 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 use std::io::Write;
+use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -176,54 +177,32 @@ impl GraphDBBuilder {
 
         for chunk in chunks.into_iter() {
             let pagelinks_ref = Arc::clone(&pagelinks_sql);
-            let t = thread::spawn(move || Self::load_edges_dump_chunk(&pagelinks_ref[chunk]));
+            let db = db.clone();
+            let t = thread::spawn(move || Self::load_edges_dump_chunk(pagelinks_ref, chunk, db));
             threads.push(t);
         }
 
         let mut links = Vec::new();
         for t in threads.into_iter() {
-            let mut res = t.join().unwrap();
+            let mut res = t.join().unwrap().await;
             links.append(&mut res);
         }
         log::info!("loaded pagelinks");
-
-        log::info!("linking via title");
-        let edges = links.into_iter().map(|pl| {
-            let db = db.clone();
-            async move {
-                let res = schema::vertex::Entity::find()
-                    .filter(schema::vertex::Column::Title.eq(pl.1 .0))
-                    .one(&db)
-                    .await
-                    .expect("query vertex by title");
-                match res {
-                    Some(dest) => Some(Edge {
-                        source_vertex_id: pl.0 .0,
-                        dest_vertex_id: dest.id,
-                    }),
-                    None => None,
-                }
-            }
-        });
-        let res = futures::future::join_all(edges)
-            .await
-            .into_iter()
-            .filter_map(|p| p)
-            .collect();
-        res
+        links
     }
 
-    fn load_edges_dump_chunk(
-        chunk: &[u8],
-    ) -> Vec<(
-        parse_mediawiki_sql::field_types::PageId,
-        parse_mediawiki_sql::field_types::PageTitle,
-    )> {
+    async fn load_edges_dump_chunk(
+        sql_map: Arc<Mmap>,
+        range: Range<usize>,
+        db: DbConn,
+    ) -> Vec<Edge> {
+        let chunk: &[u8] = &sql_map[range];
         use parse_mediawiki_sql::{
             field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
         };
 
-        let links = iterate_sql_insertions(&chunk)
+        let mut sql_iterator = iterate_sql_insertions(&chunk);
+        let links = sql_iterator
             .filter_map(
                 |PageLink {
                      from,
@@ -238,13 +217,51 @@ impl GraphDBBuilder {
                     }
                 },
             )
-            .collect::<Vec<_>>();
-        links
+            .map(|pl| {
+                let db = db.clone();
+                async move {
+                    let res = schema::vertex::Entity::find()
+                        .filter(schema::vertex::Column::Title.eq(pl.1 .0))
+                        .one(&db)
+                        .await
+                        .expect("query vertex by title");
+                    match res {
+                        Some(dest) => Some(Edge {
+                            source_vertex_id: pl.0 .0,
+                            dest_vertex_id: dest.id,
+                        }),
+                        None => None,
+                    }
+                }
+            });
+        let links = futures::future::join_all(links).await;
+        links.into_iter().filter_map(|e| e).collect()
     }
 
     // load vertexes from the pages.sql dump
     async fn load_vertexes_dump(&mut self, db: DbConn) {
         use parse_mediawiki_sql::utils::memory_map;
+        let count = schema::vertex::Entity::find().count(&db).await;
+        match count {
+            Ok(count) => {
+                log::debug!("rows present: {}", count);
+                if count == self.vertex_count as usize {
+                    log::debug!("all rows already present");
+                    return;
+                }
+                log::debug!("wrong row count; expected {}", self.vertex_count);
+                let stmt = Table::drop()
+                    .table(schema::vertex::Entity.table_ref())
+                    .to_owned();
+                db.execute(db.get_database_backend().build(&stmt))
+                    .await
+                    .expect("drop table");
+                    self.create_vertex_table(&db).await;
+            }
+            Err(_) => {
+              self.create_vertex_table(&db).await;
+            }
+        }
 
         let progress = indicatif::ProgressBar::new(self.vertex_count.into());
         progress.set_style(
@@ -259,8 +276,6 @@ impl GraphDBBuilder {
         }
 
         let page_sql = unsafe { memory_map(&self.page_path).unwrap() };
-
-        self.create_vertex_table(db.clone()).await;
 
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
@@ -314,33 +329,13 @@ impl GraphDBBuilder {
         progress.finish();
     }
 
-    pub async fn create_vertex_table(&self, db: DbConn) {
-        let count = schema::vertex::Entity::find().count(&db).await;
+    pub async fn create_vertex_table(&self, db: &DbConn) {
         let schema = Schema::new(DbBackend::Sqlite);
         let create_stmt: TableCreateStatement =
             schema.create_table_from_entity(schema::vertex::Entity);
-        match count {
-            Ok(count) => {
-                log::debug!("rows present: {}", count);
-                if count != self.vertex_count as usize {
-                    log::debug!("wrong row count; expected {}", self.vertex_count);
-                    let stmt = Table::drop()
-                        .table(schema::vertex::Entity.table_ref())
-                        .to_owned();
-                    db.execute(db.get_database_backend().build(&stmt))
-                        .await
-                        .expect("drop table");
-                    db.execute(db.get_database_backend().build(&create_stmt))
-                        .await
-                        .expect("create table");
-                }
-            }
-            Err(_) => {
-                db.execute(db.get_database_backend().build(&create_stmt))
-                    .await
-                    .expect("create table");
-            }
-        }
+        db.execute(db.get_database_backend().build(&create_stmt))
+            .await
+            .expect("create table");
     }
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
