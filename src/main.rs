@@ -1,3 +1,4 @@
+use bincode::config::{BigEndian, Fixint};
 use clap::{Parser, Subcommand};
 use dirs;
 use futures::channel::mpsc::{self, Sender};
@@ -67,6 +68,82 @@ pub struct Link<'a> {
 pub struct WPPageLink {
     pub source_page_id: PageId,
     pub dest_page_title: PageTitle,
+}
+
+struct EdgeDB {
+    db: sled::Db,
+    bc_config: bincode::config::Configuration<BigEndian, Fixint>,
+}
+
+impl EdgeDB {
+    fn new(path: PathBuf) -> EdgeDB {
+        let db = sled::open(path).expect("create edge db");
+        db.set_merge_operator(Self::merge_operator);
+        EdgeDB {
+            db: db,
+            bc_config: Self::bincode_config(),
+        }
+    }
+
+    fn merge_operator(
+        _key: &[u8],              // the key being merged
+        old_value: Option<&[u8]>, // the previous value, if one existed
+        merged_bytes: &[u8],      // the new bytes being merged in
+    ) -> Option<Vec<u8>> {
+        // set the new value, return None to delete
+        let mut ret: Vec<u32> = old_value
+            .map(|ov| {
+                bincode::decode_from_slice(ov, Self::bincode_config())
+                    .expect("merge_operator: bincode deserialize old val")
+            })
+            .map(|o| o.0)
+            .unwrap_or_else(|| vec![]);
+
+        let merged_val: Vec<u32> = bincode::decode_from_slice(merged_bytes, Self::bincode_config())
+            .expect("merge_operator: bincode deserialize merge val")
+            .0;
+
+        ret.extend(merged_val);
+
+        Some(
+            bincode::encode_to_vec(ret, Self::bincode_config())
+                .expect("merge_operator: bincode serialize merge val"),
+        )
+    }
+
+    #[inline]
+    fn bincode_config() -> bincode::config::Configuration<BigEndian, Fixint> {
+        bincode::config::standard()
+            .with_big_endian()
+            .with_fixed_int_encoding()
+            .with_no_limit()
+    }
+
+    pub fn write_edge(&self, edge: Edge) {
+        let enc_val = bincode::encode_to_vec(vec![edge.dest_vertex_id], self.bc_config)
+            .expect("write_edge_db: encode");
+        self.db
+            .merge(edge.source_vertex_id.to_be_bytes().as_slice(), enc_val)
+            .expect("merge edge db key");
+    }
+
+    pub fn edges(&self, source_vertex_id: u32) -> Vec<u32> {
+        let key =
+            bincode::encode_to_vec(source_vertex_id, self.bc_config).expect("edge db: encode key");
+        let val = self.db.get(key).expect("edge db: get value");
+        match val {
+            Some(val) => {
+                bincode::decode_from_slice(&val, self.bc_config)
+                    .expect("edge db: decode error")
+                    .0
+            }
+            None => vec![],
+        }
+    }
+
+    pub fn flush(&self) {
+        self.db.flush().expect("flush edge db");
+    }
 }
 
 struct GraphDBBuilder {
@@ -150,7 +227,8 @@ impl GraphDBBuilder {
             .unwrap();
 
         log::debug!("building edge map");
-        let edge_map = self.build_edge_map(db.clone()).await;
+
+        let edge_db = self.load_edges_dump(&self.pagelinks_path, db).await;
 
         log::debug!(
             "building al [{}] and ix [{}] - {} vertexes",
@@ -160,7 +238,7 @@ impl GraphDBBuilder {
         );
 
         for n in 0..max_page_id {
-            let vertex_al_offset: u64 = self.build_adjacency_list(n, &edge_map);
+            let vertex_al_offset: u64 = self.build_adjacency_list(n, &edge_db);
             self.ix_file.write(&vertex_al_offset.to_le_bytes()).unwrap();
             if n % 1000 == 0 {
                 log::debug!("-> wrote {} entries", n);
@@ -171,27 +249,11 @@ impl GraphDBBuilder {
         log::info!("database build complete")
     }
 
-    // builds outgoing edges
-    async fn build_edge_map(&self, db: DbConn) -> HashMap<u32, Vec<u32>> {
-        let mut m = HashMap::new();
-        log::debug!("loading edges from dump");
-        let edges = Self::load_edges_dump(&self.pagelinks_path, db);
-        log::debug!("building edge map");
-        for edge in edges.await.iter() {
-            if !m.contains_key(&edge.source_vertex_id) {
-                m.insert(edge.source_vertex_id, vec![]);
-            }
-            m.get_mut(&edge.source_vertex_id)
-                .unwrap()
-                .push(edge.dest_vertex_id);
-        }
-        m
-    }
-
     // load edges from the pagelinks.sql dump
-    async fn load_edges_dump(path: &PathBuf, db: DbConn) -> Vec<Edge> {
+    async fn load_edges_dump(&self, path: &PathBuf, db: DbConn) -> EdgeDB {
         use parse_mediawiki_sql::utils::memory_map;
         let pagelinks_sql = unsafe { Arc::new(memory_map(path).unwrap()) };
+        let edge_db = EdgeDB::new(self.process_path.join("edges.db"));
 
         let chunks = dump::dump_chunks(&pagelinks_sql);
         let mut threads = Vec::new();
@@ -215,15 +277,31 @@ impl GraphDBBuilder {
         let (edge_tx, edge_rx) = mpsc::channel::<Edge>(65535);
         let resolver = Self::resolve_edges(db.clone(), pagelink_rx, edge_tx);
 
+        let edge_db_proc = self.write_edge_db(&edge_db, edge_rx);
+
         for t in threads.into_iter() {
             t.join().unwrap();
             log::debug!("joined edge loading thread");
         }
 
+        // FIXME: do we need to notify the transmitting end that we are done?
+        log::debug!("waiting on resolver to complete");
         resolver.await;
-        let links = edge_rx.collect::<Vec<Edge>>().await;
-        log::info!("loaded pagelinks: {}", links.len());
-        links
+        log::debug!("waiting on edge db writer to complete");
+        edge_db_proc.await;
+        log::debug!("flushing edge database");
+        edge_db.flush();
+        edge_db
+    }
+
+    async fn write_edge_db(
+        &self,
+        edge_db: &EdgeDB,
+        edge_rx: futures::channel::mpsc::Receiver<Edge>,
+    ) {
+        edge_rx.for_each(|edge| async move {
+          edge_db.write_edge(edge);
+        }).await;
     }
 
     async fn resolve_edges(
@@ -404,12 +482,8 @@ impl GraphDBBuilder {
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
     /// Each 4-byte value is a LE representation
-    pub fn build_adjacency_list(
-        &mut self,
-        vertex_id: u32,
-        edge_map: &HashMap<u32, Vec<u32>>,
-    ) -> u64 {
-        let edge_ids = edge_map.get(&vertex_id).unwrap();
+    pub fn build_adjacency_list(&mut self, vertex_id: u32, edge_db: &EdgeDB) -> u64 {
+        let edge_ids = edge_db.edges(vertex_id);
         if edge_ids.len() == 0 {
             // No outgoing edges or no such vertex
             return 0;
