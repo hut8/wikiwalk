@@ -128,6 +128,7 @@ impl GraphDBBuilder {
 
         log::info!("loading page.sql");
         self.load_vertexes_dump(db.clone()).await;
+        self.create_vertex_title_ix(&db).await;
 
         log::debug!("finding max index");
 
@@ -357,6 +358,19 @@ impl GraphDBBuilder {
         }
         txn.commit().await.expect("commit");
         progress.finish();
+    }
+
+    pub async fn create_vertex_title_ix(&self, db: &DbConn) {
+        log::debug!("vertex table: creating title index");
+        let stmt = Index::create()
+            .name("vertex-title-ix")
+            .table(schema::vertex::Entity)
+            .col(schema::vertex::Column::Title)
+            .if_not_exists()
+            .to_owned();
+        let stmt = db.get_database_backend().build(&stmt);
+        db.execute(stmt).await.expect("vertex title index");
+        log::debug!("vertex table: title index created");
     }
 
     pub async fn create_vertex_table(&self, db: &DbConn) {
