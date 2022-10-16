@@ -1,11 +1,13 @@
 use clap::{Parser, Subcommand};
 use dirs;
+use futures::channel::mpsc::{self, UnboundedSender};
+use futures::stream::{self, StreamExt};
 use indicatif::ProgressStyle;
 use memmap2::{Mmap, MmapOptions};
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::schemas::Page;
 use sea_orm::entity::prelude::*;
-use sea_orm::sea_query::{Table, TableCreateStatement, TableDropStatement};
+use sea_orm::sea_query::{Table, TableCreateStatement};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, Database, DatabaseBackend, DbBackend, DbConn, DeriveColumn,
     EntityTrait, EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
@@ -13,7 +15,7 @@ use sea_orm::{
 };
 use spinners::{Spinner, Spinners};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
-use sqlx::{ConnectOptions, SqlitePool};
+use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
@@ -121,10 +123,7 @@ impl GraphDBBuilder {
             .journal_mode(SqliteJournalMode::Memory)
             .filename(&db_path)
             .create_if_missing(true);
-            // .connect()
-            // .await
-            // .expect("db connect");
-            let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+        let pool = SqlitePool::connect_with(opts).await.expect("db connect");
         let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
 
         log::info!("loading page.sql");
@@ -186,7 +185,8 @@ impl GraphDBBuilder {
         let pagelinks_sql = unsafe { Arc::new(memory_map(path).unwrap()) };
 
         let chunks = dump::dump_chunks(&pagelinks_sql);
-        let mut threads = Vec::new();
+        // let mut threads = Vec::new();
+        let (tx, rx) = mpsc::unbounded::<Edge>();
 
         for chunk in chunks.into_iter() {
             log::debug!(
@@ -196,16 +196,19 @@ impl GraphDBBuilder {
             );
             let pagelinks_ref = Arc::clone(&pagelinks_sql);
             let db = db.clone();
-            let t = thread::spawn(move || Self::load_edges_dump_chunk(pagelinks_ref, chunk, db));
-            threads.push(t);
+            let tx = tx.clone();
+            let t =
+                thread::spawn(move || Self::load_edges_dump_chunk(pagelinks_ref, chunk, db, tx));
+            //threads.push(t);
         }
 
-        let mut links = Vec::new();
-        for t in threads.into_iter() {
-            let mut res = t.join().unwrap().await;
-            log::debug!("joined edge loading thread");
-            links.append(&mut res);
-        }
+        // let mut links = Vec::new();
+        // for t in threads.into_iter() {
+        //     let mut res = t.join().unwrap().await;
+        //     log::debug!("joined edge loading thread");
+        //     links.append(&mut res);
+        // }
+        let links = rx.collect::<Vec<Edge>>().await;
         log::info!("loaded pagelinks");
         links
     }
@@ -214,30 +217,34 @@ impl GraphDBBuilder {
         sql_map: Arc<Mmap>,
         range: Range<usize>,
         db: DbConn,
-    ) -> Vec<Edge> {
+        tx: UnboundedSender<Edge>,
+    ) {
         let chunk: &[u8] = &sql_map[range];
         use parse_mediawiki_sql::{
             field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
         };
 
         let mut sql_iterator = iterate_sql_insertions(&chunk);
-        let links = sql_iterator
-            .filter_map(
-                |PageLink {
-                     from,
-                     from_namespace,
-                     namespace,
-                     title,
-                 }| {
-                    if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
-                        Some((from, title))
-                    } else {
-                        None
-                    }
-                },
-            )
-            .map(|pl| {
+        let links = sql_iterator.filter_map(
+            |PageLink {
+                 from,
+                 from_namespace,
+                 namespace,
+                 title,
+             }| {
+                if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
+                    Some((from, title))
+                } else {
+                    None
+                }
+            },
+        );
+        let links_stream = futures::stream::iter(links);
+
+        let query_stream = links_stream
+            .for_each(|pl| {
                 let db = db.clone();
+                let tx = tx.clone();
                 async move {
                     let res = schema::vertex::Entity::find()
                         .filter(schema::vertex::Column::Title.eq(pl.1 .0))
@@ -245,16 +252,18 @@ impl GraphDBBuilder {
                         .await
                         .expect("query vertex by title");
                     match res {
-                        Some(dest) => Some(Edge {
-                            source_vertex_id: pl.0 .0,
-                            dest_vertex_id: dest.id,
-                        }),
-                        None => None,
-                    }
+                        Some(dest) => {
+                            let edge = Edge {
+                                source_vertex_id: pl.0 .0,
+                                dest_vertex_id: dest.id,
+                            };
+                            tx.unbounded_send(edge).expect("transmit edge");
+                        }
+                        _ => (),
+                    };
                 }
-            });
-        let links = futures::future::join_all(links).await;
-        links.into_iter().filter_map(|e| e).collect()
+            })
+            .await;
     }
 
     // load vertexes from the pages.sql dump
