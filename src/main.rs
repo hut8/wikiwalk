@@ -8,9 +8,12 @@ use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Table, TableCreateStatement, TableDropStatement};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, Database, DatabaseBackend, DbBackend, DbConn, DeriveColumn,
-    EntityTrait, EnumIter, QueryFilter, QuerySelect, Schema, Set, Statement, TransactionTrait,
+    EntityTrait, EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
+    TransactionTrait,
 };
 use spinners::{Spinner, Spinners};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
+use sqlx::{ConnectOptions, SqlitePool};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
@@ -113,7 +116,16 @@ impl GraphDBBuilder {
         let db_path = self.process_path.join("wikipedia-speedrun.db");
         let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
         log::debug!("using database: {}", conn_str);
-        let db: DbConn = Database::connect(conn_str).await.expect("db connect");
+        let opts = SqliteConnectOptions::new()
+            .synchronous(SqliteSynchronous::Off)
+            .journal_mode(SqliteJournalMode::Memory)
+            .filename(&db_path)
+            .create_if_missing(true);
+            // .connect()
+            // .await
+            // .expect("db connect");
+            let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+        let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
 
         log::info!("loading page.sql");
         self.load_vertexes_dump(db.clone()).await;
@@ -156,6 +168,7 @@ impl GraphDBBuilder {
         let mut m = HashMap::new();
         log::debug!("loading edges from dump");
         let edges = Self::load_edges_dump(&self.pagelinks_path, db);
+        log::debug!("building edge map");
         for edge in edges.await.iter() {
             if !m.contains_key(&edge.source_vertex_id) {
                 m.insert(edge.source_vertex_id, vec![]);
@@ -176,6 +189,11 @@ impl GraphDBBuilder {
         let mut threads = Vec::new();
 
         for chunk in chunks.into_iter() {
+            log::debug!(
+                "spawning thread for edge loading: {} -> {}",
+                chunk.start,
+                chunk.end
+            );
             let pagelinks_ref = Arc::clone(&pagelinks_sql);
             let db = db.clone();
             let t = thread::spawn(move || Self::load_edges_dump_chunk(pagelinks_ref, chunk, db));
@@ -185,6 +203,7 @@ impl GraphDBBuilder {
         let mut links = Vec::new();
         for t in threads.into_iter() {
             let mut res = t.join().unwrap().await;
+            log::debug!("joined edge loading thread");
             links.append(&mut res);
         }
         log::info!("loaded pagelinks");
@@ -256,10 +275,10 @@ impl GraphDBBuilder {
                 db.execute(db.get_database_backend().build(&stmt))
                     .await
                     .expect("drop table");
-                    self.create_vertex_table(&db).await;
+                self.create_vertex_table(&db).await;
             }
             Err(_) => {
-              self.create_vertex_table(&db).await;
+                self.create_vertex_table(&db).await;
             }
         }
 

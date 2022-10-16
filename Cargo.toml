@@ -21,5 +21,6 @@ num_cpus = "1.13.1"
 parse-mediawiki-sql = { version = "=0.9.0", features = ["utils"] }
 serde = "*"
 spinners = "4.1.0"
+sqlx={ version = "*", features = ["sqlite"]}
 stderrlog = "*"
 tokio = { version = "1", features = ["full"] }
