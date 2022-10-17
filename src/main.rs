@@ -1,9 +1,6 @@
 use bincode::config::{BigEndian, Fixint};
 use clap::{Parser, Subcommand};
 use dirs;
-use futures::channel::mpsc::{self, Sender};
-use futures::stream::StreamExt;
-use futures::SinkExt;
 use indicatif::{ProgressDrawTarget, ProgressStyle};
 use memmap2::{Mmap, MmapOptions};
 use memory_stats::memory_stats;
@@ -26,6 +23,7 @@ use std::io::prelude::*;
 use std::io::Write;
 use std::ops::Range;
 use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, SyncSender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
@@ -70,14 +68,23 @@ pub struct WPPageLink {
     pub dest_page_title: PageTitle,
 }
 
+#[derive(Clone)]
 struct EdgeDB {
     db: sled::Db,
     bc_config: bincode::config::Configuration<BigEndian, Fixint>,
 }
 
 impl EdgeDB {
+    // FIXME: If database exists and is complete (has right number of vertexes), don't delete it
     fn new(path: PathBuf) -> EdgeDB {
-        let db = sled::open(path).expect("create edge db");
+        let _ = std::fs::remove_dir_all(&path);
+        let db = sled::Config::default()
+            .cache_capacity(1024 * 1024 * 1024)
+            .use_compression(true)
+            .create_new(true)
+            .path(&path)
+            .open()
+            .expect("open edge db");
         db.set_merge_operator(Self::merge_operator);
         EdgeDB {
             db: db,
@@ -253,11 +260,11 @@ impl GraphDBBuilder {
     async fn load_edges_dump(&self, path: &PathBuf, db: DbConn) -> EdgeDB {
         use parse_mediawiki_sql::utils::memory_map;
         let pagelinks_sql = unsafe { Arc::new(memory_map(path).unwrap()) };
-        let edge_db = EdgeDB::new(self.process_path.join("edges.db"));
+        let edge_db = EdgeDB::new(self.process_path.join("edge-db"));
 
         let chunks = dump::dump_chunks(&pagelinks_sql);
         let mut threads = Vec::new();
-        let (pagelink_tx, pagelink_rx) = std::sync::mpsc::sync_channel::<WPPageLink>(65535);
+        let (pagelink_tx, pagelink_rx) = std::sync::mpsc::sync_channel::<WPPageLink>(128);
 
         // because the parsing is CPU-bound, spawn multiple threads to parse the SQL
         for chunk in chunks.into_iter() {
@@ -272,12 +279,18 @@ impl GraphDBBuilder {
             threads.push(t);
         }
 
+        drop(pagelink_tx);
+
         // the WPPageLinks will be resolved to edges using async functions, and therefore will not get
         // their own thread
-        let (edge_tx, edge_rx) = mpsc::channel::<Edge>(65535);
-        let resolver = Self::resolve_edges(db.clone(), pagelink_rx, edge_tx);
+        let (edge_tx, edge_rx) = std::sync::mpsc::sync_channel::<Edge>(128);
+        let resolve_thread =
+            tokio::spawn(
+                async move { Self::resolve_edges(db.clone(), pagelink_rx, edge_tx).await },
+            );
 
-        let edge_db_proc = self.write_edge_db(&edge_db, edge_rx);
+        let edge_db_ = edge_db.clone();
+        let write_edge_thread = thread::spawn(move || Self::write_edge_db(&edge_db_, edge_rx));
 
         for t in threads.into_iter() {
             t.join().unwrap();
@@ -286,41 +299,39 @@ impl GraphDBBuilder {
 
         // FIXME: do we need to notify the transmitting end that we are done?
         log::debug!("waiting on resolver to complete");
-        resolver.await;
+        resolve_thread.await.expect("join resolver thread");
         log::debug!("waiting on edge db writer to complete");
-        edge_db_proc.await;
+        write_edge_thread.join().expect("join write edge thread");
         log::debug!("flushing edge database");
         edge_db.flush();
         edge_db
     }
 
-    async fn write_edge_db(
-        &self,
-        edge_db: &EdgeDB,
-        edge_rx: futures::channel::mpsc::Receiver<Edge>,
-    ) {
-        edge_rx.for_each(|edge| async move {
-          edge_db.write_edge(edge);
-        }).await;
+    fn write_edge_db(edge_db: &EdgeDB, edge_rx: Receiver<Edge>) {
+        for edge in edge_rx {
+            edge_db.write_edge(edge);
+        }
     }
 
     async fn resolve_edges(
         db: DbConn,
         rx: std::sync::mpsc::Receiver<WPPageLink>,
-        mut tx: Sender<Edge>,
+        tx: SyncSender<Edge>,
     ) {
         for pl in rx.into_iter() {
+            let t = pl.dest_page_title.0;
             let res = schema::vertex::Entity::find()
-                .filter(schema::vertex::Column::Title.eq(pl.dest_page_title.0))
+                .filter(schema::vertex::Column::Title.eq(t.clone()))
                 .one(&db)
                 .await
                 .expect("query vertex by title");
+            // log::debug!("query vertex by title: {} -> {:?}", &t, res);
             if let Some(dest) = res {
                 let edge = Edge {
                     source_vertex_id: pl.source_page_id.0,
                     dest_vertex_id: dest.id,
                 };
-                tx.send(edge).await.expect("edge send");
+                tx.send(edge).expect("send resolved edge");
             }
         }
     }
