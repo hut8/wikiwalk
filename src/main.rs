@@ -1,8 +1,10 @@
 use bincode::config::{BigEndian, Fixint};
+use bincode::error::DecodeError;
 use clap::{Parser, Subcommand};
 use dirs;
 use indicatif::{ProgressDrawTarget, ProgressStyle};
-use memmap2::{Mmap, MmapOptions};
+use itertools::Itertools;
+use memmap2::MmapOptions;
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::field_types::{PageId, PageTitle};
 use parse_mediawiki_sql::schemas::Page;
@@ -19,13 +21,9 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::prelude::*;
-use std::io::Write;
-use std::ops::Range;
+use std::io::{prelude::*, BufReader, BufWriter};
+use std::io::{SeekFrom, Write};
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, SyncSender};
-use std::sync::Arc;
-use std::thread;
 use std::time::Instant;
 
 mod dump;
@@ -51,7 +49,7 @@ impl PartialEq for Vertex {
 
 impl Eq for Vertex {}
 
-#[derive(PartialEq, Debug, Copy, Clone)]
+#[derive(PartialEq, Debug, Copy, Clone, bincode::Decode, bincode::Encode)]
 pub struct Edge {
     pub source_vertex_id: u32,
     pub dest_vertex_id: u32,
@@ -68,54 +66,23 @@ pub struct WPPageLink {
     pub dest_page_title: PageTitle,
 }
 
-#[derive(Clone)]
-struct EdgeDB {
-    db: sled::Db,
+// flat file database for sorting/aggregating edges
+struct EdgeProcDB {
+    path: PathBuf,
+    writer: BufWriter<File>,
     bc_config: bincode::config::Configuration<BigEndian, Fixint>,
+    pub edges: Vec<Edge>,
 }
 
-impl EdgeDB {
-    // FIXME: If database exists and is complete (has right number of vertexes), don't delete it
-    fn new(path: PathBuf) -> EdgeDB {
-        let _ = std::fs::remove_dir_all(&path);
-        let db = sled::Config::default()
-            .cache_capacity(1024 * 1024 * 1024)
-            .use_compression(true)
-            .create_new(true)
-            .path(&path)
-            .open()
-            .expect("open edge db");
-        db.set_merge_operator(Self::merge_operator);
-        EdgeDB {
-            db: db,
+impl EdgeProcDB {
+    pub fn new(path: PathBuf) -> EdgeProcDB {
+        let file = File::create(&path).expect("open edge proc db");
+        EdgeProcDB {
+            path,
+            writer: BufWriter::new(file),
             bc_config: Self::bincode_config(),
+            edges: Vec::new(),
         }
-    }
-
-    fn merge_operator(
-        _key: &[u8],              // the key being merged
-        old_value: Option<&[u8]>, // the previous value, if one existed
-        merged_bytes: &[u8],      // the new bytes being merged in
-    ) -> Option<Vec<u8>> {
-        // set the new value, return None to delete
-        let mut ret: Vec<u32> = old_value
-            .map(|ov| {
-                bincode::decode_from_slice(ov, Self::bincode_config())
-                    .expect("merge_operator: bincode deserialize old val")
-            })
-            .map(|o| o.0)
-            .unwrap_or_else(|| vec![]);
-
-        let merged_val: Vec<u32> = bincode::decode_from_slice(merged_bytes, Self::bincode_config())
-            .expect("merge_operator: bincode deserialize merge val")
-            .0;
-
-        ret.extend(merged_val);
-
-        Some(
-            bincode::encode_to_vec(ret, Self::bincode_config())
-                .expect("merge_operator: bincode serialize merge val"),
-        )
     }
 
     #[inline]
@@ -126,30 +93,109 @@ impl EdgeDB {
             .with_no_limit()
     }
 
-    pub fn write_edge(&self, edge: Edge) {
-        let enc_val = bincode::encode_to_vec(vec![edge.dest_vertex_id], self.bc_config)
-            .expect("write_edge_db: encode");
-        self.db
-            .merge(edge.source_vertex_id.to_be_bytes().as_slice(), enc_val)
-            .expect("merge edge db key");
+    pub fn write_edge(&mut self, edge: &Edge) {
+        bincode::encode_into_std_write(edge, &mut self.writer, self.bc_config).expect("write edge");
     }
 
-    pub fn edges(&self, source_vertex_id: u32) -> Vec<u32> {
-        let key =
-            bincode::encode_to_vec(source_vertex_id, self.bc_config).expect("edge db: encode key");
-        let val = self.db.get(key).expect("edge db: get value");
-        match val {
-            Some(val) => {
-                bincode::decode_from_slice(&val, self.bc_config)
-                    .expect("edge db: decode error")
-                    .0
+    pub fn sort(&mut self) {
+        let source = File::open(&self.path).expect("open edge db sort source");
+        // let sink = File::create(self.path.join("-sort")).expect("open edge db sort sink");
+        let mut source = BufReader::new(source);
+        // let sink = BufWriter::new(sink);
+        log::debug!("loading edge db for sort");
+        loop {
+            let res = bincode::decode_from_reader::<Edge, _, _>(&mut source, self.bc_config);
+            match res {
+                Ok(edge) => {
+                    self.edges.push(edge);
+                }
+                Err(err) => match err {
+                    DecodeError::Io { inner, .. } => match inner.kind() {
+                        std::io::ErrorKind::UnexpectedEof => {
+                            // eof = we're done
+                            break;
+                        }
+                        _ => {
+                            panic!("unexpected io error during decode: {:#?}", inner);
+                        }
+                    },
+                    _ => {
+                        panic!("decode error: {:#?}", err);
+                    }
+                },
             }
-            None => vec![],
+        }
+        log::debug!("sorting edge db");
+        self.edges
+            .sort_unstable_by(|x, y| x.source_vertex_id.cmp(&y.source_vertex_id));
+    }
+
+    pub fn flush(&mut self) {
+        self.writer.flush().expect("flush edge db");
+    }
+
+    pub fn iter(self, max_page_id: u32) -> AdjacencySetIterator {
+        AdjacencySetIterator {
+            edges: self.edges,
+            position: 0,
+            vertex_id: 0,
+            max_page_id,
         }
     }
+}
 
-    pub fn flush(&self) {
-        self.db.flush().expect("flush edge db");
+struct AdjacencySet {
+    source_vertex_id: u32,
+    dest_vertex_ids: Vec<u32>,
+}
+
+struct AdjacencySetIterator {
+    edges: Vec<Edge>,
+    position: usize,
+    vertex_id: u32,
+    max_page_id: u32,
+}
+
+impl Iterator for AdjacencySetIterator {
+    type Item = AdjacencySet;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // are we done yet?
+        if self.vertex_id > self.max_page_id {
+            return None;
+        }
+
+        let mut val = AdjacencySet {
+            source_vertex_id: self.vertex_id,
+            dest_vertex_ids: vec![],
+        };
+
+        // if we are about to run off the end
+        if self.position >= self.edges.len() {
+            self.vertex_id += 1;
+            return Some(val);
+        }
+        let current_source = self.edges[self.position].source_vertex_id;
+
+        // if the vertex we're at has no outgoing edges, increment the source vertex
+        // and return the empty adjacency set
+        if self.vertex_id < current_source {
+            self.vertex_id += 1;
+            return Some(val);
+        }
+
+        loop {
+            if self.position >= self.edges.len()
+                || self.edges[self.position].source_vertex_id != current_source
+            {
+                break;
+            }
+            val.dest_vertex_ids
+                .push(self.edges[self.position].dest_vertex_id);
+            self.position += 1;
+        }
+        self.vertex_id += 1;
+        Some(val)
     }
 }
 
@@ -224,7 +270,7 @@ impl GraphDBBuilder {
 
         log::debug!("finding max index");
 
-        let max_page_id = schema::vertex::Entity::find()
+        let max_page_id: u32 = schema::vertex::Entity::find()
             .select_only()
             .column_as(schema::vertex::Column::Id.max(), QueryAs::MaxVertexId)
             .into_values::<_, QueryAs>()
@@ -235,7 +281,8 @@ impl GraphDBBuilder {
 
         log::debug!("building edge map");
 
-        let edge_db = self.load_edges_dump(&self.pagelinks_path, db).await;
+        let mut edge_db = self.load_edges_dump(&self.pagelinks_path, db).await;
+        edge_db.sort();
 
         log::debug!(
             "building al [{}] and ix [{}] - {} vertexes",
@@ -244,111 +291,30 @@ impl GraphDBBuilder {
             max_page_id,
         );
 
-        for n in 0..max_page_id {
-            let vertex_al_offset: u64 = self.build_adjacency_list(n, &edge_db);
+        let edge_iter = edge_db.iter(max_page_id);
+
+        for adjacency_set in edge_iter {
+            log::debug!("adjacencies for: {}", adjacency_set.source_vertex_id);
+            let vertex_al_offset: u64 = self.build_adjacency_list(
+                adjacency_set.source_vertex_id,
+                adjacency_set.dest_vertex_ids,
+            );
             self.ix_file.write(&vertex_al_offset.to_le_bytes()).unwrap();
-            if n % 1000 == 0 {
-                log::debug!("-> wrote {} entries", n);
+            if adjacency_set.source_vertex_id % 1000 == 0 {
+                log::debug!("-> wrote {} entries", adjacency_set.source_vertex_id);
             }
         }
         self.ix_file.flush().unwrap();
         self.al_file.flush().unwrap();
-        log::info!("database build complete")
+        log::info!("database build complete");
     }
 
-    // load edges from the pagelinks.sql dump
-    async fn load_edges_dump(&self, path: &PathBuf, db: DbConn) -> EdgeDB {
-        use parse_mediawiki_sql::utils::memory_map;
-        let pagelinks_sql = unsafe { Arc::new(memory_map(path).unwrap()) };
-        let edge_db = EdgeDB::new(self.process_path.join("edge-db"));
-
-        let chunks = dump::dump_chunks(&pagelinks_sql);
-        let mut threads = Vec::new();
-        let (pagelink_tx, pagelink_rx) = std::sync::mpsc::sync_channel::<WPPageLink>(128);
-
-        // because the parsing is CPU-bound, spawn multiple threads to parse the SQL
-        for chunk in chunks.into_iter() {
-            log::debug!(
-                "spawning thread for edge loading: {} -> {}",
-                chunk.start,
-                chunk.end
-            );
-            let pagelinks_ref = Arc::clone(&pagelinks_sql);
-            let tx = pagelink_tx.clone();
-            let t = thread::spawn(move || Self::load_edges_dump_chunk(pagelinks_ref, chunk, tx));
-            threads.push(t);
-        }
-
-        drop(pagelink_tx);
-
-        // the WPPageLinks will be resolved to edges using async functions, and therefore will not get
-        // their own thread
-        let (edge_tx, edge_rx) = std::sync::mpsc::sync_channel::<Edge>(128);
-        let resolve_thread =
-            tokio::spawn(
-                async move { Self::resolve_edges(db.clone(), pagelink_rx, edge_tx).await },
-            );
-
-        let edge_db_ = edge_db.clone();
-        let write_edge_thread = thread::spawn(move || Self::write_edge_db(&edge_db_, edge_rx));
-
-        for t in threads.into_iter() {
-            t.join().unwrap();
-            log::debug!("joined edge loading thread");
-        }
-
-        // FIXME: do we need to notify the transmitting end that we are done?
-        log::debug!("waiting on resolver to complete");
-        resolve_thread.await.expect("join resolver thread");
-        log::debug!("waiting on edge db writer to complete");
-        write_edge_thread.join().expect("join write edge thread");
-        log::debug!("flushing edge database");
-        edge_db.flush();
-        edge_db
-    }
-
-    fn write_edge_db(edge_db: &EdgeDB, edge_rx: Receiver<Edge>) {
-        for edge in edge_rx {
-            edge_db.write_edge(edge);
-        }
-    }
-
-    async fn resolve_edges(
-        db: DbConn,
-        rx: std::sync::mpsc::Receiver<WPPageLink>,
-        tx: SyncSender<Edge>,
-    ) {
-        for pl in rx.into_iter() {
-            let t = pl.dest_page_title.0;
-            let res = schema::vertex::Entity::find()
-                .filter(schema::vertex::Column::Title.eq(t.clone()))
-                .one(&db)
-                .await
-                .expect("query vertex by title");
-            // log::debug!("query vertex by title: {} -> {:?}", &t, res);
-            if let Some(dest) = res {
-                let edge = Edge {
-                    source_vertex_id: pl.source_page_id.0,
-                    dest_vertex_id: dest.id,
-                };
-                tx.send(edge).expect("send resolved edge");
-            }
-        }
-    }
-
-    /// Load one chunk via parse_mediawiki_sql
-    /// This is heavily CPU-bound and therefore does not belong in an async function.
-    /// The results of parsing are passed directly to tx to the consumer
-    fn load_edges_dump_chunk(
-        sql_map: Arc<Mmap>,
-        range: Range<usize>,
-        tx: std::sync::mpsc::SyncSender<WPPageLink>,
-    ) {
-        let chunk: &[u8] = &sql_map[range];
+    async fn load_edges_dump_chunk(chunk: Vec<String>, edge_db: &mut EdgeProcDB, db: DbConn) {
         use parse_mediawiki_sql::{
             field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
         };
-
+        let chunk_str = chunk.join("\n");
+        let chunk = chunk_str.as_bytes();
         let mut sql_iterator = iterate_sql_insertions(&chunk);
         let links = sql_iterator.filter_map(
             |PageLink {
@@ -368,9 +334,87 @@ impl GraphDBBuilder {
             },
         );
 
-        links.for_each(|link| {
-            tx.send(link).expect("send page link");
-        });
+        let links: Vec<WPPageLink> = links.collect();
+        let titles = links.iter().map(|l| l.dest_page_title.0.clone());
+        let mut title_map = HashMap::new();
+        // see SQLITE_LIMIT_VARIABLE_NUMBER
+        // https://www.sqlite.org/limits.html
+        for title_chunk in titles.chunks(32760).into_iter() {
+          let title_vec: Vec<String> = title_chunk.collect();
+            let vertexes = schema::vertex::Entity::find()
+                .filter(schema::vertex::Column::Title.is_in(title_vec))
+                .all(&db)
+                .await
+                .expect("query vertexes by title");
+            for v in vertexes {
+                title_map.insert(v.title, v.id);
+            }
+        }
+
+        for link in links {
+            if let Some(dest) = title_map.get(&link.dest_page_title.0) {
+                let edge = Edge {
+                    source_vertex_id: link.source_page_id.0,
+                    dest_vertex_id: *dest,
+                };
+                edge_db.write_edge(&edge);
+            }
+        }
+    }
+
+    fn count_edge_inserts(source: BufReader<&File>) -> usize {
+        // 56034
+        return source
+            .lines()
+            .filter(|line_res| {
+                let line = line_res.as_ref().expect("read line");
+                return line.starts_with("INSERT ");
+            })
+            .count();
+    }
+
+    // load edges from the pagelinks.sql dump
+    async fn load_edges_dump(&self, path: &PathBuf, db: DbConn) -> EdgeProcDB {
+        let mut pagelinks_sql_file = File::open(path).expect("open pagelinks file");
+        let mut edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
+
+        let pagelinks_sql = BufReader::new(&pagelinks_sql_file);
+        log::debug!("counting inserts in pagelinks sql");
+        let insert_count = Self::count_edge_inserts(pagelinks_sql);
+        log::debug!("pagelinks sql contains {} inserts", insert_count);
+        pagelinks_sql_file
+            .seek(SeekFrom::Start(0))
+            .expect("rewind pagelinks sql");
+
+        let draw_target = ProgressDrawTarget::stderr_with_hz(0.1);
+        let progress = indicatif::ProgressBar::new(insert_count as u64);
+        progress.set_style(
+                ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
+            );
+        progress.set_draw_target(draw_target);
+
+        let pagelinks_sql = BufReader::new(pagelinks_sql_file);
+        let pagelinks_line_iter = pagelinks_sql.lines();
+        let pagelinks_line_iter = pagelinks_line_iter
+            .skip_while(|line| !line.as_ref().expect("read preamble").starts_with("INSERT"))
+            .into_iter();
+
+        let chunks = pagelinks_line_iter.chunks(1);
+
+        for chunk in chunks.into_iter() {
+            let line_iter = chunk.map(|l| l.expect("read line"));
+            let db = db.clone();
+            let lines = line_iter.collect_vec();
+            let count = lines.len().try_into().unwrap();
+            Self::load_edges_dump_chunk(lines, &mut edge_db, db).await;
+            progress.inc(count);
+        }
+
+        progress.finish();
+
+        log::debug!("\nflushing edge database");
+        edge_db.flush();
+        edge_db
     }
 
     // load vertexes from the pages.sql dump
@@ -493,8 +537,7 @@ impl GraphDBBuilder {
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
     /// Each 4-byte value is a LE representation
-    pub fn build_adjacency_list(&mut self, vertex_id: u32, edge_db: &EdgeDB) -> u64 {
-        let edge_ids = edge_db.edges(vertex_id);
+    pub fn build_adjacency_list(&mut self, vertex_id: u32, edge_ids: Vec<u32>) -> u64 {
         if edge_ids.len() == 0 {
             // No outgoing edges or no such vertex
             return 0;

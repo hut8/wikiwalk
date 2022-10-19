@@ -2110,6 +2110,7 @@ dependencies = [
  "dotenv",
  "futures",
  "indicatif",
+ "itertools",
  "log",
  "memmap2",
  "memory-stats",
