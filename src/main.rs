@@ -28,6 +28,7 @@ use std::time::Instant;
 
 mod dump;
 mod schema;
+mod source;
 
 #[derive(Clone, Debug)]
 pub struct Vertex {

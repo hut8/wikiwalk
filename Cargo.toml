@@ -9,6 +9,7 @@ edition = "2021"
 bincode = "2.0.0-rc.2"
 byteorder = "1"
 clap = { version = "3.0", features = ["derive"] }
+crossbeam = "*"
 dirs = "4.0"
 dotenv = "0.15.0"
 futures = "*"
@@ -23,6 +24,7 @@ log = "*"
 memmap2 = "*"
 memory-stats = "1.0.0"
 num_cpus = "1.13.1"
+rayon = "*"
 parse-mediawiki-sql = { version = "=0.9.0", features = ["utils"] }
 serde = "*"
 sled = { version = "0.34.7", features = ["compression"] }
