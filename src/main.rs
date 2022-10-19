@@ -323,7 +323,6 @@ impl GraphDBBuilder {
         // look up and write in chunks
         for page_link_chunk in &rx.iter().chunks(32760) {
             let page_links: Vec<WPPageLink> = page_link_chunk.collect();
-            log::debug!("resolving {} page links", page_links.len());
 
             let mut title_map = HashMap::new();
             let titles = page_links.iter().map(|l| l.dest_page_title.0.clone());
@@ -351,19 +350,14 @@ impl GraphDBBuilder {
     // load edges from the pagelinks.sql dump
      async fn load_edges_dump(&self, path: PathBuf, db: DbConn) -> EdgeProcDB {
         let mut edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
-        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(1);
+        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
 
         let mut pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
 
         pagelink_source.count_edge_inserts();
         log::debug!("spawning pagelink source");
         thread::spawn(move || pagelink_source.run());
-        // thread::spawn(move || {
-        //     pagelink_tx.send(WPPageLink {
-        //         source_page_id: 12.into(),
-        //         dest_page_title: "Hello".to_owned().into(),
-        //     })
-        // });
+
         log::debug!("spawning edge resolver");
         Self::resolve_edges(pagelink_rx, &mut edge_db, db).await;
 
