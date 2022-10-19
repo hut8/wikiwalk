@@ -51,17 +51,8 @@ impl WPPageLinkSource {
             );
         progress.set_draw_target(draw_target);
 
-        // let pool = rayon::ThreadPoolBuilder::new()
-        //     .num_threads(2)
-        //     .build()
-        //     .unwrap();
-
-        //let pagelinks_line_iter = pagelinks_line_iter.clo
         pagelinks_line_iter.par_bridge().for_each(|chunk| {
-            // let line_iter = chunk.map(|l| l.expect("read line"));
-            // let lines = line_iter.collect_vec();
             let lines = vec![chunk.expect("read line")];
-            // progress.inc(lines.len().try_into().unwrap());
             progress.inc(1);
             let sender = self.sender.clone();
             Self::load_edges_dump_chunk(lines, sender);
@@ -89,7 +80,6 @@ impl WPPageLinkSource {
     }
 
     fn load_edges_dump_chunk(chunk: Vec<String>, sender: Sender<WPPageLink>) {
-        log::debug!("load_edges_dump_chunk: load chunk of {}", chunk.len());
         use parse_mediawiki_sql::{
             field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
         };
