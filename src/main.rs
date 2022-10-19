@@ -1,6 +1,7 @@
 use bincode::config::{BigEndian, Fixint};
 use bincode::error::DecodeError;
 use clap::{Parser, Subcommand};
+use crossbeam::channel::Receiver;
 use dirs;
 use indicatif::{ProgressDrawTarget, ProgressStyle};
 use itertools::Itertools;
@@ -25,6 +26,7 @@ use std::io::{prelude::*, BufReader, BufWriter};
 use std::io::{SeekFrom, Write};
 use std::path::PathBuf;
 use std::time::Instant;
+use std::{thread, time};
 
 mod dump;
 mod schema;
@@ -73,6 +75,7 @@ struct EdgeProcDB {
     writer: BufWriter<File>,
     bc_config: bincode::config::Configuration<BigEndian, Fixint>,
     pub edges: Vec<Edge>,
+    unflushed_inserts: usize,
 }
 
 impl EdgeProcDB {
@@ -83,6 +86,7 @@ impl EdgeProcDB {
             writer: BufWriter::new(file),
             bc_config: Self::bincode_config(),
             edges: Vec::new(),
+            unflushed_inserts: 0,
         }
     }
 
@@ -96,6 +100,11 @@ impl EdgeProcDB {
 
     pub fn write_edge(&mut self, edge: &Edge) {
         bincode::encode_into_std_write(edge, &mut self.writer, self.bc_config).expect("write edge");
+        self.unflushed_inserts += 1;
+        if self.unflushed_inserts % 1024 == 0 {
+            self.unflushed_inserts = 0;
+            self.writer.flush().expect("flush edge proc db");
+        }
     }
 
     pub fn sort(&mut self) {
@@ -282,7 +291,7 @@ impl GraphDBBuilder {
 
         log::debug!("building edge map");
 
-        let mut edge_db = self.load_edges_dump(&self.pagelinks_path, db).await;
+        let mut edge_db = self.load_edges_dump(self.pagelinks_path.clone(), db).await;
         edge_db.sort();
 
         log::debug!(
@@ -310,108 +319,55 @@ impl GraphDBBuilder {
         log::info!("database build complete");
     }
 
-    async fn load_edges_dump_chunk(chunk: Vec<String>, edge_db: &mut EdgeProcDB, db: DbConn) {
-        use parse_mediawiki_sql::{
-            field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
-        };
-        let chunk_str = chunk.join("\n");
-        let chunk = chunk_str.as_bytes();
-        let mut sql_iterator = iterate_sql_insertions(&chunk);
-        let links = sql_iterator.filter_map(
-            |PageLink {
-                 from,
-                 from_namespace,
-                 namespace,
-                 title,
-             }| {
-                if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
-                    Some(WPPageLink {
-                        source_page_id: from,
-                        dest_page_title: title,
-                    })
-                } else {
-                    None
-                }
-            },
-        );
+    async fn resolve_edges(rx: Receiver<WPPageLink>, edge_db: &mut EdgeProcDB, db: DbConn) {
+        // look up and write in chunks
+        for page_link_chunk in &rx.iter().chunks(32760) {
+            let page_links: Vec<WPPageLink> = page_link_chunk.collect();
+            log::debug!("resolving {} page links", page_links.len());
 
-        let links: Vec<WPPageLink> = links.collect();
-        let titles = links.iter().map(|l| l.dest_page_title.0.clone());
-        let mut title_map = HashMap::new();
-        // see SQLITE_LIMIT_VARIABLE_NUMBER
-        // https://www.sqlite.org/limits.html
-        for title_chunk in titles.chunks(32760).into_iter() {
-          let title_vec: Vec<String> = title_chunk.collect();
+            let mut title_map = HashMap::new();
+            let titles = page_links.iter().map(|l| l.dest_page_title.0.clone());
             let vertexes = schema::vertex::Entity::find()
-                .filter(schema::vertex::Column::Title.is_in(title_vec))
+                .filter(schema::vertex::Column::Title.is_in(titles))
                 .all(&db)
                 .await
                 .expect("query vertexes by title");
             for v in vertexes {
                 title_map.insert(v.title, v.id);
             }
-        }
 
-        for link in links {
-            if let Some(dest) = title_map.get(&link.dest_page_title.0) {
-                let edge = Edge {
-                    source_vertex_id: link.source_page_id.0,
-                    dest_vertex_id: *dest,
-                };
-                edge_db.write_edge(&edge);
+            for link in page_links {
+                if let Some(dest) = title_map.get(&link.dest_page_title.0) {
+                    let edge = Edge {
+                        source_vertex_id: link.source_page_id.0,
+                        dest_vertex_id: *dest,
+                    };
+                    edge_db.write_edge(&edge);
+                }
             }
         }
     }
 
-    fn count_edge_inserts(source: BufReader<&File>) -> usize {
-        // 56034
-        return source
-            .lines()
-            .filter(|line_res| {
-                let line = line_res.as_ref().expect("read line");
-                return line.starts_with("INSERT ");
-            })
-            .count();
-    }
-
     // load edges from the pagelinks.sql dump
-    async fn load_edges_dump(&self, path: &PathBuf, db: DbConn) -> EdgeProcDB {
-        let mut pagelinks_sql_file = File::open(path).expect("open pagelinks file");
+     async fn load_edges_dump(&self, path: PathBuf, db: DbConn) -> EdgeProcDB {
         let mut edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
+        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(1);
 
-        let pagelinks_sql = BufReader::new(&pagelinks_sql_file);
-        log::debug!("counting inserts in pagelinks sql");
-        let insert_count = Self::count_edge_inserts(pagelinks_sql);
-        log::debug!("pagelinks sql contains {} inserts", insert_count);
-        pagelinks_sql_file
-            .seek(SeekFrom::Start(0))
-            .expect("rewind pagelinks sql");
+        let mut pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
 
-        let draw_target = ProgressDrawTarget::stderr_with_hz(0.1);
-        let progress = indicatif::ProgressBar::new(insert_count as u64);
-        progress.set_style(
-                ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
-            );
-        progress.set_draw_target(draw_target);
+        pagelink_source.count_edge_inserts();
+        log::debug!("spawning pagelink source");
+        thread::spawn(move || pagelink_source.run());
+        // thread::spawn(move || {
+        //     pagelink_tx.send(WPPageLink {
+        //         source_page_id: 12.into(),
+        //         dest_page_title: "Hello".to_owned().into(),
+        //     })
+        // });
+        log::debug!("spawning edge resolver");
+        Self::resolve_edges(pagelink_rx, &mut edge_db, db).await;
 
-        let pagelinks_sql = BufReader::new(pagelinks_sql_file);
-        let pagelinks_line_iter = pagelinks_sql.lines();
-        let pagelinks_line_iter = pagelinks_line_iter
-            .skip_while(|line| !line.as_ref().expect("read preamble").starts_with("INSERT"))
-            .into_iter();
-
-        let chunks = pagelinks_line_iter.chunks(1);
-
-        for chunk in chunks.into_iter() {
-            let line_iter = chunk.map(|l| l.expect("read line"));
-            let db = db.clone();
-            let lines = line_iter.collect_vec();
-            let count = lines.len().try_into().unwrap();
-            Self::load_edges_dump_chunk(lines, &mut edge_db, db).await;
-            progress.inc(count);
-        }
-
-        progress.finish();
+        log::debug!("edge resolver returned");
 
         log::debug!("\nflushing edge database");
         edge_db.flush();
