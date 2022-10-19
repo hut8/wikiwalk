@@ -304,7 +304,7 @@ impl GraphDBBuilder {
         let edge_iter = edge_db.iter(max_page_id);
 
         for adjacency_set in edge_iter {
-            log::debug!("adjacencies for: {}", adjacency_set.source_vertex_id);
+            // log::debug!("adjacencies for: {}", adjacency_set.source_vertex_id);
             let vertex_al_offset: u64 = self.build_adjacency_list(
                 adjacency_set.source_vertex_id,
                 adjacency_set.dest_vertex_ids,
@@ -496,12 +496,12 @@ impl GraphDBBuilder {
 
         // Position at which we are writing the thing.
         let al_position = self.al_file.stream_position().unwrap();
-        log::debug!(
-            "writing vertex {} list with {} edges {}",
-            vertex_id,
-            edge_ids.len(),
-            al_position
-        );
+        // log::debug!(
+        //     "writing vertex {} list with {} edges {}",
+        //     vertex_id,
+        //     edge_ids.len(),
+        //     al_position
+        // );
         for neighbor in edge_ids.iter() {
             let neighbor_bytes = neighbor.to_le_bytes();
             self.al_file.write(&neighbor_bytes).unwrap();
