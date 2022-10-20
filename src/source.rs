@@ -4,9 +4,8 @@ use std::{
     path::PathBuf,
 };
 
-use crossbeam::channel::{Receiver, Sender};
+use crossbeam::channel::Sender;
 use indicatif::{ProgressDrawTarget, ProgressStyle};
-use itertools::Itertools;
 use rayon::prelude::*;
 
 use crate::WPPageLink;
@@ -64,18 +63,17 @@ impl WPPageLinkSource {
         if self.insert_count != 0 {
             return self.insert_count;
         }
-        self.insert_count = 56034;
-        // log::debug!("counting inserts in pagelinks sql");
-        // let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
-        // let pagelinks_sql = BufReader::new(pagelinks_sql_file);
-        // // 56034
-        // self.insert_count = pagelinks_sql
-        //     .lines()
-        //     .filter(|line_res| {
-        //         let line = line_res.as_ref().expect("read line");
-        //         return line.starts_with("INSERT ");
-        //     })
-        //     .count();
+        log::debug!("counting inserts in pagelinks sql");
+        let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
+        let pagelinks_sql = BufReader::new(pagelinks_sql_file);
+        // 56034
+        self.insert_count = pagelinks_sql
+            .lines()
+            .filter(|line_res| {
+                let line = line_res.as_ref().expect("read line");
+                return line.starts_with("INSERT ");
+            })
+            .count();
         self.insert_count
     }
 
@@ -95,8 +93,8 @@ impl WPPageLinkSource {
              }| {
                 if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
                     Some(WPPageLink {
-                        source_page_id: from,
-                        dest_page_title: title,
+                        source_page_id: from.0,
+                        dest_page_title: title.0.to_lowercase(),
                     })
                 } else {
                     None

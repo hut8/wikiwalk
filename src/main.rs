@@ -7,7 +7,6 @@ use indicatif::{ProgressDrawTarget, ProgressStyle};
 use itertools::Itertools;
 use memmap2::MmapOptions;
 use memory_stats::memory_stats;
-use parse_mediawiki_sql::field_types::{PageId, PageTitle};
 use parse_mediawiki_sql::schemas::Page;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
@@ -23,10 +22,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{prelude::*, BufReader, BufWriter};
-use std::io::{SeekFrom, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Instant;
-use std::{thread, time};
+use std::thread;
 
 mod dump;
 mod schema;
@@ -65,8 +64,8 @@ pub struct Link<'a> {
 
 /// Intermediate type of only fields necessary to create an Edge
 pub struct WPPageLink {
-    pub source_page_id: PageId,
-    pub dest_page_title: PageTitle,
+    pub source_page_id: u32,
+    pub dest_page_title: String,
 }
 
 // flat file database for sorting/aggregating edges
@@ -325,7 +324,7 @@ impl GraphDBBuilder {
             let page_links: Vec<WPPageLink> = page_link_chunk.collect();
 
             let mut title_map = HashMap::new();
-            let titles = page_links.iter().map(|l| l.dest_page_title.0.clone());
+            let titles = page_links.iter().map(|l| l.dest_page_title.clone());
             let vertexes = schema::vertex::Entity::find()
                 .filter(schema::vertex::Column::Title.is_in(titles))
                 .all(&db)
@@ -336,9 +335,9 @@ impl GraphDBBuilder {
             }
 
             for link in page_links {
-                if let Some(dest) = title_map.get(&link.dest_page_title.0) {
+                if let Some(dest) = title_map.get(&link.dest_page_title) {
                     let edge = Edge {
-                        source_vertex_id: link.source_page_id.0,
+                        source_vertex_id: link.source_page_id,
                         dest_vertex_id: *dest,
                     };
                     edge_db.write_edge(&edge);
@@ -348,7 +347,7 @@ impl GraphDBBuilder {
     }
 
     // load edges from the pagelinks.sql dump
-     async fn load_edges_dump(&self, path: PathBuf, db: DbConn) -> EdgeProcDB {
+    async fn load_edges_dump(&self, path: PathBuf, db: DbConn) -> EdgeProcDB {
         let mut edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
 
@@ -441,7 +440,7 @@ impl GraphDBBuilder {
                 if namespace == PageNamespace(0) && !is_redirect {
                     Some(Vertex {
                         id: id.0,
-                        title: title.0,
+                        title: title.0.to_lowercase().replace("_", " "),
                     })
                 } else {
                     None
@@ -488,7 +487,7 @@ impl GraphDBBuilder {
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
     /// Each 4-byte value is a LE representation
-    pub fn build_adjacency_list(&mut self, vertex_id: u32, edge_ids: Vec<u32>) -> u64 {
+    pub fn build_adjacency_list(&mut self, _vertex_id: u32, edge_ids: Vec<u32>) -> u64 {
         if edge_ids.len() == 0 {
             // No outgoing edges or no such vertex
             return 0;
