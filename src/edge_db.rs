@@ -65,16 +65,13 @@ impl AdjacencyList {
         let mut incoming: Vec<u32> = Vec::new();
         let mut i = 0_usize;
         let mut buf: [u8; 4] = [0; 4];
-        let mut val: u32 = 0;
-        buf.copy_from_slice(&data[..4]);
-        val = u32::from_le_bytes(buf);
+        let mut val: u32 = u32::from_le_bytes(data[..4].try_into().unwrap());
         if val != 0xCAFECAFE {
             panic!("corrupt database; expected 0xCAFECAFE");
         }
         loop {
             i += 4;
-            buf.copy_from_slice(&data[i..i + 4]);
-            val = u32::from_le_bytes(buf);
+            val = u32::from_le_bytes(data[i..i + 4].try_into().unwrap());
             if val == 0 {
                 break;
             }
@@ -82,8 +79,7 @@ impl AdjacencyList {
         }
         loop {
             i += 4;
-            buf.copy_from_slice(&data[i..i + 4]);
-            val = u32::from_le_bytes(buf);
+            val = u32::from_le_bytes(data[i..i + 4].try_into().unwrap());
             if val == 0 {
                 break;
             }
