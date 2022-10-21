@@ -15,6 +15,7 @@ use sea_orm::{
     EntityTrait, EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
+use sha3::{Digest, Sha3_256};
 use spinners::{Spinner, Spinners};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
@@ -73,9 +74,15 @@ enum EdgeSort {
     Outgoing,
 }
 
+enum FileDirection {
+  Source,
+  Sink
+}
+
 // flat file database for sorting/aggregating edges
 struct EdgeProcDB {
-    path: PathBuf,
+    /// directory containing raw edge list and both sorted files
+    root_path: PathBuf,
     writer: BufWriter<File>,
     bc_config: bincode::config::Configuration<BigEndian, Fixint>,
     pub edges: Vec<Edge>,
@@ -84,9 +91,10 @@ struct EdgeProcDB {
 
 impl EdgeProcDB {
     pub fn new(path: PathBuf) -> EdgeProcDB {
-        let file = File::create(&path).expect("open edge proc db");
+        std::fs::create_dir_all(&path).expect("create edge db directory");
+        let file = File::create(&path.join("edges")).expect("open edge proc db");
         EdgeProcDB {
-            path,
+            root_path: path,
             writer: BufWriter::new(file),
             bc_config: Self::bincode_config(),
             edges: Vec::new(),
@@ -113,7 +121,7 @@ impl EdgeProcDB {
 
     fn sort_basename(sort_by: &EdgeSort) -> String {
         format!(
-            "-sort-{}",
+            "edges-{}",
             match sort_by {
                 EdgeSort::Incoming => "incoming",
                 EdgeSort::Outgoing => "outgoing",
@@ -121,15 +129,19 @@ impl EdgeProcDB {
         )
     }
 
-    fn sort_file(&self, sort_by: &EdgeSort) -> File {
+    fn sort_file(&self, sort_by: &EdgeSort, direction: FileDirection) -> File {
         let sink_basename = Self::sort_basename(&sort_by);
-        File::create(self.path.join(sink_basename)).expect("open edge db sort sink")
+        match direction {
+          FileDirection::Source => File::open(self.root_path.join(sink_basename)).expect("open edge db sort source"),
+          FileDirection::Sink => File::create(self.root_path.join(sink_basename)).expect("open edge db sort sink")
+        }
+
     }
 
     pub fn write_sorted_by(&mut self, sort_by: EdgeSort) {
-        let source = File::open(&self.path).expect("open edge db sort source");
-        let sink_basename = Self::sort_basename(&sort_by);
-        let sink = File::create(self.path.join(sink_basename)).expect("open edge db sort sink");
+        let source = File::open(&self.root_path.join("edges")).expect("open edge db sort source");
+        let sink = self.sort_file(&sort_by, FileDirection::Sink);
+
         let mut source = BufReader::new(source);
         let mut sink = BufWriter::new(sink);
         log::debug!("loading edge db for sort");
@@ -163,6 +175,7 @@ impl EdgeProcDB {
         for edge in &self.edges {
             bincode::encode_into_std_write(edge, &mut sink, self.bc_config).expect("write edge");
         }
+        sink.flush().unwrap();
     }
 
     pub fn flush(&mut self) {
@@ -170,8 +183,8 @@ impl EdgeProcDB {
     }
 
     pub fn iter(&self, max_page_id: u32) -> AdjacencySetIterator {
-        let outgoing_source = self.sort_file(&EdgeSort::Outgoing);
-        let incoming_source = self.sort_file(&EdgeSort::Incoming);
+        let outgoing_source = self.sort_file(&EdgeSort::Outgoing, FileDirection::Source);
+        let incoming_source = self.sort_file(&EdgeSort::Incoming, FileDirection::Source);
 
         let outgoing_source = unsafe { Mmap::map(&outgoing_source).unwrap() };
         let incoming_source = unsafe { Mmap::map(&incoming_source).unwrap() };
@@ -305,6 +318,48 @@ enum QueryAs {
     MaxVertexId,
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+struct DBStatus {
+    wp_page_hash: Option<Vec<u8>>,
+    wp_pagelinks_hash: Option<Vec<u8>>,
+}
+
+impl DBStatus {
+    pub fn compute(page_path: PathBuf, pagelinks_path: PathBuf) -> DBStatus {
+        let wp_page_hash_thread = thread::spawn(|| Self::hash_file(page_path));
+        let wp_pagelinks_hash_thread = thread::spawn(|| Self::hash_file(pagelinks_path));
+        let wp_page_hash = Some(wp_page_hash_thread.join().unwrap());
+        let wp_pagelinks_hash = Some(wp_pagelinks_hash_thread.join().unwrap());
+        DBStatus {
+            wp_page_hash,
+            wp_pagelinks_hash,
+        }
+    }
+
+    pub fn load(status_path: PathBuf) -> DBStatus {
+        match File::open(status_path) {
+            Ok(file) => serde_json::from_reader(file).unwrap(),
+            Err(_) => DBStatus {
+                wp_page_hash: None,
+                wp_pagelinks_hash: None,
+            },
+        }
+    }
+
+    pub fn save(&self, status_path: PathBuf) {
+        let sink = File::create(status_path).unwrap();
+        serde_json::to_writer_pretty(&sink, self).unwrap();
+    }
+
+    fn hash_file(path: PathBuf) -> Vec<u8> {
+        let source = File::open(path).unwrap();
+        let source = unsafe { Mmap::map(&source).unwrap() };
+        let mut hasher = Sha3_256::new();
+        hasher.update(&source[..]);
+        hasher.finalize().to_vec()
+    }
+}
+
 impl GraphDBBuilder {
     pub fn new(
         page: PathBuf,
@@ -337,6 +392,11 @@ impl GraphDBBuilder {
 
     /// load vertexes from page.sql and put them in a sqlite file
     pub async fn build_database(&mut self) {
+        let db_status_path = self.process_path.join("status.json");
+        let mut db_status = DBStatus::load(db_status_path.clone());
+        let db_status_complete =
+            DBStatus::compute(self.page_path.clone(), self.pagelinks_path.clone());
+
         let db_path = self.process_path.join("wikipedia-speedrun.db");
         let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
         log::debug!("using database: {}", conn_str);
@@ -348,9 +408,26 @@ impl GraphDBBuilder {
         let pool = SqlitePool::connect_with(opts).await.expect("db connect");
         let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
 
-        log::info!("loading page.sql");
-        self.load_vertexes_dump(db.clone()).await;
-        self.create_vertex_title_ix(&db).await;
+        let need_vertexes = match &db_status.wp_page_hash {
+            Some(stat_hash) => db_status_complete
+                .wp_page_hash
+                .as_ref()
+                .map(|complete_hash| complete_hash != stat_hash)
+                .unwrap(),
+            None => true,
+        };
+        if need_vertexes {
+            log::info!("loading page.sql");
+            self.load_vertexes_dump(db.clone()).await;
+            self.create_vertex_title_ix(&db).await;
+            db_status.wp_page_hash = db_status_complete.wp_page_hash;
+            db_status.save(db_status_path.clone());
+        } else {
+            log::info!(
+                "skipping page.sql load due to match on hash: {}",
+                hex::encode(&db_status.wp_page_hash.unwrap())
+            );
+        }
 
         log::debug!("finding max index");
 
