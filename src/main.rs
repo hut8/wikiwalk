@@ -355,7 +355,10 @@ impl DBStatus {
         let source = File::open(path).unwrap();
         let source = unsafe { Mmap::map(&source).unwrap() };
         let mut hasher = Sha3_256::new();
-        hasher.update(&source[..]);
+        let max_tail_size: usize = 1024*1024;
+        let tail_size = source.len().min(max_tail_size);
+        let tail = (source.len()-tail_size)..source.len()-1;
+        hasher.update(&source[tail]);
         hasher.finalize().to_vec()
     }
 }
@@ -393,6 +396,8 @@ impl GraphDBBuilder {
     /// load vertexes from page.sql and put them in a sqlite file
     pub async fn build_database(&mut self) {
         let db_status_path = self.process_path.join("status.json");
+
+        log::debug!("computing current and finished state of data files");
         let mut db_status = DBStatus::load(db_status_path.clone());
         let db_status_complete =
             DBStatus::compute(self.page_path.clone(), self.pagelinks_path.clone());
