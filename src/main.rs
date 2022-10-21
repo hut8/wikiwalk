@@ -1,11 +1,10 @@
 use bincode::config::{BigEndian, Fixint};
-use bincode::error::DecodeError;
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
 use dirs;
 use indicatif::{ProgressDrawTarget, ProgressStyle};
 use itertools::Itertools;
-use memmap2::{Mmap, MmapOptions};
+use memmap2::{Mmap, MmapMut, MmapOptions};
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::schemas::Page;
 use sea_orm::entity::prelude::*;
@@ -20,10 +19,10 @@ use spinners::{Spinner, Spinners};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
-use std::io::{prelude::*, BufReader, BufWriter};
+use std::io::{prelude::*, BufWriter};
 use std::path::PathBuf;
 use std::thread;
 use std::time::Instant;
@@ -53,6 +52,7 @@ impl PartialEq for Vertex {
 impl Eq for Vertex {}
 
 #[derive(PartialEq, Debug, Copy, Clone, bincode::Decode, bincode::Encode)]
+#[repr(align(8))]
 pub struct Edge {
     pub source_vertex_id: u32,
     pub dest_vertex_id: u32,
@@ -72,11 +72,6 @@ pub struct WPPageLink {
 enum EdgeSort {
     Incoming,
     Outgoing,
-}
-
-enum FileDirection {
-  Source,
-  Sink
 }
 
 // flat file database for sorting/aggregating edges
@@ -129,53 +124,44 @@ impl EdgeProcDB {
         )
     }
 
-    fn sort_file(&self, sort_by: &EdgeSort, direction: FileDirection) -> File {
-        let sink_basename = Self::sort_basename(&sort_by);
-        match direction {
-          FileDirection::Source => File::open(self.root_path.join(sink_basename)).expect("open edge db sort source"),
-          FileDirection::Sink => File::create(self.root_path.join(sink_basename)).expect("open edge db sort sink")
-        }
+    fn open_sort_file(&self, sort_by: &EdgeSort) -> Mmap {
+        let basename = Self::sort_basename(&sort_by);
+        let path = &self.root_path.join(basename);
+        let sink_file = OpenOptions::new()
+            .read(true)
+            .open(path)
+            .expect("open edge db sort file as source");
+        unsafe { Mmap::map(&sink_file).expect("mmap edge sort file") }
+    }
 
+    fn make_sort_file(&self, sort_by: &EdgeSort) -> MmapMut {
+        let sink_basename = Self::sort_basename(&sort_by);
+        let sink_path = &self.root_path.join(sink_basename);
+        std::fs::copy(&self.root_path.join("edges"), sink_path).expect("copy file for sort");
+
+        let sink_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(sink_path)
+            .expect("open edge db sort file as sink");
+        unsafe { MmapMut::map_mut(&sink_file).expect("mmap edge sort file") }
     }
 
     pub fn write_sorted_by(&mut self, sort_by: EdgeSort) {
-        let source = File::open(&self.root_path.join("edges")).expect("open edge db sort source");
-        let sink = self.sort_file(&sort_by, FileDirection::Sink);
+        let mut sink = self.make_sort_file(&sort_by);
 
-        let mut source = BufReader::new(source);
-        let mut sink = BufWriter::new(sink);
-        log::debug!("loading edge db for sort");
-        loop {
-            let res = bincode::decode_from_reader::<Edge, _, _>(&mut source, self.bc_config);
-            match res {
-                Ok(edge) => {
-                    self.edges.push(edge);
-                }
-                Err(err) => match err {
-                    DecodeError::Io { inner, .. } => match inner.kind() {
-                        std::io::ErrorKind::UnexpectedEof => {
-                            // eof = we're done
-                            break;
-                        }
-                        _ => {
-                            panic!("unexpected io error during decode: {:#?}", inner);
-                        }
-                    },
-                    _ => {
-                        panic!("decode error: {:#?}", err);
-                    }
-                },
-            }
-        }
         log::debug!("sorting edge db");
+        let slice = &mut sink[..];
+        let sink_byte_len = slice.len();
+        let edges = unsafe { ::std::mem::transmute::<&mut [u8], &mut [Edge]>(slice) };
+        let sink_edge_len = edges.len();
+        assert!(sink_byte_len / std::mem::size_of::<Edge>() == sink_edge_len);
+
         self.edges.sort_unstable_by(|x, y| match sort_by {
             EdgeSort::Incoming => x.dest_vertex_id.cmp(&y.dest_vertex_id),
             EdgeSort::Outgoing => x.source_vertex_id.cmp(&y.source_vertex_id),
         });
-        for edge in &self.edges {
-            bincode::encode_into_std_write(edge, &mut sink, self.bc_config).expect("write edge");
-        }
-        sink.flush().unwrap();
     }
 
     pub fn flush(&mut self) {
@@ -183,11 +169,9 @@ impl EdgeProcDB {
     }
 
     pub fn iter(&self, max_page_id: u32) -> AdjacencySetIterator {
-        let outgoing_source = self.sort_file(&EdgeSort::Outgoing, FileDirection::Source);
-        let incoming_source = self.sort_file(&EdgeSort::Incoming, FileDirection::Source);
+        let outgoing_source = self.open_sort_file(&EdgeSort::Outgoing);
+        let incoming_source = self.open_sort_file(&EdgeSort::Incoming);
 
-        let outgoing_source = unsafe { Mmap::map(&outgoing_source).unwrap() };
-        let incoming_source = unsafe { Mmap::map(&incoming_source).unwrap() };
         AdjacencySetIterator {
             outgoing_source,
             incoming_source,
@@ -355,9 +339,9 @@ impl DBStatus {
         let source = File::open(path).unwrap();
         let source = unsafe { Mmap::map(&source).unwrap() };
         let mut hasher = Sha3_256::new();
-        let max_tail_size: usize = 1024*1024;
+        let max_tail_size: usize = 1024 * 1024;
         let tail_size = source.len().min(max_tail_size);
-        let tail = (source.len()-tail_size)..source.len()-1;
+        let tail = (source.len() - tail_size)..source.len() - 1;
         hasher.update(&source[tail]);
         hasher.finalize().to_vec()
     }
