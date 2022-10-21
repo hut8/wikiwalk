@@ -27,31 +27,23 @@ impl WPPageLinkSource {
     }
 
     pub fn run(self) {
-        let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
-        let pagelinks_sql = BufReader::new(pagelinks_sql_file);
-        let mut pagelinks_line_iter = pagelinks_sql.lines();
-
-        // let pagelinks_line_iter = pagelinks_line_iter
-        //     .skip_while(|line| !line.as_ref().expect("read preamble").starts_with("INSERT"))
-        //     .into_iter();
-
-        //        let chunks = pagelinks_line_iter.chunks(1);
-        for l in pagelinks_line_iter.by_ref() {
-            let line = l.expect("read preamble");
-            if line.starts_with("/*!40000 ALTER TABLE `pagelinks`") {
-                break;
-            }
-        }
-
         let draw_target = ProgressDrawTarget::stderr_with_hz(0.1);
         let progress = indicatif::ProgressBar::new(self.insert_count as u64);
         progress.set_style(
-                ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
-            );
+              ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
+          );
         progress.set_draw_target(draw_target);
 
+        let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
+        let pagelinks_sql = BufReader::new(pagelinks_sql_file);
+        let pagelinks_line_iter = pagelinks_sql.lines();
+
         pagelinks_line_iter.par_bridge().for_each(|chunk| {
-            let lines = vec![chunk.expect("read line")];
+            let line = chunk.expect("read line");
+            if !line.starts_with("INSERT ") {
+                return;
+            }
+            let lines = vec![line];
             progress.inc(1);
             let sender = self.sender.clone();
             Self::load_edges_dump_chunk(lines, sender);
