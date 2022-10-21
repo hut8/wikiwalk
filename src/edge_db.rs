@@ -64,7 +64,6 @@ impl AdjacencyList {
         let mut outgoing: Vec<u32> = Vec::new();
         let mut incoming: Vec<u32> = Vec::new();
         let mut i = 0_usize;
-        let mut buf: [u8; 4] = [0; 4];
         let mut val: u32 = u32::from_le_bytes(data[..4].try_into().unwrap());
         if val != 0xCAFECAFE {
             panic!("corrupt database; expected 0xCAFECAFE");
