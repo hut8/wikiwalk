@@ -5,7 +5,7 @@ use crossbeam::channel::Receiver;
 use dirs;
 use indicatif::{ProgressDrawTarget, ProgressStyle};
 use itertools::Itertools;
-use memmap2::MmapOptions;
+use memmap2::{Mmap, MmapOptions};
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::schemas::Page;
 use sea_orm::entity::prelude::*;
@@ -21,16 +21,16 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{prelude::*, BufReader, BufWriter};
 use std::io::Write;
+use std::io::{prelude::*, BufReader, BufWriter};
 use std::path::PathBuf;
-use std::time::Instant;
 use std::thread;
+use std::time::Instant;
 
 mod dump;
+mod edge_db;
 mod schema;
 mod source;
-
 #[derive(Clone, Debug)]
 pub struct Vertex {
     pub id: u32,
@@ -66,6 +66,11 @@ pub struct Link<'a> {
 pub struct WPPageLink {
     pub source_page_id: u32,
     pub dest_page_title: String,
+}
+
+enum EdgeSort {
+    Incoming,
+    Outgoing,
 }
 
 // flat file database for sorting/aggregating edges
@@ -106,11 +111,27 @@ impl EdgeProcDB {
         }
     }
 
-    pub fn sort(&mut self) {
+    fn sort_basename(sort_by: &EdgeSort) -> String {
+        format!(
+            "-sort-{}",
+            match sort_by {
+                EdgeSort::Incoming => "incoming",
+                EdgeSort::Outgoing => "outgoing",
+            }
+        )
+    }
+
+    fn sort_file(&self, sort_by: &EdgeSort) -> File {
+        let sink_basename = Self::sort_basename(&sort_by);
+        File::create(self.path.join(sink_basename)).expect("open edge db sort sink")
+    }
+
+    pub fn write_sorted_by(&mut self, sort_by: EdgeSort) {
         let source = File::open(&self.path).expect("open edge db sort source");
-        // let sink = File::create(self.path.join("-sort")).expect("open edge db sort sink");
+        let sink_basename = Self::sort_basename(&sort_by);
+        let sink = File::create(self.path.join(sink_basename)).expect("open edge db sort sink");
         let mut source = BufReader::new(source);
-        // let sink = BufWriter::new(sink);
+        let mut sink = BufWriter::new(sink);
         log::debug!("loading edge db for sort");
         loop {
             let res = bincode::decode_from_reader::<Edge, _, _>(&mut source, self.bc_config);
@@ -135,39 +156,59 @@ impl EdgeProcDB {
             }
         }
         log::debug!("sorting edge db");
-        self.edges
-            .sort_unstable_by(|x, y| x.source_vertex_id.cmp(&y.source_vertex_id));
+        self.edges.sort_unstable_by(|x, y| match sort_by {
+            EdgeSort::Incoming => x.dest_vertex_id.cmp(&y.dest_vertex_id),
+            EdgeSort::Outgoing => x.source_vertex_id.cmp(&y.source_vertex_id),
+        });
+        for edge in &self.edges {
+            bincode::encode_into_std_write(edge, &mut sink, self.bc_config).expect("write edge");
+        }
     }
 
     pub fn flush(&mut self) {
         self.writer.flush().expect("flush edge db");
     }
 
-    pub fn iter(self, max_page_id: u32) -> AdjacencySetIterator {
+    pub fn iter(&self, max_page_id: u32) -> AdjacencySetIterator {
+        let outgoing_source = self.sort_file(&EdgeSort::Outgoing);
+        let incoming_source = self.sort_file(&EdgeSort::Incoming);
+
+        let outgoing_source = unsafe { Mmap::map(&outgoing_source).unwrap() };
+        let incoming_source = unsafe { Mmap::map(&incoming_source).unwrap() };
         AdjacencySetIterator {
-            edges: self.edges,
-            position: 0,
+            outgoing_source,
+            incoming_source,
+            incoming_i: 0,
+            outgoing_i: 0,
             vertex_id: 0,
             max_page_id,
+            bc_config: self.bc_config,
         }
     }
 }
 
+// AdjacencySet is an AdjacencyList combined with its vertex
 struct AdjacencySet {
-    source_vertex_id: u32,
-    dest_vertex_ids: Vec<u32>,
+    vertex_id: u32,
+    adjacency_list: edge_db::AdjacencyList,
 }
 
 struct AdjacencySetIterator {
-    edges: Vec<Edge>,
-    position: usize,
+    incoming_source: Mmap,
+    outgoing_source: Mmap,
+    incoming_i: usize,
+    outgoing_i: usize,
     vertex_id: u32,
     max_page_id: u32,
+    bc_config: bincode::config::Configuration<BigEndian, Fixint>,
 }
 
 impl Iterator for AdjacencySetIterator {
     type Item = AdjacencySet;
 
+    // iterates over range of 0..max_page_id,
+    // combining data in incoming_source and outgoing_source
+    // into adjacency lists
     fn next(&mut self) -> Option<Self::Item> {
         // are we done yet?
         if self.vertex_id > self.max_page_id {
@@ -175,35 +216,69 @@ impl Iterator for AdjacencySetIterator {
         }
 
         let mut val = AdjacencySet {
-            source_vertex_id: self.vertex_id,
-            dest_vertex_ids: vec![],
+            vertex_id: self.vertex_id,
+            adjacency_list: edge_db::AdjacencyList::default(),
         };
 
-        // if we are about to run off the end
-        if self.position >= self.edges.len() {
-            self.vertex_id += 1;
-            return Some(val);
-        }
-        let current_source = self.edges[self.position].source_vertex_id;
-
-        // if the vertex we're at has no outgoing edges, increment the source vertex
-        // and return the empty adjacency set
-        if self.vertex_id < current_source {
-            self.vertex_id += 1;
-            return Some(val);
-        }
-
+        // put in all the outgoing edges
         loop {
-            if self.position >= self.edges.len()
-                || self.edges[self.position].source_vertex_id != current_source
-            {
+            let outgoing_offset: usize = self.outgoing_i * (u32::BITS as usize / 8) * 2;
+
+            if outgoing_offset >= self.outgoing_source.len() {
                 break;
             }
-            val.dest_vertex_ids
-                .push(self.edges[self.position].dest_vertex_id);
-            self.position += 1;
+
+            let current_edge: Edge = bincode::decode_from_slice(
+                &self.outgoing_source[outgoing_offset..],
+                self.bc_config,
+            )
+            .unwrap()
+            .0;
+
+            if current_edge.source_vertex_id > self.vertex_id {
+                break;
+            }
+            if current_edge.source_vertex_id < self.vertex_id {
+                self.outgoing_i += 1;
+                continue;
+            }
+            val.adjacency_list
+                .outgoing
+                .push(current_edge.dest_vertex_id);
         }
+
+        // put in all the incoming edges
+        loop {
+            let incoming_offset: usize = self.incoming_i * (u32::BITS as usize / 8) * 2;
+
+            if incoming_offset >= self.incoming_source.len() {
+                break;
+            }
+
+            let current_edge: Edge = bincode::decode_from_slice(
+                &self.incoming_source[incoming_offset..],
+                self.bc_config,
+            )
+            .unwrap()
+            .0;
+
+            if current_edge.dest_vertex_id > self.vertex_id {
+                break;
+            }
+
+            // necessary at the beginning before hitting first vertex
+            if current_edge.dest_vertex_id < self.vertex_id {
+                self.incoming_i += 1;
+                continue;
+            }
+
+            val.adjacency_list
+                .outgoing
+                .push(current_edge.source_vertex_id);
+        }
+
         self.vertex_id += 1;
+
         Some(val)
     }
 }
@@ -291,7 +366,10 @@ impl GraphDBBuilder {
         log::debug!("building edge map");
 
         let mut edge_db = self.load_edges_dump(self.pagelinks_path.clone(), db).await;
-        edge_db.sort();
+        log::debug!("writing sorted outgoing edges");
+        edge_db.write_sorted_by(EdgeSort::Outgoing);
+        log::debug!("writing sorted incoming edges");
+        edge_db.write_sorted_by(EdgeSort::Incoming);
 
         log::debug!(
             "building al [{}] and ix [{}] - {} vertexes",
@@ -304,13 +382,10 @@ impl GraphDBBuilder {
 
         for adjacency_set in edge_iter {
             // log::debug!("adjacencies for: {}", adjacency_set.source_vertex_id);
-            let vertex_al_offset: u64 = self.build_adjacency_list(
-                adjacency_set.source_vertex_id,
-                adjacency_set.dest_vertex_ids,
-            );
+            let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set);
             self.ix_file.write(&vertex_al_offset.to_le_bytes()).unwrap();
-            if adjacency_set.source_vertex_id % 1000 == 0 {
-                log::debug!("-> wrote {} entries", adjacency_set.source_vertex_id);
+            if adjacency_set.vertex_id % 1000 == 0 {
+                log::debug!("-> wrote {} entries", adjacency_set.vertex_id);
             }
         }
         self.ix_file.flush().unwrap();
@@ -487,8 +562,8 @@ impl GraphDBBuilder {
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
     /// Each 4-byte value is a LE representation
-    pub fn build_adjacency_list(&mut self, _vertex_id: u32, edge_ids: Vec<u32>) -> u64 {
-        if edge_ids.len() == 0 {
+    pub fn write_adjacency_set(&mut self, adjacency_set: &AdjacencySet) -> u64 {
+        if adjacency_set.adjacency_list.is_empty() {
             // No outgoing edges or no such vertex
             return 0;
         }
@@ -501,20 +576,31 @@ impl GraphDBBuilder {
         //     edge_ids.len(),
         //     al_position
         // );
-        for neighbor in edge_ids.iter() {
+        self.al_file.write(&(0xCAFECAFE_u32).to_le_bytes()).unwrap();
+
+        // outgoing edges
+        for neighbor in adjacency_set.adjacency_list.outgoing.iter() {
             let neighbor_bytes = neighbor.to_le_bytes();
             self.al_file.write(&neighbor_bytes).unwrap();
         }
         // Null terminator
-        self.al_file.write(&(0i32).to_le_bytes()).unwrap();
+        self.al_file.write(&(0u32).to_le_bytes()).unwrap();
+
+        // incoming edges
+        for neighbor in adjacency_set.adjacency_list.incoming.iter() {
+            let neighbor_bytes = neighbor.to_le_bytes();
+            self.al_file.write(&neighbor_bytes).unwrap();
+        }
+        // Null terminator
+        self.al_file.write(&(0u32).to_le_bytes()).unwrap();
+
         al_position
     }
 }
 
 pub struct GraphDB {
-    pub mmap_ix: memmap2::Mmap,
-    pub mmap_al: memmap2::Mmap,
     pub db: DbConn,
+    pub edge_db: edge_db::EdgeDB,
     pub visited_ids: HashSet<u32>,
     pub parents: HashMap<u32, u32>,
     pub q: VecDeque<u32>,
@@ -529,9 +615,9 @@ impl GraphDB {
         let visited_ids = HashSet::new();
         let parents = HashMap::new();
         let q: VecDeque<u32> = VecDeque::new();
+        let edge_db = edge_db::EdgeDB::new(mmap_al, mmap_ix);
         Ok(GraphDB {
-            mmap_ix,
-            mmap_al,
+            edge_db,
             db,
             visited_ids,
             parents,
@@ -571,40 +657,6 @@ impl GraphDB {
         }
     }
 
-    fn check_al(&mut self) {
-        let mut buf: [u8; 4] = [0; 4];
-        buf.copy_from_slice(&self.mmap_al[0..4]);
-        let magic: u32 = u32::from_be_bytes(buf);
-        assert!(magic == 1337);
-    }
-
-    fn check_ix(&mut self) {
-        // read index file and ensure that all 64-bit entries
-        // point to within range
-        let max_sz: u64 = (self.mmap_al.len() - 4) as u64;
-        let mut buf: [u8; 8] = [0; 8];
-        let mut position: usize = 0;
-        while position <= (self.mmap_ix.len() - 8) {
-            buf.copy_from_slice(&self.mmap_ix[position..position + 8]);
-            let value: u64 = u64::from_be_bytes(buf);
-            if value > max_sz {
-                let msg = format!(
-                    "check_ix: at index file: {}, got pointer to {} in AL file (maximum: {})",
-                    position, value, max_sz
-                );
-                panic!("{}", msg);
-            }
-            position += 8;
-        }
-    }
-
-    fn check_db(&mut self) {
-        self.check_al();
-        println!("checking index file");
-        self.check_ix();
-        println!("done");
-    }
-
     fn build_path(&self, source: u32, dest: u32) -> Vec<u32> {
         let mut path: Vec<u32> = Vec::new();
         let mut current = dest;
@@ -623,7 +675,7 @@ impl GraphDB {
     }
 
     pub fn bfs(&mut self, src: u32, dest: u32) -> Option<Vec<u32>> {
-        self.check_db();
+        self.edge_db.check_db();
         let mut sp = Spinner::new(Spinners::Dots9, "Computing path".into());
 
         let start_time = Instant::now();
@@ -663,34 +715,11 @@ impl GraphDB {
     }
 
     pub fn load_neighbors(&self, vertex_id: u32) -> Vec<u32> {
-        let mut neighbors: Vec<u32> = Vec::new();
-        let ix_position: usize = ((u64::BITS / 8) * vertex_id) as usize;
         // println!(
-        //     "load_neighbors for {} from ix position: {}",
-        //     vertex_id, ix_position
+        //     "load_neighbors for {}",
+        //     vertex_id
         // );
-        let mut buf: [u8; 8] = [0; 8];
-        buf.copy_from_slice(&self.mmap_ix[ix_position..ix_position + 8]);
-        // println!("buf from ix = {:?}", buf);
-        let mut al_offset: usize = u64::from_be_bytes(buf) as usize;
-        if al_offset == 0 {
-            // println!("vertex {} has no neighbors", vertex_id);
-            return neighbors;
-        }
-        let mut vbuf: [u8; 4] = [0; 4];
-        loop {
-            // println!("looking at al_offset = {}", al_offset);
-            vbuf.copy_from_slice(&self.mmap_al[al_offset..al_offset + 4]);
-            // println!("vbuf from al = {:?}", vbuf);
-            let i: u32 = u32::from_be_bytes(vbuf);
-            // println!("vbuf -> int = {:?}", i);
-            if i == 0 {
-                break;
-            }
-            neighbors.push(i);
-            al_offset += 4;
-        }
-        neighbors
+        self.edge_db.read_edges(vertex_id).outgoing
     }
 }
 
