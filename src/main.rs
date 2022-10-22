@@ -1,4 +1,3 @@
-use bincode::config::{BigEndian, Fixint};
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
 use dirs;
@@ -21,8 +20,8 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::Write;
 use std::io::{prelude::*, BufWriter};
+use std::io::{SeekFrom, Write};
 use std::path::PathBuf;
 use std::thread;
 use std::time::Instant;
@@ -51,11 +50,23 @@ impl PartialEq for Vertex {
 
 impl Eq for Vertex {}
 
-#[derive(PartialEq, Debug, Copy, Clone, bincode::Decode, bincode::Encode)]
+#[derive(PartialEq, Debug, Copy, Clone, Default)]
 #[repr(align(8))]
 pub struct Edge {
     pub source_vertex_id: u32,
     pub dest_vertex_id: u32,
+}
+
+impl Edge {
+    fn from_bytes(buf: &[u8]) -> Edge {
+        let mut val = Edge::default();
+        let source_ptr = buf.as_ptr() as *const Edge;
+        let dest_ptr = &mut val as *mut Edge;
+        unsafe {
+            *dest_ptr = *source_ptr;
+        }
+        val
+    }
 }
 
 pub struct Link<'a> {
@@ -79,7 +90,6 @@ struct EdgeProcDB {
     /// directory containing raw edge list and both sorted files
     root_path: PathBuf,
     writer: BufWriter<File>,
-    bc_config: bincode::config::Configuration<BigEndian, Fixint>,
     unflushed_inserts: usize,
 }
 
@@ -95,21 +105,28 @@ impl EdgeProcDB {
         EdgeProcDB {
             root_path: path,
             writer: BufWriter::new(file),
-            bc_config: Self::bincode_config(),
             unflushed_inserts: 0,
         }
     }
 
-    #[inline]
-    fn bincode_config() -> bincode::config::Configuration<BigEndian, Fixint> {
-        bincode::config::standard()
-            .with_big_endian()
-            .with_fixed_int_encoding()
-            .with_no_limit()
+    pub fn truncate(self) -> Self {
+        let mut file = self.writer.into_inner().unwrap();
+        file.set_len(0).unwrap();
+        file.seek(SeekFrom::Start(0)).unwrap();
+        EdgeProcDB {
+            root_path: self.root_path.clone(),
+            writer: BufWriter::new(file),
+            unflushed_inserts: 0,
+        }
     }
 
+    // FIXME: may need to copy it directly from memory
+    // for endianness portability
     pub fn write_edge(&mut self, edge: &Edge) {
-        bincode::encode_into_std_write(edge, &mut self.writer, self.bc_config).expect("write edge");
+        let edge_ptr = edge as *const Edge as *const u8;
+        let edge_slice =
+            unsafe { std::slice::from_raw_parts(edge_ptr, std::mem::size_of::<Edge>()) };
+        self.writer.write_all(edge_slice).expect("write edge");
         self.unflushed_inserts += 1;
         if self.unflushed_inserts % 1024 == 0 {
             self.unflushed_inserts = 0;
@@ -195,7 +212,6 @@ impl EdgeProcDB {
             outgoing_i: 0,
             vertex_id: 0,
             max_page_id,
-            bc_config: self.bc_config,
         }
     }
 }
@@ -213,7 +229,6 @@ struct AdjacencySetIterator {
     outgoing_i: usize,
     vertex_id: u32,
     max_page_id: u32,
-    bc_config: bincode::config::Configuration<BigEndian, Fixint>,
 }
 
 impl Iterator for AdjacencySetIterator {
@@ -241,12 +256,7 @@ impl Iterator for AdjacencySetIterator {
                 break;
             }
 
-            let current_edge: Edge = bincode::decode_from_slice(
-                &self.outgoing_source[outgoing_offset..],
-                self.bc_config,
-            )
-            .unwrap()
-            .0;
+            let current_edge: Edge = Edge::from_bytes(&self.outgoing_source[outgoing_offset..]);
 
             if current_edge.source_vertex_id > self.vertex_id {
                 break;
@@ -268,12 +278,7 @@ impl Iterator for AdjacencySetIterator {
                 break;
             }
 
-            let current_edge: Edge = bincode::decode_from_slice(
-                &self.incoming_source[incoming_offset..],
-                self.bc_config,
-            )
-            .unwrap()
-            .0;
+            let current_edge: Edge = Edge::from_bytes(&self.incoming_source[incoming_offset..]);
 
             if current_edge.dest_vertex_id > self.vertex_id {
                 break;
@@ -477,7 +482,12 @@ impl GraphDBBuilder {
         let edge_iter = edge_db.iter(max_page_id);
 
         for adjacency_set in edge_iter {
-            // log::debug!("adjacencies for: {}", adjacency_set.source_vertex_id);
+            log::debug!(
+                "adjacencies for: {}\toutgoing: [{}] incoming: [{}]",
+                adjacency_set.vertex_id,
+                adjacency_set.adjacency_list.outgoing.iter().join(" "),
+                adjacency_set.adjacency_list.incoming.iter().join(" "),
+            );
             let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set);
             self.ix_file.write(&vertex_al_offset.to_le_bytes()).unwrap();
             if adjacency_set.vertex_id % 1000 == 0 {
@@ -532,7 +542,7 @@ impl GraphDBBuilder {
         db: DbConn,
         db_status: &mut DBStatus,
     ) -> EdgeProcDB {
-        let mut edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
+        let edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
 
         let mut pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
@@ -547,6 +557,9 @@ impl GraphDBBuilder {
             }
             None => log::debug!("current edge count not found - creating edge database"),
         }
+
+        log::debug!("truncating edge db due to wrong size");
+        let mut edge_db = edge_db.truncate();
 
         log::debug!("spawning pagelink source");
         let pagelink_thread = thread::spawn(move || pagelink_source.run());

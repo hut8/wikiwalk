@@ -15,11 +15,11 @@ impl EdgeDB {
 
     pub fn read_edges(&self, vertex_id: u32) -> AdjacencyList {
         let index_offset: usize = ((u64::BITS / 8) * vertex_id) as usize;
-        let offset: usize = usize::from_le_bytes(
+        let offset: usize = u64::from_le_bytes(
             self.vertex_al_ix[index_offset..index_offset + 8]
                 .try_into()
                 .unwrap(),
-        );
+        ) as usize;
         AdjacencyList::read(&self.vertex_al[offset..])
     }
 
