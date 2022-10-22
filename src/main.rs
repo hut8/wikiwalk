@@ -306,6 +306,9 @@ enum QueryAs {
 struct DBStatus {
     wp_page_hash: Option<Vec<u8>>,
     wp_pagelinks_hash: Option<Vec<u8>>,
+    edge_count: Option<usize>,
+    #[serde(skip)]
+    status_path: Option<PathBuf>,
 }
 
 impl DBStatus {
@@ -317,21 +320,29 @@ impl DBStatus {
         DBStatus {
             wp_page_hash,
             wp_pagelinks_hash,
+            edge_count: None,
+            status_path: None,
         }
     }
 
     pub fn load(status_path: PathBuf) -> DBStatus {
-        match File::open(status_path) {
-            Ok(file) => serde_json::from_reader(file).unwrap(),
+        match File::open(&status_path) {
+            Ok(file) => {
+              let mut val: DBStatus = serde_json::from_reader(file).unwrap();
+              val.status_path = Some(status_path);
+              val
+            },
             Err(_) => DBStatus {
                 wp_page_hash: None,
                 wp_pagelinks_hash: None,
+                edge_count: None,
+                status_path: Some(status_path),
             },
         }
     }
 
-    pub fn save(&self, status_path: PathBuf) {
-        let sink = File::create(status_path).unwrap();
+    pub fn save(&self) {
+        let sink = File::create(&self.status_path.as_ref().unwrap()).unwrap();
         serde_json::to_writer_pretty(&sink, self).unwrap();
     }
 
@@ -410,11 +421,11 @@ impl GraphDBBuilder {
             self.load_vertexes_dump(db.clone()).await;
             self.create_vertex_title_ix(&db).await;
             db_status.wp_page_hash = db_status_complete.wp_page_hash;
-            db_status.save(db_status_path.clone());
+            db_status.save();
         } else {
             log::info!(
                 "skipping page.sql load due to match on hash: {}",
-                hex::encode(&db_status.wp_page_hash.unwrap())
+                hex::encode(&db_status.wp_page_hash.as_ref().unwrap())
             );
         }
 
@@ -431,7 +442,10 @@ impl GraphDBBuilder {
 
         log::debug!("building edge map");
 
-        let mut edge_db = self.load_edges_dump(self.pagelinks_path.clone(), db).await;
+        let mut edge_db = self
+            .load_edges_dump(self.pagelinks_path.clone(), db, &mut db_status)
+            .await;
+
         log::debug!("writing sorted outgoing edges");
         edge_db.write_sorted_by(EdgeSort::Outgoing);
         log::debug!("writing sorted incoming edges");
@@ -488,13 +502,28 @@ impl GraphDBBuilder {
     }
 
     // load edges from the pagelinks.sql dump
-    async fn load_edges_dump(&self, path: PathBuf, db: DbConn) -> EdgeProcDB {
+    async fn load_edges_dump(
+        &self,
+        path: PathBuf,
+        db: DbConn,
+        db_status: &mut DBStatus,
+    ) -> EdgeProcDB {
         let mut edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
 
         let mut pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
 
-        pagelink_source.count_edge_inserts();
+        let edge_count = pagelink_source.count_edge_inserts();
+        match db_status.edge_count {
+            Some(current_edge_count) => {
+                if current_edge_count == edge_count {
+                    log::debug!("current edge count matches; returning");
+                    return edge_db;
+                }
+            }
+            None => log::debug!("current edge count not found - creating edge database")
+        }
+
         log::debug!("spawning pagelink source");
         thread::spawn(move || pagelink_source.run());
 
@@ -505,6 +534,10 @@ impl GraphDBBuilder {
 
         log::debug!("\nflushing edge database");
         edge_db.flush();
+
+        db_status.edge_count = Some(edge_count);
+        db_status.save();
+
         edge_db
     }
 

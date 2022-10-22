@@ -14,7 +14,7 @@ use crate::WPPageLink;
 pub struct WPPageLinkSource {
     sender: Sender<WPPageLink>,
     source_path: PathBuf,
-    insert_count: usize,
+    pub insert_count: usize,
 }
 
 impl WPPageLinkSource {
