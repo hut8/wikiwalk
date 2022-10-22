@@ -250,7 +250,7 @@ impl Iterator for AdjacencySetIterator {
 
         // put in all the outgoing edges
         loop {
-            let outgoing_offset: usize = self.outgoing_i * (u32::BITS as usize / 8) * 2;
+            let outgoing_offset: usize = self.outgoing_i * std::mem::size_of::<Edge>();
 
             if outgoing_offset >= self.outgoing_source.len() {
                 break;
@@ -272,7 +272,7 @@ impl Iterator for AdjacencySetIterator {
 
         // put in all the incoming edges
         loop {
-            let incoming_offset: usize = self.incoming_i * (u32::BITS as usize / 8) * 2;
+            let incoming_offset: usize = self.incoming_i * std::mem::size_of::<Edge>();
 
             if incoming_offset >= self.incoming_source.len() {
                 break;
@@ -914,7 +914,7 @@ async fn main() {
         .module(module_path!())
         .quiet(false)
         .verbosity(4)
-        //    .timestamp(ts)
+        .timestamp(stderrlog::Timestamp::Second)
         .init()
         .unwrap();
 
