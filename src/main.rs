@@ -164,16 +164,13 @@ impl EdgeProcDB {
         );
         let slice = &mut sink[..];
         let sink_byte_len = slice.len();
-        let edges = unsafe { ::std::mem::transmute::<&mut [u8], &mut [Edge]>(slice) };
+        let edges_ptr = slice.as_mut_ptr() as *mut Edge;
+        let edges_len = sink_byte_len / std::mem::size_of::<Edge>();
+        let edges = unsafe { std::slice::from_raw_parts_mut(edges_ptr, edges_len) };
         let sink_edge_len = edges.len();
         log::debug!("sink byte len={}", sink_byte_len);
         log::debug!("size of edge={}", std::mem::size_of::<Edge>());
-        log::debug!(
-            "predicted edge count={}",
-            sink_byte_len / std::mem::size_of::<Edge>()
-        );
         log::debug!("edge count={}", sink_edge_len);
-        assert!(sink_byte_len / std::mem::size_of::<Edge>() == sink_edge_len);
 
         edges.sort_unstable_by(|x, y| match sort_by {
             EdgeSort::Incoming => x.dest_vertex_id.cmp(&y.dest_vertex_id),
