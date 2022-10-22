@@ -670,7 +670,7 @@ impl GraphDBBuilder {
         for v in vertexes {
             let vertex_model = schema::vertex::ActiveModel {
                 title: Set(v.title),
-                ..Default::default()
+                id: Set(v.id),
             };
             schema::vertex::Entity::insert(vertex_model)
                 .exec(&txn)
@@ -953,8 +953,8 @@ async fn main() {
                 db,
             )
             .unwrap();
-            let source_title = source.replace(" ", "_").to_lowercase();
-            let dest_title = destination.replace(" ", "_").to_lowercase();
+            let source_title = source.replace("_", " ").to_lowercase();
+            let dest_title = destination.replace("_", " ").to_lowercase();
 
             log::info!("speedrun: [{}] → [{}]", source_title, dest_title);
 
