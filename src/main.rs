@@ -80,19 +80,22 @@ struct EdgeProcDB {
     root_path: PathBuf,
     writer: BufWriter<File>,
     bc_config: bincode::config::Configuration<BigEndian, Fixint>,
-    pub edges: Vec<Edge>,
     unflushed_inserts: usize,
 }
 
 impl EdgeProcDB {
     pub fn new(path: PathBuf) -> EdgeProcDB {
         std::fs::create_dir_all(&path).expect("create edge db directory");
-        let file = File::create(&path.join("edges")).expect("open edge proc db");
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&path.join("edges"))
+            .expect("open edge proc db file");
         EdgeProcDB {
             root_path: path,
             writer: BufWriter::new(file),
             bc_config: Self::bincode_config(),
-            edges: Vec::new(),
             unflushed_inserts: 0,
         }
     }
@@ -134,7 +137,7 @@ impl EdgeProcDB {
         unsafe { Mmap::map(&sink_file).expect("mmap edge sort file") }
     }
 
-    fn make_sort_file(&self, sort_by: &EdgeSort) -> MmapMut {
+    fn make_sort_file(&self, sort_by: &EdgeSort) -> (MmapMut, File) {
         let sink_basename = Self::sort_basename(&sort_by);
         let sink_path = &self.root_path.join(sink_basename);
         std::fs::copy(&self.root_path.join("edges"), sink_path).expect("copy file for sort");
@@ -145,23 +148,39 @@ impl EdgeProcDB {
             .create(true)
             .open(sink_path)
             .expect("open edge db sort file as sink");
-        unsafe { MmapMut::map_mut(&sink_file).expect("mmap edge sort file") }
+        let map = unsafe { MmapMut::map_mut(&sink_file).expect("mmap edge sort file") };
+        (map, sink_file)
     }
 
     pub fn write_sorted_by(&mut self, sort_by: EdgeSort) {
-        let mut sink = self.make_sort_file(&sort_by);
+        let (mut sink, sink_file) = self.make_sort_file(&sort_by);
 
-        log::debug!("sorting edge db");
+        log::debug!(
+            "sorting edge db for direction: {}",
+            match sort_by {
+                EdgeSort::Incoming => "incoming",
+                EdgeSort::Outgoing => "outgoing",
+            }
+        );
         let slice = &mut sink[..];
         let sink_byte_len = slice.len();
         let edges = unsafe { ::std::mem::transmute::<&mut [u8], &mut [Edge]>(slice) };
         let sink_edge_len = edges.len();
+        log::debug!("sink byte len={}", sink_byte_len);
+        log::debug!("size of edge={}", std::mem::size_of::<Edge>());
+        log::debug!(
+            "predicted edge count={}",
+            sink_byte_len / std::mem::size_of::<Edge>()
+        );
+        log::debug!("edge count={}", sink_edge_len);
         assert!(sink_byte_len / std::mem::size_of::<Edge>() == sink_edge_len);
 
-        self.edges.sort_unstable_by(|x, y| match sort_by {
+        edges.sort_unstable_by(|x, y| match sort_by {
             EdgeSort::Incoming => x.dest_vertex_id.cmp(&y.dest_vertex_id),
             EdgeSort::Outgoing => x.source_vertex_id.cmp(&y.source_vertex_id),
         });
+        sink.flush().expect("sink flush");
+        drop(sink_file);
     }
 
     pub fn flush(&mut self) {
@@ -328,10 +347,10 @@ impl DBStatus {
     pub fn load(status_path: PathBuf) -> DBStatus {
         match File::open(&status_path) {
             Ok(file) => {
-              let mut val: DBStatus = serde_json::from_reader(file).unwrap();
-              val.status_path = Some(status_path);
-              val
-            },
+                let mut val: DBStatus = serde_json::from_reader(file).unwrap();
+                val.status_path = Some(status_path);
+                val
+            }
             Err(_) => DBStatus {
                 wp_page_hash: None,
                 wp_pagelinks_hash: None,
@@ -473,11 +492,17 @@ impl GraphDBBuilder {
         log::info!("database build complete");
     }
 
-    async fn resolve_edges(rx: Receiver<WPPageLink>, edge_db: &mut EdgeProcDB, db: DbConn) {
+    async fn resolve_edges(
+        rx: Receiver<WPPageLink>,
+        edge_db: &mut EdgeProcDB,
+        db: DbConn,
+    ) -> (u32, u32) {
         // look up and write in chunks
+        let mut received_count = 0u32;
+        let mut hit_count = 0u32;
         for page_link_chunk in &rx.iter().chunks(32760) {
             let page_links: Vec<WPPageLink> = page_link_chunk.collect();
-
+            received_count += page_links.len() as u32;
             let mut title_map = HashMap::new();
             let titles = page_links.iter().map(|l| l.dest_page_title.clone());
             let vertexes = schema::vertex::Entity::find()
@@ -486,6 +511,7 @@ impl GraphDBBuilder {
                 .await
                 .expect("query vertexes by title");
             for v in vertexes {
+                hit_count += 1;
                 title_map.insert(v.title, v.id);
             }
 
@@ -499,6 +525,7 @@ impl GraphDBBuilder {
                 }
             }
         }
+        (received_count, hit_count)
     }
 
     // load edges from the pagelinks.sql dump
@@ -513,29 +540,37 @@ impl GraphDBBuilder {
 
         let mut pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
 
-        let edge_count = pagelink_source.count_edge_inserts();
+        let edge_insert_count = pagelink_source.count_edge_inserts();
         match db_status.edge_count {
             Some(current_edge_count) => {
-                if current_edge_count == edge_count {
+                if current_edge_count == edge_insert_count {
                     log::debug!("current edge count matches; returning");
                     return edge_db;
                 }
             }
-            None => log::debug!("current edge count not found - creating edge database")
+            None => log::debug!("current edge count not found - creating edge database"),
         }
 
         log::debug!("spawning pagelink source");
-        thread::spawn(move || pagelink_source.run());
+        let pagelink_thread = thread::spawn(move || pagelink_source.run());
 
         log::debug!("spawning edge resolver");
-        Self::resolve_edges(pagelink_rx, &mut edge_db, db).await;
+        let (resolved_total_count, resolved_hit_count) =
+            Self::resolve_edges(pagelink_rx, &mut edge_db, db).await;
+        log::debug!(
+            "edge resolver: received {} pagelinks and resolved {}",
+            resolved_total_count,
+            resolved_hit_count
+        );
 
-        log::debug!("edge resolver returned");
+        log::debug!("joining pagelink count thread");
+        let pagelink_count = pagelink_thread.join().unwrap();
+        log::debug!("pagelink count = {}", pagelink_count);
 
         log::debug!("\nflushing edge database");
         edge_db.flush();
 
-        db_status.edge_count = Some(edge_count);
+        db_status.edge_count = Some(edge_insert_count);
         db_status.save();
 
         edge_db
@@ -725,7 +760,7 @@ impl GraphDB {
     }
 
     pub async fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
-        let canon_title = title.to_lowercase();
+        let canon_title = title.to_lowercase().replace("_", " ");
         log::debug!("loading vertex: {}", canon_title);
         let vertex_model = schema::vertex::Entity::find()
             .filter(schema::vertex::Column::Title.eq(title))
