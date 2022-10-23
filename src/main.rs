@@ -157,7 +157,8 @@ impl EdgeProcDB {
 
     #[cfg(unix)]
     fn configure_mmap(mmap: &Mmap) {
-        mmap.advise(memmap2::Advice::Sequential).expect("set madvice sequential");
+        mmap.advise(memmap2::Advice::Sequential)
+            .expect("set madvice sequential");
     }
 
     #[cfg(windows)]
@@ -273,18 +274,23 @@ impl Iterator for AdjacencySetIterator {
                     [outgoing_offset..outgoing_offset + std::mem::size_of::<Edge>()],
             );
 
-            log::debug!("\toutgoing edge at offset {}: {:#?}", outgoing_offset, current_edge);
+            log::debug!(
+                "\toutgoing edge at offset {}: {:#?}",
+                outgoing_offset,
+                current_edge
+            );
 
             if current_edge.source_vertex_id > self.vertex_id {
                 break;
             }
             if current_edge.source_vertex_id < self.vertex_id {
-                self.outgoing_i += 1;
-                continue;
+                panic!("current edge source vertex id={} is before current vertex id={}; edge was missed",
+            current_edge.source_vertex_id, self.vertex_id);
             }
             val.adjacency_list
                 .outgoing
                 .push(current_edge.dest_vertex_id);
+            self.outgoing_i += 1;
         }
 
         // put in all the incoming edges
@@ -307,13 +313,14 @@ impl Iterator for AdjacencySetIterator {
 
             // necessary at the beginning before hitting first vertex
             if current_edge.dest_vertex_id < self.vertex_id {
-                self.incoming_i += 1;
-                continue;
+                panic!("current edge dest vertex id={} is before current vertex id={}; edge was missed",
+              current_edge.dest_vertex_id, self.vertex_id);
             }
 
             val.adjacency_list
                 .outgoing
                 .push(current_edge.source_vertex_id);
+            self.incoming_i += 1;
         }
 
         self.vertex_id += 1;
