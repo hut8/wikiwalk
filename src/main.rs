@@ -146,17 +146,19 @@ impl EdgeProcDB {
     fn open_sort_file(&self, sort_by: &EdgeSort) -> Mmap {
         let basename = Self::sort_basename(&sort_by);
         let path = &self.root_path.join(basename);
-        let sink_file = OpenOptions::new()
+        let source_file = OpenOptions::new()
             .read(true)
             .open(path)
             .expect("open edge db sort file as source");
-        let map = unsafe { Mmap::map(&sink_file).expect("mmap edge sort file") };
+        let map = unsafe { Mmap::map(&source_file).expect("mmap edge sort file") };
         Self::configure_mmap(&map);
         map
     }
 
     #[cfg(unix)]
-    fn configure_mmap(&mmap: &Mmap) {}
+    fn configure_mmap(mmap: &Mmap) {
+        mmap.advise(memmap2::Advice::Sequential).expect("set madvice sequential");
+    }
 
     #[cfg(windows)]
     /// configure_mmap is a nop in Windows
