@@ -120,8 +120,6 @@ impl EdgeProcDB {
         }
     }
 
-    // FIXME: may need to copy it directly from memory
-    // for endianness portability
     pub fn write_edge(&mut self, edge: &Edge) {
         let edge_ptr = edge as *const Edge as *const u8;
         let edge_slice =
@@ -251,12 +249,16 @@ impl Iterator for AdjacencySetIterator {
         // put in all the outgoing edges
         loop {
             let outgoing_offset: usize = self.outgoing_i * std::mem::size_of::<Edge>();
+            log::debug!("\toutgoing file offset: {}", outgoing_offset);
 
             if outgoing_offset >= self.outgoing_source.len() {
                 break;
             }
 
-            let current_edge: Edge = Edge::from_bytes(&self.outgoing_source[outgoing_offset..]);
+            let current_edge: Edge = Edge::from_bytes(
+                &self.outgoing_source
+                    [outgoing_offset..outgoing_offset + std::mem::size_of::<Edge>()],
+            );
 
             if current_edge.source_vertex_id > self.vertex_id {
                 break;
@@ -273,12 +275,16 @@ impl Iterator for AdjacencySetIterator {
         // put in all the incoming edges
         loop {
             let incoming_offset: usize = self.incoming_i * std::mem::size_of::<Edge>();
+            log::debug!("\tincoming file offset: {}", incoming_offset);
 
             if incoming_offset >= self.incoming_source.len() {
                 break;
             }
 
-            let current_edge: Edge = Edge::from_bytes(&self.incoming_source[incoming_offset..]);
+            let current_edge: Edge = Edge::from_bytes(
+                &self.incoming_source
+                    [incoming_offset..incoming_offset + std::mem::size_of::<Edge>()],
+            );
 
             if current_edge.dest_vertex_id > self.vertex_id {
                 break;
