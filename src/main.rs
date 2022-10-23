@@ -6,6 +6,7 @@ use itertools::Itertools;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::schemas::Page;
+use rayon::slice::ParallelSliceMut;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
@@ -149,8 +150,17 @@ impl EdgeProcDB {
             .read(true)
             .open(path)
             .expect("open edge db sort file as source");
-        unsafe { Mmap::map(&sink_file).expect("mmap edge sort file") }
+        let map = unsafe { Mmap::map(&sink_file).expect("mmap edge sort file") };
+        Self::configure_mmap(&map);
+        map
     }
+
+    #[cfg(unix)]
+    fn configure_mmap(&mmap: &Mmap) {}
+
+    #[cfg(windows)]
+    /// configure_mmap is a nop in Windows
+    fn configure_mmap(_mmap: &Mmap) {}
 
     fn make_sort_file(&self, sort_by: &EdgeSort) -> (MmapMut, File) {
         let sink_basename = Self::sort_basename(&sort_by);
@@ -187,7 +197,7 @@ impl EdgeProcDB {
         log::debug!("size of edge={}", std::mem::size_of::<Edge>());
         log::debug!("edge count={}", sink_edge_len);
 
-        edges.sort_unstable_by(|x, y| match sort_by {
+        edges.par_sort_unstable_by(|x, y| match sort_by {
             EdgeSort::Incoming => x.dest_vertex_id.cmp(&y.dest_vertex_id),
             EdgeSort::Outgoing => x.source_vertex_id.cmp(&y.source_vertex_id),
         });
@@ -240,6 +250,7 @@ impl Iterator for AdjacencySetIterator {
         if self.vertex_id > self.max_page_id {
             return None;
         }
+        log::debug!("creating adjacency set for vertex {}", self.vertex_id);
 
         let mut val = AdjacencySet {
             vertex_id: self.vertex_id,
@@ -259,6 +270,8 @@ impl Iterator for AdjacencySetIterator {
                 &self.outgoing_source
                     [outgoing_offset..outgoing_offset + std::mem::size_of::<Edge>()],
             );
+
+            log::debug!("\toutgoing edge at offset {}: {:#?}", outgoing_offset, current_edge);
 
             if current_edge.source_vertex_id > self.vertex_id {
                 break;
