@@ -456,6 +456,18 @@ impl GraphDBBuilder {
         let db_status_complete =
             DBStatus::compute(self.page_path.clone(), self.pagelinks_path.clone());
 
+        // adjust status if pagelinks hash is mismatched
+        let pagelink_data_changed = match db_status.wp_pagelinks_hash.as_ref() {
+            Some(hash) => hash != db_status_complete.wp_pagelinks_hash.as_ref().unwrap(),
+            None => true,
+        };
+        if pagelink_data_changed {
+            log::info!("wp_pagelinks_hash mismatch; will recompute all edge data");
+            db_status.build_complete = Some(false);
+            db_status.edges_resolved = Some(false);
+            db_status.edges_sorted = Some(false);
+        }
+
         let db_path = self.process_path.join("wikipedia-speedrun.db");
         let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
         log::debug!("using database: {}", conn_str);
@@ -475,6 +487,7 @@ impl GraphDBBuilder {
                 .unwrap(),
             None => true,
         };
+
         if need_vertexes {
             log::info!("loading page.sql");
             self.load_vertexes_dump(db.clone()).await;
@@ -506,17 +519,19 @@ impl GraphDBBuilder {
             .await;
 
         let needs_sort = match db_status.edges_sorted {
-          Some(sorted) => !sorted,
-          None => true
+            Some(sorted) => !sorted,
+            None => true,
         };
 
         if needs_sort {
             log::debug!("writing sorted outgoing edges");
             edge_db.write_sorted_by(EdgeSort::Outgoing);
             log::debug!("writing sorted incoming edges");
-             edge_db.write_sorted_by(EdgeSort::Incoming);
-             db_status.edges_sorted = Some(true);
-             db_status.save();
+            edge_db.write_sorted_by(EdgeSort::Incoming);
+            db_status.edges_sorted = Some(true);
+            db_status.save();
+        } else {
+            log::debug!("edges already sorted");
         }
 
         log::debug!(
@@ -551,6 +566,8 @@ impl GraphDBBuilder {
                 log::debug!("-> wrote {} entries", adjacency_set.vertex_id);
             }
         }
+        db_status.build_complete = Some(true);
+        db_status.save();
         log::info!("database build complete");
     }
 
