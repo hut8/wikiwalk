@@ -353,8 +353,6 @@ struct GraphDBBuilder {
     // outputs
     pub ix_path: PathBuf,
     pub al_path: PathBuf,
-    al_file: File,
-    ix_file: File,
 
     // process directory
     process_path: PathBuf,
@@ -372,7 +370,9 @@ enum QueryAs {
 struct DBStatus {
     wp_page_hash: Option<Vec<u8>>,
     wp_pagelinks_hash: Option<Vec<u8>>,
-    edge_count: Option<usize>,
+    edges_resolved: Option<bool>,
+    edges_sorted: Option<bool>,
+    build_complete: Option<bool>,
     #[serde(skip)]
     status_path: Option<PathBuf>,
 }
@@ -386,7 +386,9 @@ impl DBStatus {
         DBStatus {
             wp_page_hash,
             wp_pagelinks_hash,
-            edge_count: None,
+            edges_resolved: None,
+            edges_sorted: None,
+            build_complete: None,
             status_path: None,
         }
     }
@@ -401,7 +403,9 @@ impl DBStatus {
             Err(_) => DBStatus {
                 wp_page_hash: None,
                 wp_pagelinks_hash: None,
-                edge_count: None,
+                build_complete: None,
+                edges_resolved: None,
+                edges_sorted: None,
                 status_path: Some(status_path),
             },
         }
@@ -432,23 +436,12 @@ impl GraphDBBuilder {
         al_path: PathBuf,
         process_path: PathBuf,
     ) -> GraphDBBuilder {
-        let ix_file = match File::create(&ix_path) {
-            Err(why) => panic!("couldn't create {:?}: {}", &ix_path, why),
-            Ok(file) => file,
-        };
-        let al_file = match File::create(&al_path) {
-            Err(why) => panic!("couldn't create {:?}: {}", &al_path, why),
-            Ok(file) => file,
-        };
-
         let vertex_count = 6546390;
         GraphDBBuilder {
             page_path: page,
             pagelinks_path: pagelinks,
             ix_path,
             al_path,
-            al_file,
-            ix_file,
             process_path,
             vertex_count,
         }
@@ -512,10 +505,19 @@ impl GraphDBBuilder {
             .load_edges_dump(self.pagelinks_path.clone(), db, &mut db_status)
             .await;
 
-        log::debug!("writing sorted outgoing edges");
-        edge_db.write_sorted_by(EdgeSort::Outgoing);
-        log::debug!("writing sorted incoming edges");
-        edge_db.write_sorted_by(EdgeSort::Incoming);
+        let needs_sort = match db_status.edges_sorted {
+          Some(sorted) => !sorted,
+          None => true
+        };
+
+        if needs_sort {
+            log::debug!("writing sorted outgoing edges");
+            edge_db.write_sorted_by(EdgeSort::Outgoing);
+            log::debug!("writing sorted incoming edges");
+             edge_db.write_sorted_by(EdgeSort::Incoming);
+             db_status.edges_sorted = Some(true);
+             db_status.save();
+        }
 
         log::debug!(
             "building al [{}] and ix [{}] - {} vertexes",
@@ -525,6 +527,16 @@ impl GraphDBBuilder {
         );
 
         let edge_iter = edge_db.iter(max_page_id);
+        let ix_file = match File::create(&self.ix_path) {
+            Err(why) => panic!("couldn't create {:?}: {}", &self.ix_path, why),
+            Ok(file) => file,
+        };
+        let al_file = match File::create(&self.al_path) {
+            Err(why) => panic!("couldn't create {:?}: {}", &self.al_path, why),
+            Ok(file) => file,
+        };
+        let mut ix_writer = BufWriter::new(ix_file);
+        let mut al_writer = BufWriter::new(al_file);
 
         for adjacency_set in edge_iter {
             // log::debug!(
@@ -533,14 +545,12 @@ impl GraphDBBuilder {
             //     adjacency_set.adjacency_list.outgoing.iter().join(" "),
             //     adjacency_set.adjacency_list.incoming.iter().join(" "),
             // );
-            let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set);
-            self.ix_file.write(&vertex_al_offset.to_le_bytes()).unwrap();
+            let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set, &mut al_writer);
+            ix_writer.write(&vertex_al_offset.to_le_bytes()).unwrap();
             if adjacency_set.vertex_id % 1000 == 0 {
                 log::debug!("-> wrote {} entries", adjacency_set.vertex_id);
             }
         }
-        self.ix_file.flush().unwrap();
-        self.al_file.flush().unwrap();
         log::info!("database build complete");
     }
 
@@ -594,22 +604,22 @@ impl GraphDBBuilder {
         db_status: &mut DBStatus,
     ) -> EdgeProcDB {
         let edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
-        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
 
-        let mut pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
-
-        let edge_insert_count = pagelink_source.count_edge_inserts();
-        match db_status.edge_count {
-            Some(current_edge_count) => {
-                if current_edge_count == edge_insert_count {
-                    log::debug!("current edge count matches; returning");
+        match db_status.edges_resolved {
+            Some(resolved) => {
+                if resolved {
+                    log::debug!("edges already resolved; returning");
                     return edge_db;
                 }
             }
-            None => log::debug!("current edge count not found - creating edge database"),
+            None => (),
         }
 
-        log::debug!("truncating edge db due to wrong size");
+        log::debug!("loading edges dump");
+        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
+        let pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
+
+        log::debug!("truncating edge db due to mismatch");
         let mut edge_db = edge_db.truncate();
 
         log::debug!("spawning pagelink source");
@@ -631,7 +641,7 @@ impl GraphDBBuilder {
         log::debug!("\nflushing edge database");
         edge_db.flush();
 
-        db_status.edge_count = Some(edge_insert_count);
+        db_status.edges_resolved = Some(true);
         db_status.save();
 
         edge_db
@@ -757,37 +767,41 @@ impl GraphDBBuilder {
 
     /// Writes appropriate null-terminated list of 4-byte values to al_file
     /// Each 4-byte value is a LE representation
-    pub fn write_adjacency_set(&mut self, adjacency_set: &AdjacencySet) -> u64 {
+    pub fn write_adjacency_set(
+        &mut self,
+        adjacency_set: &AdjacencySet,
+        al_writer: &mut BufWriter<File>,
+    ) -> u64 {
         if adjacency_set.adjacency_list.is_empty() {
             // No outgoing edges or no such vertex
             return 0;
         }
 
         // Position at which we are writing the thing.
-        let al_position = self.al_file.stream_position().unwrap();
+        let al_position = al_writer.stream_position().unwrap();
         // log::debug!(
         //     "writing vertex {} list with {} edges {}",
         //     vertex_id,
         //     edge_ids.len(),
         //     al_position
         // );
-        self.al_file.write(&(0xCAFECAFE_u32).to_le_bytes()).unwrap();
+        al_writer.write(&(0xCAFECAFE_u32).to_le_bytes()).unwrap();
 
         // outgoing edges
         for neighbor in adjacency_set.adjacency_list.outgoing.iter() {
             let neighbor_bytes = neighbor.to_le_bytes();
-            self.al_file.write(&neighbor_bytes).unwrap();
+            al_writer.write(&neighbor_bytes).unwrap();
         }
         // Null terminator
-        self.al_file.write(&(0u32).to_le_bytes()).unwrap();
+        al_writer.write(&(0u32).to_le_bytes()).unwrap();
 
         // incoming edges
         for neighbor in adjacency_set.adjacency_list.incoming.iter() {
             let neighbor_bytes = neighbor.to_le_bytes();
-            self.al_file.write(&neighbor_bytes).unwrap();
+            al_writer.write(&neighbor_bytes).unwrap();
         }
         // Null terminator
-        self.al_file.write(&(0u32).to_le_bytes()).unwrap();
+        al_writer.write(&(0u32).to_le_bytes()).unwrap();
 
         al_position
     }

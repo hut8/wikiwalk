@@ -18,7 +18,6 @@ use crate::WPPageLink;
 pub struct WPPageLinkSource {
     sender: Sender<WPPageLink>,
     source_path: PathBuf,
-    pub insert_count: usize,
     pub edge_count: Arc<AtomicU32>,
 }
 
@@ -27,14 +26,14 @@ impl WPPageLinkSource {
         WPPageLinkSource {
             source_path,
             sender,
-            insert_count: 0,
             edge_count: Arc::new(AtomicU32::default()),
         }
     }
 
     pub fn run(self) -> u32 {
+        let insert_count = self.count_edge_inserts();
         let draw_target = ProgressDrawTarget::stderr_with_hz(0.1);
-        let progress = indicatif::ProgressBar::new(self.insert_count as u64);
+        let progress = indicatif::ProgressBar::new(insert_count as u64);
         progress.set_style(
               ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
           );
@@ -59,22 +58,18 @@ impl WPPageLinkSource {
         self.edge_count.load(Ordering::Relaxed)
     }
 
-    pub fn count_edge_inserts(&mut self) -> usize {
-        if self.insert_count != 0 {
-            return self.insert_count;
-        }
+    pub fn count_edge_inserts(&self) -> usize {
         log::debug!("counting inserts in pagelinks sql");
         let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
         let pagelinks_sql = BufReader::new(pagelinks_sql_file);
         // 56034
-        self.insert_count = pagelinks_sql
+        pagelinks_sql
             .lines()
             .filter(|line_res| {
                 let line = line_res.as_ref().expect("read line");
                 return line.starts_with("INSERT ");
             })
-            .count();
-        self.insert_count
+            .count()
     }
 
     fn load_edges_dump_chunk(
