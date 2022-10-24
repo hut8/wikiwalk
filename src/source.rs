@@ -94,7 +94,7 @@ impl WPPageLinkSource {
                 if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
                     Some(WPPageLink {
                         source_page_id: from.0,
-                        dest_page_title: title.0.to_lowercase().replace("_", " "),
+                        dest_page_title: title.0.replace("_", " "),
                     })
                 } else {
                     None

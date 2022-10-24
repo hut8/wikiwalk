@@ -630,7 +630,7 @@ impl GraphDBBuilder {
                     // to the page ID of the destination of the redirect
                     match redirects.get(v.id) {
                         Some(dest) => {
-                          title_map.insert(v.title, dest);
+                            title_map.insert(v.title, dest);
                         }
                         None => {
                             log::debug!("tried to resolve redirect for page: [{}: {}] but no entry was in redirects",
@@ -784,7 +784,7 @@ impl GraphDBBuilder {
                 if namespace == PageNamespace(0) {
                     Some(Vertex {
                         id: id.0,
-                        title: title.0.to_lowercase().replace("_", " "),
+                        title: title.0.replace("_", " "),
                         is_redirect,
                     })
                 } else {
@@ -901,7 +901,7 @@ impl GraphDB {
     }
 
     pub async fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
-        let canon_title = title.to_lowercase().replace("_", " ");
+        let canon_title = title.replace("_", " ");
         log::debug!("loading vertex: {}", canon_title);
         let vertex_model = schema::vertex::Entity::find()
             .filter(schema::vertex::Column::Title.eq(title))
@@ -1099,8 +1099,8 @@ async fn main() {
                 db,
             )
             .unwrap();
-            let source_title = source.replace("_", " ").to_lowercase();
-            let dest_title = destination.replace("_", " ").to_lowercase();
+            let source_title = source.replace("_", " ");
+            let dest_title = destination.replace("_", " ");
 
             log::info!("speedrun: [{}] → [{}]", source_title, dest_title);
 

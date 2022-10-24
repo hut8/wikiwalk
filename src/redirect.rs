@@ -35,7 +35,7 @@ impl RedirectMap {
                  ..
              }| {
                 if namespace == PageNamespace(0) {
-                    let title = title.0.to_lowercase().replace("_", " ");
+                    let title = title.0.replace("_", " ");
                     let from = from.0;
                     Some((from, title))
                 } else {
