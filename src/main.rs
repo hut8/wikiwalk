@@ -76,6 +76,7 @@ pub struct Link<'a> {
 }
 
 /// Intermediate type of only fields necessary to create an Edge
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct WPPageLink {
     pub source_page_id: u32,
     pub dest_page_title: String,
@@ -251,6 +252,7 @@ impl Iterator for AdjacencySetIterator {
     fn next(&mut self) -> Option<Self::Item> {
         // are we done yet?
         if self.vertex_id > self.max_page_id {
+          log::debug!("adjacency set iter: done after {} iterations", self.max_page_id);
             return None;
         }
         log::debug!("creating adjacency set for vertex {}", self.vertex_id);
@@ -263,7 +265,7 @@ impl Iterator for AdjacencySetIterator {
         // put in all the outgoing edges
         loop {
             let outgoing_offset: usize = self.outgoing_i * std::mem::size_of::<Edge>();
-            log::debug!("\toutgoing file offset: {}", outgoing_offset);
+            // log::debug!("\toutgoing file offset: {}", outgoing_offset);
 
             if outgoing_offset >= self.outgoing_source.len() {
                 break;
@@ -274,11 +276,11 @@ impl Iterator for AdjacencySetIterator {
                     [outgoing_offset..outgoing_offset + std::mem::size_of::<Edge>()],
             );
 
-            log::debug!(
-                "\toutgoing edge at offset {}: {:#?}",
-                outgoing_offset,
-                current_edge
-            );
+            // log::debug!(
+            //     "\toutgoing edge at offset {}: {:#?}",
+            //     outgoing_offset,
+            //     current_edge
+            // );
 
             if current_edge.source_vertex_id > self.vertex_id {
                 break;
@@ -296,7 +298,7 @@ impl Iterator for AdjacencySetIterator {
         // put in all the incoming edges
         loop {
             let incoming_offset: usize = self.incoming_i * std::mem::size_of::<Edge>();
-            log::debug!("\tincoming file offset: {}", incoming_offset);
+            // log::debug!("\tincoming file offset: {}", incoming_offset);
 
             if incoming_offset >= self.incoming_source.len() {
                 break;
@@ -311,7 +313,6 @@ impl Iterator for AdjacencySetIterator {
                 break;
             }
 
-            // necessary at the beginning before hitting first vertex
             if current_edge.dest_vertex_id < self.vertex_id {
                 panic!("current edge dest vertex id={} is before current vertex id={}; edge was missed",
               current_edge.dest_vertex_id, self.vertex_id);
@@ -510,12 +511,12 @@ impl GraphDBBuilder {
         let edge_iter = edge_db.iter(max_page_id);
 
         for adjacency_set in edge_iter {
-            log::debug!(
-                "adjacencies for: {}\toutgoing: [{}] incoming: [{}]",
-                adjacency_set.vertex_id,
-                adjacency_set.adjacency_list.outgoing.iter().join(" "),
-                adjacency_set.adjacency_list.incoming.iter().join(" "),
-            );
+            // log::debug!(
+            //     "adjacencies for: {}\toutgoing: [{}] incoming: [{}]",
+            //     adjacency_set.vertex_id,
+            //     adjacency_set.adjacency_list.outgoing.iter().join(" "),
+            //     adjacency_set.adjacency_list.incoming.iter().join(" "),
+            // );
             let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set);
             self.ix_file.write(&vertex_al_offset.to_le_bytes()).unwrap();
             if adjacency_set.vertex_id % 1000 == 0 {
@@ -539,7 +540,7 @@ impl GraphDBBuilder {
             let page_links: Vec<WPPageLink> = page_link_chunk.collect();
             received_count += page_links.len() as u32;
             let mut title_map = HashMap::new();
-            let titles = page_links.iter().map(|l| l.dest_page_title.clone());
+            let titles = page_links.iter().map(|l| l.dest_page_title.clone()).into_iter().unique();
             let vertexes = schema::vertex::Entity::find()
                 .filter(schema::vertex::Column::Title.is_in(titles))
                 .all(&db)
