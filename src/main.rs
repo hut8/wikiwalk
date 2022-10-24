@@ -624,18 +624,20 @@ impl GraphDBBuilder {
             for v in vertexes {
                 hit_count += 1;
                 if v.is_redirect {
-                  match redirects.get(v.id) {
-                    Some(dest) => {
-
+                    // in this case, "v" is a redirect. The destination of the redirect
+                    // is in the redirects table, which is loaded into the RedirectMap.
+                    // this will make it appear that our current vertex (by title) maps
+                    // to the page ID of the destination of the redirect
+                    match redirects.get(v.id) {
+                        Some(dest) => {
+                          title_map.insert(v.title, dest);
+                        }
+                        None => {
+                            log::debug!("tried to resolve redirect for page: [{}: {}] but no entry was in redirects",
+                    v.id, v.title);
+                        }
                     }
-                    None => {
-                      log::debug!("tried to resolve redirect for page: [{}] but no entry was in redirects");
-                    }
-                  }
-                  // in this case, "v" is a redirect. The destination of the redirect
-                  // is in the redirects table, which is loaded into the RedirectMap.
-                  //
-                  continue;
+                    continue;
                 }
                 title_map.insert(v.title, v.id);
             }
