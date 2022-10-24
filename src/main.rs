@@ -76,7 +76,7 @@ pub struct Link<'a> {
 }
 
 /// Intermediate type of only fields necessary to create an Edge
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct WPPageLink {
     pub source_page_id: u32,
     pub dest_page_title: String,
@@ -578,6 +578,8 @@ impl GraphDBBuilder {
                         dest_vertex_id: *dest,
                     };
                     edge_db.write_edge(&edge);
+                } else {
+                    log::debug!("link not found: {:?}", link);
                 }
             }
         }
