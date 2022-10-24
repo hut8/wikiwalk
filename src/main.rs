@@ -29,6 +29,7 @@ use std::time::Instant;
 
 mod dump;
 mod edge_db;
+mod redirect;
 mod schema;
 mod source;
 #[derive(Clone, Debug)]
@@ -370,6 +371,8 @@ struct GraphDBBuilder {
     // inputs
     pub page_path: PathBuf,
     pub pagelinks_path: PathBuf,
+    pub redirects_path: PathBuf,
+
     // outputs
     pub ix_path: PathBuf,
     pub al_path: PathBuf,
@@ -452,6 +455,7 @@ impl GraphDBBuilder {
     pub fn new(
         page: PathBuf,
         pagelinks: PathBuf,
+        redirects_path: PathBuf,
         ix_path: PathBuf,
         al_path: PathBuf,
         process_path: PathBuf,
@@ -464,6 +468,7 @@ impl GraphDBBuilder {
             al_path,
             process_path,
             vertex_count,
+            redirects_path,
         }
     }
 
@@ -651,6 +656,9 @@ impl GraphDBBuilder {
             }
             None => (),
         }
+
+        let mut redirects = redirect::RedirectMap::new(self.redirects_path.clone());
+        redirects.parse();
 
         log::debug!("loading edges dump");
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
@@ -1000,6 +1008,9 @@ enum Command {
         /// Path to pagelinks.sql
         #[clap(long)]
         pagelinks: PathBuf,
+        /// Path to redirects.sql
+        #[clap(long)]
+        redirects: PathBuf,
     },
     /// Find the shortest path
     Run {
@@ -1033,10 +1044,20 @@ async fn main() {
 
     // directory used for processing import
     match cli.command {
-        Command::Build { page, pagelinks } => {
+        Command::Build {
+            page,
+            pagelinks,
+            redirects,
+        } => {
             log::info!("building database");
-            let mut gddb =
-                GraphDBBuilder::new(page, pagelinks, vertex_ix_path, vertex_al_path, data_dir);
+            let mut gddb = GraphDBBuilder::new(
+                page,
+                pagelinks,
+                redirects,
+                vertex_ix_path,
+                vertex_al_path,
+                data_dir,
+            );
             gddb.build_database().await;
         }
         Command::Run {

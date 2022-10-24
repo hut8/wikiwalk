@@ -32,6 +32,7 @@ impl WPPageLinkSource {
 
     pub fn run(self) -> u32 {
         let insert_count = self.count_edge_inserts();
+        log::debug!("insert count: {}", insert_count);
         let draw_target = ProgressDrawTarget::stderr_with_hz(0.1);
         let progress = indicatif::ProgressBar::new(insert_count as u64);
         progress.set_style(
