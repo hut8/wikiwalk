@@ -258,7 +258,6 @@ impl Iterator for AdjacencySetIterator {
             );
             return None;
         }
-        log::debug!("creating adjacency set for vertex {}", self.vertex_id);
 
         let mut val = AdjacencySet {
             vertex_id: self.vertex_id,
