@@ -92,6 +92,7 @@ struct EdgeProcDB {
     /// directory containing raw edge list and both sorted files
     root_path: PathBuf,
     writer: BufWriter<File>,
+    fail_writer: BufWriter<File>,
     unflushed_inserts: usize,
 }
 
@@ -104,10 +105,17 @@ impl EdgeProcDB {
             .create(true)
             .open(&path.join("edges"))
             .expect("open edge proc db file");
+        let fail_log = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&path.join("edges_fail.csv"))
+            .expect("open edge proc db fail file");
         EdgeProcDB {
             root_path: path,
             writer: BufWriter::new(file),
             unflushed_inserts: 0,
+            fail_writer: BufWriter::new(fail_log),
         }
     }
 
@@ -115,10 +123,15 @@ impl EdgeProcDB {
         let mut file = self.writer.into_inner().unwrap();
         file.set_len(0).unwrap();
         file.seek(SeekFrom::Start(0)).unwrap();
+        let mut fail_file = self.fail_writer.into_inner().unwrap();
+        fail_file.set_len(0).unwrap();
+        fail_file.seek(SeekFrom::Start(0)).unwrap();
+
         EdgeProcDB {
             root_path: self.root_path.clone(),
             writer: BufWriter::new(file),
             unflushed_inserts: 0,
+            fail_writer: BufWriter::new(fail_file),
         }
     }
 
@@ -132,6 +145,13 @@ impl EdgeProcDB {
             self.unflushed_inserts = 0;
             self.writer.flush().expect("flush edge proc db");
         }
+    }
+
+    pub fn write_fail(&mut self, source_vertex_id: u32, dest_page_title: String) {
+        let line = format!("{},{}\n", source_vertex_id, dest_page_title);
+        self.fail_writer
+            .write_all(line.as_bytes())
+            .expect("write edge fail");
     }
 
     fn sort_basename(sort_by: &EdgeSort) -> String {
@@ -606,7 +626,7 @@ impl GraphDBBuilder {
                     };
                     edge_db.write_edge(&edge);
                 } else {
-                    log::debug!("link not found: {:?}", link);
+                    edge_db.write_fail(link.source_page_id, link.dest_page_title);
                 }
             }
         }
