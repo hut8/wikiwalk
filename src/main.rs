@@ -252,7 +252,10 @@ impl Iterator for AdjacencySetIterator {
     fn next(&mut self) -> Option<Self::Item> {
         // are we done yet?
         if self.vertex_id > self.max_page_id {
-          log::debug!("adjacency set iter: done after {} iterations", self.max_page_id);
+            log::debug!(
+                "adjacency set iter: done after {} iterations",
+                self.max_page_id
+            );
             return None;
         }
         log::debug!("creating adjacency set for vertex {}", self.vertex_id);
@@ -289,6 +292,13 @@ impl Iterator for AdjacencySetIterator {
                 panic!("current edge source vertex id={} is before current vertex id={}; edge was missed",
             current_edge.source_vertex_id, self.vertex_id);
             }
+
+            if current_edge.dest_vertex_id > self.max_page_id {
+                panic!(
+                    "destination vertex id for edge: {:#?} is greater than max page id {}",
+                    current_edge, self.max_page_id
+                );
+            }
             val.adjacency_list
                 .outgoing
                 .push(current_edge.dest_vertex_id);
@@ -316,6 +326,13 @@ impl Iterator for AdjacencySetIterator {
             if current_edge.dest_vertex_id < self.vertex_id {
                 panic!("current edge dest vertex id={} is before current vertex id={}; edge was missed",
               current_edge.dest_vertex_id, self.vertex_id);
+            }
+
+            if current_edge.source_vertex_id > self.max_page_id {
+                panic!(
+                    "source vertex id for edge: {:#?} is greater than max page id {}",
+                    current_edge, self.max_page_id
+                );
             }
 
             val.adjacency_list
@@ -540,7 +557,11 @@ impl GraphDBBuilder {
             let page_links: Vec<WPPageLink> = page_link_chunk.collect();
             received_count += page_links.len() as u32;
             let mut title_map = HashMap::new();
-            let titles = page_links.iter().map(|l| l.dest_page_title.clone()).into_iter().unique();
+            let titles = page_links
+                .iter()
+                .map(|l| l.dest_page_title.clone())
+                .into_iter()
+                .unique();
             let vertexes = schema::vertex::Entity::find()
                 .filter(schema::vertex::Column::Title.is_in(titles))
                 .all(&db)
