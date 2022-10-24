@@ -48,7 +48,6 @@ impl RedirectMap {
         for chunk in redirect_iter.chunks(32760).into_iter() {
             let chunk_lookup: HashMap<String, u32> = HashMap::new();
             let chunk_vec: Vec<(u32, String)> = chunk.into_iter().collect();
-            log::debug!("got redirect chunk: {} redirects", chunk_vec.len());
             let titles = chunk_vec.iter().map(|f| f.1.clone()).unique();
             let vertexes = schema::vertex::Entity::find()
                 .filter(schema::vertex::Column::Title.is_in(titles))
@@ -56,9 +55,6 @@ impl RedirectMap {
                 .await
                 .expect("query vertexes by title");
             let chunk_lookup = vertexes.into_iter().fold(chunk_lookup, |mut accum, elm| {
-                if !elm.is_redirect {
-                    log::warn!("queried for page: [{}] which was not a redirect", elm.title);
-                }
                 accum.insert(elm.title, elm.id);
                 accum
             });
