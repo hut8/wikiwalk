@@ -7,6 +7,7 @@ use memmap2::{Mmap, MmapMut, MmapOptions};
 use memory_stats::memory_stats;
 use parse_mediawiki_sql::schemas::Page;
 use rayon::slice::ParallelSliceMut;
+use redirect::RedirectMap;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
@@ -36,6 +37,7 @@ mod source;
 pub struct Vertex {
     pub id: u32,
     pub title: String,
+    pub is_redirect: bool,
 }
 
 impl Hash for Vertex {
@@ -600,6 +602,7 @@ impl GraphDBBuilder {
         rx: Receiver<WPPageLink>,
         edge_db: &mut EdgeProcDB,
         db: DbConn,
+        redirects: &mut RedirectMap,
     ) -> (u32, u32) {
         // look up and write in chunks
         let mut received_count = 0u32;
@@ -620,6 +623,20 @@ impl GraphDBBuilder {
                 .expect("query vertexes by title");
             for v in vertexes {
                 hit_count += 1;
+                if v.is_redirect {
+                  match redirects.get(v.id) {
+                    Some(dest) => {
+
+                    }
+                    None => {
+                      log::debug!("tried to resolve redirect for page: [{}] but no entry was in redirects");
+                    }
+                  }
+                  // in this case, "v" is a redirect. The destination of the redirect
+                  // is in the redirects table, which is loaded into the RedirectMap.
+                  //
+                  continue;
+                }
                 title_map.insert(v.title, v.id);
             }
 
@@ -658,13 +675,13 @@ impl GraphDBBuilder {
         }
 
         let mut redirects = redirect::RedirectMap::new(self.redirects_path.clone());
-        redirects.parse();
+        redirects.parse(db.clone()).await;
 
         log::debug!("loading edges dump");
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
         let pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
 
-        log::debug!("truncating edge db due to mismatch");
+        log::debug!("truncating edge db");
         let mut edge_db = edge_db.truncate();
 
         log::debug!("spawning pagelink source");
@@ -672,7 +689,7 @@ impl GraphDBBuilder {
 
         log::debug!("spawning edge resolver");
         let (resolved_total_count, resolved_hit_count) =
-            Self::resolve_edges(pagelink_rx, &mut edge_db, db).await;
+            Self::resolve_edges(pagelink_rx, &mut edge_db, db, &mut redirects).await;
         log::debug!(
             "edge resolver: received {} pagelinks and resolved {}",
             resolved_total_count,
@@ -762,10 +779,11 @@ impl GraphDBBuilder {
                  title,
                  ..
              }| {
-                if namespace == PageNamespace(0) && !is_redirect {
+                if namespace == PageNamespace(0) {
                     Some(Vertex {
                         id: id.0,
                         title: title.0.to_lowercase().replace("_", " "),
+                        is_redirect,
                     })
                 } else {
                     None
@@ -777,6 +795,7 @@ impl GraphDBBuilder {
             let vertex_model = schema::vertex::ActiveModel {
                 title: Set(v.title),
                 id: Set(v.id),
+                is_redirect: Set(v.is_redirect),
             };
             schema::vertex::Entity::insert(vertex_model)
                 .exec(&txn)
@@ -891,6 +910,7 @@ impl GraphDB {
             Some(v) => Some(Vertex {
                 id: v.id,
                 title: v.title,
+                is_redirect: v.is_redirect,
             }),
             None => None,
         }
@@ -906,6 +926,7 @@ impl GraphDB {
             Some(v) => Some(Vertex {
                 id: v.id,
                 title: v.title,
+                is_redirect: v.is_redirect,
             }),
             None => None,
         }
