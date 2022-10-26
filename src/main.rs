@@ -288,6 +288,7 @@ impl Iterator for AdjacencySetIterator {
         };
 
         // put in all the outgoing edges
+        // outgoing source is sorted by source vertex id
         loop {
             let outgoing_offset: usize = self.outgoing_i * std::mem::size_of::<Edge>();
             // log::debug!("\toutgoing file offset: {}", outgoing_offset);
@@ -328,6 +329,7 @@ impl Iterator for AdjacencySetIterator {
         }
 
         // put in all the incoming edges
+        // incoming source is sorted by destination vertex id
         loop {
             let incoming_offset: usize = self.incoming_i * std::mem::size_of::<Edge>();
             // log::debug!("\tincoming file offset: {}", incoming_offset);
@@ -358,7 +360,7 @@ impl Iterator for AdjacencySetIterator {
             }
 
             val.adjacency_list
-                .outgoing
+                .incoming
                 .push(current_edge.source_vertex_id);
             self.incoming_i += 1;
         }
