@@ -91,6 +91,10 @@ pub fn breadth_first_search(
     let mut unvisited_forward = NeighborList::new();
     let mut unvisited_backward = NeighborList::new();
 
+    // 0 is a magic value meaning "no parent"
+    unvisited_forward.record(source_vertex_id, 0);
+    unvisited_backward.record(dest_vertex_id, 0);
+
     // The visited dictionaries are a mapping from page ID to a list of that page's parents' IDs.
     let mut visited_forward = NeighborList::new();
     let mut visited_backward = NeighborList::new();
