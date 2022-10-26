@@ -16,10 +16,9 @@ use sea_orm::{
     TransactionTrait,
 };
 use sha3::{Digest, Sha3_256};
-use spinners::{Spinner, Spinners};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{prelude::*, BufWriter};
@@ -28,6 +27,7 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Instant;
 
+mod bfs;
 mod dump;
 mod edge_db;
 mod redirect;
@@ -876,9 +876,6 @@ impl GraphDBBuilder {
 pub struct GraphDB {
     pub db: DbConn,
     pub edge_db: edge_db::EdgeDB,
-    pub visited_ids: HashSet<u32>,
-    pub parents: HashMap<u32, u32>,
-    pub q: VecDeque<u32>,
 }
 
 impl GraphDB {
@@ -887,17 +884,8 @@ impl GraphDB {
         let file_al = File::open(path_al)?;
         let mmap_ix = unsafe { MmapOptions::new().map(&file_ix)? };
         let mmap_al = unsafe { MmapOptions::new().map(&file_al)? };
-        let visited_ids = HashSet::new();
-        let parents = HashMap::new();
-        let q: VecDeque<u32> = VecDeque::new();
         let edge_db = edge_db::EdgeDB::new(mmap_al, mmap_ix);
-        Ok(GraphDB {
-            edge_db,
-            db,
-            visited_ids,
-            parents,
-            q,
-        })
+        Ok(GraphDB { edge_db, db })
     }
 
     pub async fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
@@ -934,69 +922,13 @@ impl GraphDB {
         }
     }
 
-    fn build_path(&self, source: u32, dest: u32) -> Vec<u32> {
-        let mut path: Vec<u32> = Vec::new();
-        let mut current = dest;
-        loop {
-            path.push(current);
-            if current == source {
-                break;
-            }
-            current = *self
-                .parents
-                .get(&current)
-                .expect(&format!("parent not recorded for {:#?}", current));
-        }
-        path.reverse();
-        path
-    }
-
-    pub fn bfs(&mut self, src: u32, dest: u32) -> Option<Vec<u32>> {
-        self.edge_db.check_db();
-        let mut sp = Spinner::new(Spinners::Dots9, "Computing path".into());
-
+    pub fn bfs(&mut self, src: u32, dest: u32) -> Vec<Vec<u32>> {
+        // self.edge_db.check_db();
         let start_time = Instant::now();
-        self.q.push_back(src);
-        loop {
-            match self.q.pop_front() {
-                Some(current) => {
-                    if current == dest {
-                        sp.stop_with_message(format!(
-                            "Computed path - visited {} pages",
-                            self.visited_ids.len()
-                        ));
-                        let path = self.build_path(src, dest);
-                        let elapsed = start_time.elapsed();
-                        println!("\nelapsed time: {} seconds", elapsed.as_secs());
-                        return Some(path);
-                    }
-                    let neighbors = self.load_neighbors(current);
-                    let next_neighbors: Vec<u32> = neighbors
-                        .into_iter()
-                        .filter(|x| !self.visited_ids.contains(x))
-                        .collect();
-                    for &n in next_neighbors.iter() {
-                        self.parents.insert(n, current);
-                        self.visited_ids.insert(n);
-                        self.q.push_back(n);
-                    }
-                }
-                None => {
-                    sp.stop();
-                    let elapsed = start_time.elapsed();
-                    println!("\nelapsed time: {} seconds", elapsed.as_secs());
-                    return None;
-                }
-            }
-        }
-    }
-
-    pub fn load_neighbors(&self, vertex_id: u32) -> Vec<u32> {
-        // println!(
-        //     "load_neighbors for {}",
-        //     vertex_id
-        // );
-        self.edge_db.read_edges(vertex_id).outgoing
+        let paths = bfs::breadth_first_search(src, dest, &self.edge_db);
+        let elapsed = start_time.elapsed();
+        println!("\nelapsed time: {} seconds", elapsed.as_secs());
+        paths
     }
 }
 
@@ -1115,20 +1047,20 @@ async fn main() {
 
             log::info!("speedrun: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
 
-            match gdb.bfs(source_vertex.id as u32, dest_vertex.id as u32) {
-                Some(path) => {
-                    let vertex_path = path.into_iter().map(|vid| gdb.find_vertex_by_id(vid));
-                    let vertex_path = futures::future::join_all(vertex_path)
-                        .await
-                        .into_iter()
-                        .map(|v| v.expect("vertex not found"))
-                        .collect();
-                    let formatted_path = format_path(vertex_path);
-                    println!("\n{}", formatted_path);
-                }
-                None => {
-                    println!("\nno path found");
-                }
+            let paths = gdb.bfs(source_vertex.id, dest_vertex.id);
+            if paths.is_empty() {
+                println!("\nno path found");
+                return;
+            }
+            for path in paths {
+                let vertex_path = path.into_iter().map(|vid| gdb.find_vertex_by_id(vid));
+                let vertex_path = futures::future::join_all(vertex_path)
+                    .await
+                    .into_iter()
+                    .map(|v| v.expect("vertex not found"))
+                    .collect();
+                let formatted_path = format_path(vertex_path);
+                println!("\n{}", formatted_path);
             }
         }
     }
