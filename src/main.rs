@@ -557,6 +557,7 @@ impl GraphDBBuilder {
             edge_db.write_sorted_by(EdgeSort::Outgoing);
             log::debug!("writing sorted incoming edges");
             edge_db.write_sorted_by(EdgeSort::Incoming);
+            db_status.wp_pagelinks_hash = db_status_complete.wp_pagelinks_hash;
             db_status.edges_sorted = Some(true);
             db_status.save();
         } else {
