@@ -857,7 +857,6 @@ impl GraphDB {
     }
 
     pub async fn find_vertex_by_id(&self, id: u32) -> Option<Vertex> {
-        log::debug!("loading vertex: id={}", id);
         let vertex_model = schema::vertex::Entity::find_by_id(id)
             .one(&self.db)
             .await
@@ -951,6 +950,9 @@ async fn main() {
     std::fs::create_dir_all(&data_dir).unwrap();
     let vertex_al_path = data_dir.join("vertex_al");
     let vertex_ix_path = data_dir.join("vertex_al_ix");
+    let db_path = data_dir.join("wikipedia-speedrun.db");
+    let conn_str = format!("sqlite:///{}?mode=ro", db_path.to_string_lossy());
+    log::debug!("using database: {}", conn_str);
 
     // directory used for processing import
     match cli.command {
@@ -974,9 +976,6 @@ async fn main() {
             source,
             destination,
         } => {
-            let db_path = data_dir.join("wikipedia-speedrun.db");
-            let conn_str = format!("sqlite:///{}?mode=ro", db_path.to_string_lossy());
-            log::debug!("using database: {}", conn_str);
             let db: DbConn = Database::connect(conn_str).await.expect("db connect");
 
             log::info!("computing path");
@@ -1019,7 +1018,38 @@ async fn main() {
             }
         }
         Command::Query { target } => {
-            log::info!("querying target: {}", target)
+            let target = target.replace("_", " ");
+            log::info!("querying target: {}", target);
+            let db: DbConn = Database::connect(conn_str).await.expect("db connect");
+            let mut gdb = GraphDB::new(
+                vertex_ix_path.to_str().unwrap(),
+                vertex_al_path.to_str().unwrap(),
+                db,
+            )
+            .unwrap();
+            let vertex = gdb
+                .find_vertex_by_title(target)
+                .await
+                .expect("find vertex by title");
+            log::info!("vertex:\n{:#?}", vertex);
+            let al = gdb.edge_db.read_edges(vertex.id);
+            log::info!("\n{:#?}", al);
+            log::info!("incoming edges:");
+            for vid in al.incoming.iter() {
+                let v = gdb.find_vertex_by_id(*vid).await;
+                match v {
+                    Some(v) => println!("\t{:09}\t{}", v.id, v.title),
+                    None => log::error!("vertex id {} not found!", vid),
+                }
+            }
+            log::info!("outgoing edges:");
+            for vid in al.outgoing.iter() {
+                let v = gdb.find_vertex_by_id(*vid).await;
+                match v {
+                    Some(v) => println!("\t{:09}\t{}", v.id, v.title),
+                    None => log::error!("vertex id {} not found!", vid),
+                }
+            }
         }
     }
 }
