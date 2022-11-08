@@ -1,11 +1,9 @@
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
 use dirs;
-use indicatif::{ProgressDrawTarget, ProgressStyle};
 use itertools::Itertools;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use memory_stats::memory_stats;
-use parse_mediawiki_sql::schemas::Page;
 use rayon::slice::ParallelSliceMut;
 use redirect::RedirectMap;
 use sea_orm::entity::prelude::*;
@@ -30,6 +28,7 @@ use std::time::Instant;
 mod bfs;
 mod dump;
 mod edge_db;
+mod page_source;
 mod pagelink_source;
 mod redirect;
 mod schema;
@@ -588,9 +587,6 @@ impl GraphDBBuilder {
             // );
             let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set, &mut al_writer);
             ix_writer.write(&vertex_al_offset.to_le_bytes()).unwrap();
-            if adjacency_set.vertex_id % 1000 == 0 {
-                log::debug!("-> wrote {} entries", adjacency_set.vertex_id);
-            }
         }
         db_status.build_complete = Some(true);
         db_status.save();
@@ -712,21 +708,11 @@ impl GraphDBBuilder {
 
     // load vertexes from the pages.sql dump
     async fn load_vertexes_dump(&mut self, db: DbConn) {
-        use parse_mediawiki_sql::utils::memory_map;
-
         let stmt = Table::drop()
             .table(schema::vertex::Entity.table_ref())
             .to_owned();
-        let _ = db.execute(db.get_database_backend().build(&stmt))
-            .await;
+        let _ = db.execute(db.get_database_backend().build(&stmt)).await;
         self.create_vertex_table(&db).await;
-
-        let draw_target = ProgressDrawTarget::stderr_with_hz(0.1);
-        let progress = indicatif::ProgressBar::new(self.vertex_count.into());
-        progress.set_style(
-            ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
-        );
-        progress.set_draw_target(draw_target);
 
         if let Some(usage) = memory_stats() {
             println!("Current physical memory usage: {}", usage.physical_mem);
@@ -734,8 +720,6 @@ impl GraphDBBuilder {
         } else {
             println!("Couldn't get the current memory usage :(");
         }
-
-        let page_sql = unsafe { memory_map(&self.page_path).unwrap() };
 
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
@@ -751,31 +735,14 @@ impl GraphDBBuilder {
         .await
         .expect("set journal_mode pragma");
 
-        use parse_mediawiki_sql::{field_types::PageNamespace, iterate_sql_insertions};
         let txn = db.begin().await.expect("start transaction");
 
-        let mut iterator = iterate_sql_insertions(&page_sql);
-        let vertexes = iterator.filter_map(
-            |Page {
-                 id,
-                 namespace,
-                 is_redirect,
-                 title,
-                 ..
-             }| {
-                if namespace == PageNamespace(0) {
-                    Some(Vertex {
-                        id: id.0,
-                        title: title.0.replace("_", " "),
-                        is_redirect,
-                    })
-                } else {
-                    None
-                }
-            },
-        );
+        let (vertex_tx, vertex_rx) = crossbeam::channel::bounded(32);
+        let page_source = page_source::WPPageSource::new(self.page_path.clone(), vertex_tx);
+        log::debug!("spawning page source thread");
+        let page_thread = thread::spawn(move || page_source.run());
 
-        for v in vertexes {
+        for v in vertex_rx {
             let vertex_model = schema::vertex::ActiveModel {
                 title: Set(v.title),
                 id: Set(v.id),
@@ -785,10 +752,11 @@ impl GraphDBBuilder {
                 .exec(&txn)
                 .await
                 .expect("insert vertex");
-            progress.inc(1);
         }
         txn.commit().await.expect("commit");
-        progress.finish();
+        log::debug!("commited vertex sqlite inserts");
+        let page_count = page_thread.join().expect("join page thread");
+        log::debug!("page count: {}", page_count);
     }
 
     pub async fn create_vertex_title_ix(&self, db: &DbConn) {
@@ -956,6 +924,11 @@ enum Command {
         /// Destination article
         destination: String,
     },
+    /// Query a page
+    Query {
+        /// Article to query
+        target: String,
+    },
 }
 
 #[tokio::main]
@@ -1044,6 +1017,9 @@ async fn main() {
                 let formatted_path = format_path(vertex_path);
                 println!("\n{}", formatted_path);
             }
+        }
+        Command::Query { target } => {
+            log::info!("querying target: {}", target)
         }
     }
 }
