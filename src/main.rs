@@ -30,9 +30,10 @@ use std::time::Instant;
 mod bfs;
 mod dump;
 mod edge_db;
+mod pagelink_source;
 mod redirect;
 mod schema;
-mod source;
+
 #[derive(Clone, Debug)]
 pub struct Vertex {
     pub id: u32,
@@ -383,9 +384,6 @@ struct GraphDBBuilder {
 
     // process directory
     process_path: PathBuf,
-
-    // approximate size
-    vertex_count: u32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
@@ -464,14 +462,12 @@ impl GraphDBBuilder {
         al_path: PathBuf,
         process_path: PathBuf,
     ) -> GraphDBBuilder {
-        let vertex_count = 6546390;
         GraphDBBuilder {
             page_path: page,
             pagelinks_path: pagelinks,
             ix_path,
             al_path,
             process_path,
-            vertex_count,
             redirects_path,
         }
     }
@@ -684,7 +680,7 @@ impl GraphDBBuilder {
 
         log::debug!("loading edges dump");
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
-        let pagelink_source = source::WPPageLinkSource::new(path, pagelink_tx);
+        let pagelink_source = pagelink_source::WPPageLinkSource::new(path, pagelink_tx);
 
         log::debug!("truncating edge db");
         let mut edge_db = edge_db.truncate();
@@ -718,29 +714,12 @@ impl GraphDBBuilder {
     async fn load_vertexes_dump(&mut self, db: DbConn) {
         use parse_mediawiki_sql::utils::memory_map;
 
-        // If everything is already imported, skip importation
-        // Otherwise, drop the table if it exists, then create it
-        let count = schema::vertex::Entity::find().count(&db).await;
-        match count {
-            Ok(count) => {
-                log::debug!("rows present: {}", count);
-                if count == self.vertex_count as usize {
-                    log::debug!("all rows already present");
-                    return;
-                }
-                log::debug!("wrong row count; expected {}", self.vertex_count);
-                let stmt = Table::drop()
-                    .table(schema::vertex::Entity.table_ref())
-                    .to_owned();
-                db.execute(db.get_database_backend().build(&stmt))
-                    .await
-                    .expect("drop table");
-                self.create_vertex_table(&db).await;
-            }
-            Err(_) => {
-                self.create_vertex_table(&db).await;
-            }
-        }
+        let stmt = Table::drop()
+            .table(schema::vertex::Entity.table_ref())
+            .to_owned();
+        let _ = db.execute(db.get_database_backend().build(&stmt))
+            .await;
+        self.create_vertex_table(&db).await;
 
         let draw_target = ProgressDrawTarget::stderr_with_hz(0.1);
         let progress = indicatif::ProgressBar::new(self.vertex_count.into());

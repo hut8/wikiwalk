@@ -14,7 +14,7 @@ use rayon::prelude::*;
 
 use crate::WPPageLink;
 
-// EdgeSource is an iterator of edges
+// WPPageLinkSource is an iterator of edges
 pub struct WPPageLinkSource {
     sender: Sender<WPPageLink>,
     source_path: PathBuf,
