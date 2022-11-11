@@ -1033,7 +1033,6 @@ async fn main() {
                 .expect("find vertex by title");
             log::info!("vertex:\n{:#?}", vertex);
             let al = gdb.edge_db.read_edges(vertex.id);
-            log::info!("\n{:#?}", al);
             log::info!("incoming edges:");
             for vid in al.incoming.iter() {
                 let v = gdb.find_vertex_by_id(*vid).await;
