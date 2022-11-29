@@ -19,13 +19,13 @@ impl NeighborList {
         self.data
             .entry(vertex_id)
             .and_modify(|v| v.push(parent_id))
-            .or_insert(vec![parent_id]);
+            .or_insert_with(|| vec![parent_id]);
     }
 
     fn neighbors(&self, vertex_id: u32) -> Vec<u32> {
         self.data
             .get(&vertex_id)
-            .map_or_else(|| vec![], |v| v.to_owned())
+            .map_or_else(std::vec::Vec::new, |v| v.to_owned())
     }
 
     fn all(&self) -> Vec<u32> {
@@ -33,7 +33,7 @@ impl NeighborList {
     }
 
     fn contains(&self, id: u32) -> bool {
-        return self.data.contains_key(&id);
+        self.data.contains_key(&id)
     }
 
     fn has_some(&self) -> bool {
@@ -45,7 +45,7 @@ impl NeighborList {
             self.data
                 .entry(k)
                 .and_modify(|own_vals| own_vals.extend(v.clone()))
-                .or_insert(v.clone());
+                .or_insert_with(|| v.clone());
         }
         assert!(from.data.is_empty());
     }
@@ -105,11 +105,12 @@ pub fn breadth_first_search(
     // iterate furiously
     while paths.is_empty() && (unvisited_forward.has_some() && unvisited_backward.has_some()) {
         let forward_links_count =
-            count_edges(&unvisited_forward.all(), EdgeDirection::Outgoing, &edge_db);
+            count_edges(&unvisited_forward.all(), EdgeDirection::Outgoing, edge_db);
         let backward_links_count =
-            count_edges(&unvisited_backward.all(), EdgeDirection::Incoming, &edge_db);
+            count_edges(&unvisited_backward.all(), EdgeDirection::Incoming, edge_db);
 
         if forward_links_count < backward_links_count {
+            log::debug!("running forward bfs");
             // forward BFS
             //forward_depth += 1;
 
@@ -122,22 +123,17 @@ pub fn breadth_first_search(
 
             // Fetch the pages which can be reached from the currently unvisited forward pages.
             for current_source_id in outgoing_visit_q {
-                for target_id in edge_db.read_edges(current_source_id).outgoing {
-                    // If the target page is in neither visited forward nor unvisited forward, add it to
-                    // unvisited forward.
-                    if !visited_forward.contains(target_id)
-                        && !unvisited_forward.contains(target_id)
-                    {
-                        unvisited_forward.record(target_id, current_source_id);
-                    }
-                    // If the target page is in unvisited forward, add the source page as another one of its
-                    // parents.
-                    else if unvisited_forward.contains(target_id) {
+                let outgoing_edges = edge_db.read_edges(current_source_id).outgoing;
+                for target_id in outgoing_edges {
+                    //log::debug!("visiting outgoing page {}", target_id);
+                    // If we have not yet visited this target, mark it as unvisited.
+                    if !visited_forward.contains(target_id) {
                         unvisited_forward.record(target_id, current_source_id);
                     }
                 }
             }
         } else {
+            log::debug!("running backward bfs");
             // backward BFS
             //backward_depth += 1;
 
@@ -150,17 +146,11 @@ pub fn breadth_first_search(
 
             // Fetch the pages which can be reached from the currently unvisited backward pages.
             for current_target_id in incoming_visit_q {
-                for source_id in edge_db.read_edges(current_target_id).incoming {
-                    // If the source page is in neither visited backward nor unvisited backward, add it to
-                    // unvisited backward.
-                    if !visited_backward.contains(source_id)
-                        && !unvisited_backward.contains(source_id)
-                    {
-                        unvisited_backward.record(source_id, current_target_id);
-                    }
-                    // If the source page is in unvisited backward, add the target page as another one of its
-                    // parents.
-                    else if unvisited_backward.contains(source_id) {
+                let incoming_edges = edge_db.read_edges(current_target_id).incoming;
+                for source_id in incoming_edges {
+                    // log::debug!("visiting incoming page {}", source_id);
+                    // If the source page has not been visited, mark it as unvisited.
+                    if !visited_backward.contains(source_id) {
                         unvisited_backward.record(source_id, current_target_id);
                     }
                 }
@@ -171,13 +161,42 @@ pub fn breadth_first_search(
         // # The search is complete if any of the pages are in both unvisited backward and unvisited, so
         // # find the resulting paths.
         let intersection = NeighborList::intersection(&unvisited_forward, &unvisited_backward);
+        if !intersection.is_empty() {
+            log::debug!(
+                "pages are in both unvisited backward and unvisited forward lists: {:#?}",
+                &intersection
+            );
+            log::debug!("unvisited backward: {:#?}", unvisited_backward.all());
+            log::debug!("unvisited forward: {:#?}", unvisited_forward.all());
+            let intersection_page = intersection.first().unwrap();
+            log::debug!("examining {:#?}", intersection_page);
+            log::debug!(
+                "unvisited forward neighbors: {:#?}",
+                unvisited_forward.neighbors(*intersection_page)
+            );
+            log::debug!(
+                "unvisited backward neighbors: {:#?}",
+                unvisited_backward.neighbors(*intersection_page)
+            );
+            panic!("debug");
+        }
         for page_id in intersection {
             let paths_from_source =
                 render_paths(unvisited_forward.neighbors(page_id), &visited_forward);
             let paths_from_target =
                 render_paths(unvisited_backward.neighbors(page_id), &visited_backward);
+            log::debug!(
+                "paths from source ({:#?}): {:#?}",
+                page_id,
+                paths_from_source
+            );
+            log::debug!(
+                "paths from target ({:#?}): {:#?}",
+                page_id,
+                paths_from_target
+            );
             for path_from_source in paths_from_source {
-                // TODO: Fix this.
+                // TODO: Fix this clone.
                 let paths_from_target = paths_from_target.clone();
                 for path_from_target in paths_from_target {
                     let current_path = path_from_source
@@ -188,6 +207,8 @@ pub fn breadth_first_search(
                         .collect_vec();
                     if !paths.contains(&current_path) {
                         paths.push(current_path);
+                    } else {
+                        log::warn!("paths already contains just-computed path");
                     }
                 }
             }
@@ -199,6 +220,7 @@ pub fn breadth_first_search(
 
 fn render_paths(ids: Vec<u32>, visited: &NeighborList) -> Vec<Vec<u32>> {
     let mut paths = Vec::new();
+    log::debug!("paths from ids: {:#?}", ids);
     for id in ids {
         if id == 0 {
             return paths;

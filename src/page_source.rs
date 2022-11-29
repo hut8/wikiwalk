@@ -67,7 +67,7 @@ impl WPPageSource {
             .lines()
             .filter(|line_res| {
                 let line = line_res.as_ref().expect("read line");
-                return line.starts_with("INSERT ");
+                line.starts_with("INSERT ")
             })
             .count()
     }
@@ -78,7 +78,7 @@ impl WPPageSource {
         };
         let chunk_str = chunk.join("\n");
         let chunk = chunk_str.as_bytes();
-        let mut iterator = iterate_sql_insertions(&chunk);
+        let mut iterator = iterate_sql_insertions(chunk);
         let vertexes = iterator.filter_map(
             |Page {
                  id,
@@ -90,7 +90,7 @@ impl WPPageSource {
                 if namespace == PageNamespace(0) {
                     Some(Vertex {
                         id: id.0,
-                        title: title.0.replace("_", " "),
+                        title: title.0.replace('_', " "),
                         is_redirect,
                     })
                 } else {

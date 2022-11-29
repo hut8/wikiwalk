@@ -31,7 +31,7 @@ pub fn dump_chunks(sql: &Mmap) -> Vec<Range<usize>> {
     for i in 0..cpu_count {
         let far_end = chunk_start + chunk_size;
         let chunk_end = if far_end <= sql_len { far_end } else { sql_len };
-        let range_end = next_newline_ix(&sql, chunk_end);
+        let range_end = next_newline_ix(sql, chunk_end);
         log::debug!(
             "chunk {}: {} -> chunk_end={} range_end={}",
             i,

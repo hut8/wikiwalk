@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
-use dirs;
 use itertools::Itertools;
 use memmap2::{Mmap, MmapMut, MmapOptions};
 use memory_stats::memory_stats;
@@ -54,7 +53,7 @@ impl PartialEq for Vertex {
 
 impl Eq for Vertex {}
 
-#[derive(PartialEq, Debug, Copy, Clone, Default)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Default)]
 #[repr(align(8))]
 pub struct Edge {
     pub source_vertex_id: u32,
@@ -131,7 +130,7 @@ impl EdgeProcDB {
         fail_file.seek(SeekFrom::Start(0)).unwrap();
 
         EdgeProcDB {
-            root_path: self.root_path.clone(),
+            root_path: self.root_path,
             writer: BufWriter::new(file),
             unflushed_inserts: 0,
             fail_writer: BufWriter::new(fail_file),
@@ -168,7 +167,7 @@ impl EdgeProcDB {
     }
 
     fn open_sort_file(&self, sort_by: &EdgeSort) -> Mmap {
-        let basename = Self::sort_basename(&sort_by);
+        let basename = Self::sort_basename(sort_by);
         let path = &self.root_path.join(basename);
         let source_file = OpenOptions::new()
             .read(true)
@@ -190,7 +189,7 @@ impl EdgeProcDB {
     fn configure_mmap(_mmap: &Mmap) {}
 
     fn make_sort_file(&self, sort_by: &EdgeSort) -> (MmapMut, File) {
-        let sink_basename = Self::sort_basename(&sort_by);
+        let sink_basename = Self::sort_basename(sort_by);
         let sink_path = &self.root_path.join(sink_basename);
         std::fs::copy(&self.root_path.join("edges"), sink_path).expect("copy file for sort");
 
@@ -253,7 +252,6 @@ impl EdgeProcDB {
 
 // AdjacencySet is an AdjacencyList combined with its vertex
 struct AdjacencySet {
-    vertex_id: u32,
     adjacency_list: edge_db::AdjacencyList,
 }
 
@@ -283,7 +281,6 @@ impl Iterator for AdjacencySetIterator {
         }
 
         let mut val = AdjacencySet {
-            vertex_id: self.vertex_id,
             adjacency_list: edge_db::AdjacencyList::default(),
         };
 
@@ -436,7 +433,7 @@ impl DBStatus {
     }
 
     pub fn save(&self) {
-        let sink = File::create(&self.status_path.as_ref().unwrap()).unwrap();
+        let sink = File::create(self.status_path.as_ref().unwrap()).unwrap();
         serde_json::to_writer_pretty(&sink, self).unwrap();
     }
 
@@ -521,7 +518,7 @@ impl GraphDBBuilder {
         } else {
             log::info!(
                 "skipping page.sql load due to match on hash: {}",
-                hex::encode(&db_status.wp_page_hash.as_ref().unwrap())
+                hex::encode(db_status.wp_page_hash.as_ref().unwrap())
             );
         }
 
@@ -586,7 +583,9 @@ impl GraphDBBuilder {
             //     adjacency_set.adjacency_list.incoming.iter().join(" "),
             // );
             let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set, &mut al_writer);
-            ix_writer.write(&vertex_al_offset.to_le_bytes()).unwrap();
+            ix_writer
+                .write_all(&vertex_al_offset.to_le_bytes())
+                .unwrap();
         }
         db_status.build_complete = Some(true);
         db_status.save();
@@ -661,14 +660,11 @@ impl GraphDBBuilder {
     ) -> EdgeProcDB {
         let edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
 
-        match db_status.edges_resolved {
-            Some(resolved) => {
-                if resolved {
-                    log::debug!("edges already resolved; returning");
-                    return edge_db;
-                }
+        if let Some(resolved) = db_status.edges_resolved {
+            if resolved {
+                log::debug!("edges already resolved; returning");
+                return edge_db;
             }
-            None => (),
         }
 
         let mut redirects = redirect::RedirectMap::new(self.redirects_path.clone());
@@ -801,23 +797,25 @@ impl GraphDBBuilder {
         //     edge_ids.len(),
         //     al_position
         // );
-        al_writer.write(&(0xCAFECAFE_u32).to_le_bytes()).unwrap();
+        al_writer
+            .write_all(&(0xCAFECAFE_u32).to_le_bytes())
+            .unwrap();
 
         // outgoing edges
         for neighbor in adjacency_set.adjacency_list.outgoing.iter() {
             let neighbor_bytes = neighbor.to_le_bytes();
-            al_writer.write(&neighbor_bytes).unwrap();
+            al_writer.write_all(&neighbor_bytes).unwrap();
         }
         // Null terminator
-        al_writer.write(&(0u32).to_le_bytes()).unwrap();
+        al_writer.write_all(&(0u32).to_le_bytes()).unwrap();
 
         // incoming edges
         for neighbor in adjacency_set.adjacency_list.incoming.iter() {
             let neighbor_bytes = neighbor.to_le_bytes();
-            al_writer.write(&neighbor_bytes).unwrap();
+            al_writer.write_all(&neighbor_bytes).unwrap();
         }
         // Null terminator
-        al_writer.write(&(0u32).to_le_bytes()).unwrap();
+        al_writer.write_all(&(0u32).to_le_bytes()).unwrap();
 
         al_position
     }
@@ -839,7 +837,7 @@ impl GraphDB {
     }
 
     pub async fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
-        let canon_title = title.replace("_", " ");
+        let canon_title = title.replace('_', " ");
         log::debug!("loading vertex: {}", canon_title);
         let vertex_model = schema::vertex::Entity::find()
             .filter(schema::vertex::Column::Title.eq(title))
@@ -985,8 +983,8 @@ async fn main() {
                 db,
             )
             .unwrap();
-            let source_title = source.replace("_", " ");
-            let dest_title = destination.replace("_", " ");
+            let source_title = source.replace('_', " ");
+            let dest_title = destination.replace('_', " ");
 
             log::info!("speedrun: [{}] → [{}]", source_title, dest_title);
 
@@ -1018,7 +1016,7 @@ async fn main() {
             }
         }
         Command::Query { target } => {
-            let target = target.replace("_", " ");
+            let target = target.replace('_', " ");
             log::info!("querying target: {}", target);
             let db: DbConn = Database::connect(conn_str).await.expect("db connect");
             let mut gdb = GraphDB::new(

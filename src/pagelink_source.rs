@@ -68,7 +68,7 @@ impl WPPageLinkSource {
             .lines()
             .filter(|line_res| {
                 let line = line_res.as_ref().expect("read line");
-                return line.starts_with("INSERT ");
+                line.starts_with("INSERT ")
             })
             .count()
     }
@@ -83,7 +83,7 @@ impl WPPageLinkSource {
         };
         let chunk_str = chunk.join("\n");
         let chunk = chunk_str.as_bytes();
-        let mut sql_iterator = iterate_sql_insertions(&chunk);
+        let mut sql_iterator = iterate_sql_insertions(chunk);
         let links = sql_iterator.filter_map(
             |PageLink {
                  from,
@@ -94,7 +94,7 @@ impl WPPageLinkSource {
                 if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
                     Some(WPPageLink {
                         source_page_id: from.0,
-                        dest_page_title: title.0.replace("_", " "),
+                        dest_page_title: title.0.replace('_', " "),
                     })
                 } else {
                     None
