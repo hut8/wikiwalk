@@ -161,40 +161,11 @@ pub fn breadth_first_search(
         // # The search is complete if any of the pages are in both unvisited backward and unvisited, so
         // # find the resulting paths.
         let intersection = NeighborList::intersection(&unvisited_forward, &unvisited_backward);
-        if !intersection.is_empty() {
-            log::debug!(
-                "pages are in both unvisited backward and unvisited forward lists: {:#?}",
-                &intersection
-            );
-            log::debug!("unvisited backward: {:#?}", unvisited_backward.all());
-            log::debug!("unvisited forward: {:#?}", unvisited_forward.all());
-            let intersection_page = intersection.first().unwrap();
-            log::debug!("examining {:#?}", intersection_page);
-            log::debug!(
-                "unvisited forward neighbors: {:#?}",
-                unvisited_forward.neighbors(*intersection_page)
-            );
-            log::debug!(
-                "unvisited backward neighbors: {:#?}",
-                unvisited_backward.neighbors(*intersection_page)
-            );
-            panic!("debug");
-        }
         for page_id in intersection {
             let paths_from_source =
                 render_paths(unvisited_forward.neighbors(page_id), &visited_forward);
             let paths_from_target =
                 render_paths(unvisited_backward.neighbors(page_id), &visited_backward);
-            log::debug!(
-                "paths from source ({:#?}): {:#?}",
-                page_id,
-                paths_from_source
-            );
-            log::debug!(
-                "paths from target ({:#?}): {:#?}",
-                page_id,
-                paths_from_target
-            );
             for path_from_source in paths_from_source {
                 // TODO: Fix this clone.
                 let paths_from_target = paths_from_target.clone();
@@ -220,10 +191,9 @@ pub fn breadth_first_search(
 
 fn render_paths(ids: Vec<u32>, visited: &NeighborList) -> Vec<Vec<u32>> {
     let mut paths = Vec::new();
-    log::debug!("paths from ids: {:#?}", ids);
     for id in ids {
         if id == 0 {
-            return paths;
+            return vec![vec![]];
         }
 
         let current_paths = render_paths(visited.neighbors(id), visited);
