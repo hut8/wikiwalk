@@ -288,8 +288,6 @@ impl Iterator for AdjacencySetIterator {
         // outgoing source is sorted by source vertex id
         loop {
             let outgoing_offset: usize = self.outgoing_i * std::mem::size_of::<Edge>();
-            // log::debug!("\toutgoing file offset: {}", outgoing_offset);
-
             if outgoing_offset >= self.outgoing_source.len() {
                 break;
             }
@@ -298,12 +296,6 @@ impl Iterator for AdjacencySetIterator {
                 &self.outgoing_source
                     [outgoing_offset..outgoing_offset + std::mem::size_of::<Edge>()],
             );
-
-            // log::debug!(
-            //     "\toutgoing edge at offset {}: {:#?}",
-            //     outgoing_offset,
-            //     current_edge
-            // );
 
             if current_edge.source_vertex_id > self.vertex_id {
                 break;
@@ -329,8 +321,6 @@ impl Iterator for AdjacencySetIterator {
         // incoming source is sorted by destination vertex id
         loop {
             let incoming_offset: usize = self.incoming_i * std::mem::size_of::<Edge>();
-            // log::debug!("\tincoming file offset: {}", incoming_offset);
-
             if incoming_offset >= self.incoming_source.len() {
                 break;
             }
@@ -1012,7 +1002,7 @@ async fn main() {
                     .map(|v| v.expect("vertex not found"))
                     .collect();
                 let formatted_path = format_path(vertex_path);
-                println!("\n{}", formatted_path);
+                println!("{}", formatted_path);
             }
         }
         Command::Query { target } => {
