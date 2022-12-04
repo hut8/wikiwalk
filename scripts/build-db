@@ -1,0 +1,14 @@
+#!/usr/bin/zsh
+set -euo pipefail
+
+project_path=${0:a:h:h}
+sql_data_path="$HOME/data"
+echo "project path: $project_path"
+cd "$project_path"
+
+cargo build
+./target/debug/wikipedia-speedrun \
+    build \
+    --page="${sql_data_path}/enwiki-20221101-page.sql" \
+    --pagelinks="${sql_data_path}/enwiki-20221101-pagelinks.sql" \
+    --redirects="${sql_data_path}/enwiki-20221101-redirect.sql"
