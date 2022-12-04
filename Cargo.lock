@@ -2089,6 +2089,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "wikipedia-speedrun",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2522,6 +2529,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d82e1a7758622a465f8cee077614c73484dac5b836c02ff6a40d5d1010324d7"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "tool"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "crossbeam",
+ "dirs",
+ "dotenv",
+ "futures",
+ "hex",
+ "indicatif",
+ "itertools",
+ "log",
+ "memmap2",
+ "memory-stats",
+ "num_cpus",
+ "parse-mediawiki-sql",
+ "rayon",
+ "rocket",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "sha3",
+ "sqlx",
+ "stderrlog",
+ "tokio",
+ "wikipedia-speedrun",
 ]
 
 [[package]]
