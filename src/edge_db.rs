@@ -42,8 +42,7 @@ impl EdgeDB {
           let value: u64 = u64::from_le_bytes(buf);
           if value > max_sz {
               let msg = format!(
-                  "check_ix: at index file: {}, got pointer to {} in AL file (maximum: {})",
-                  position, value, max_sz
+                  "check_ix: at index file: {position}, got pointer to {value} in AL file (maximum: {max_sz})"
               );
               panic!("{}", msg);
           }

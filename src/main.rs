@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{prelude::*, BufWriter};
-use std::io::{SeekFrom, Write};
+use std::io::{Write};
 use std::path::PathBuf;
 use std::thread;
 use std::time::Instant;
@@ -105,13 +105,13 @@ impl EdgeProcDB {
             .read(true)
             .write(true)
             .create(true)
-            .open(&path.join("edges"))
+            .open(path.join("edges"))
             .expect("open edge proc db file");
         let fail_log = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(&path.join("edges_fail.csv"))
+            .open(path.join("edges_fail.csv"))
             .expect("open edge proc db fail file");
         EdgeProcDB {
             root_path: path,
@@ -124,10 +124,10 @@ impl EdgeProcDB {
     pub fn truncate(self) -> Self {
         let mut file = self.writer.into_inner().unwrap();
         file.set_len(0).unwrap();
-        file.seek(SeekFrom::Start(0)).unwrap();
+        file.rewind().unwrap();
         let mut fail_file = self.fail_writer.into_inner().unwrap();
         fail_file.set_len(0).unwrap();
-        fail_file.seek(SeekFrom::Start(0)).unwrap();
+        fail_file.rewind().unwrap();
 
         EdgeProcDB {
             root_path: self.root_path,
@@ -150,7 +150,7 @@ impl EdgeProcDB {
     }
 
     pub fn write_fail(&mut self, source_vertex_id: u32, dest_page_title: String) {
-        let line = format!("{},{}\n", source_vertex_id, dest_page_title);
+        let line = format!("{source_vertex_id},{dest_page_title}\n");
         self.fail_writer
             .write_all(line.as_bytes())
             .expect("write edge fail");
@@ -191,7 +191,7 @@ impl EdgeProcDB {
     fn make_sort_file(&self, sort_by: &EdgeSort) -> (MmapMut, File) {
         let sink_basename = Self::sort_basename(sort_by);
         let sink_path = &self.root_path.join(sink_basename);
-        std::fs::copy(&self.root_path.join("edges"), sink_path).expect("copy file for sort");
+        std::fs::copy(self.root_path.join("edges"), sink_path).expect("copy file for sort");
 
         let sink_file = OpenOptions::new()
             .read(true)
@@ -1002,7 +1002,7 @@ async fn main() {
                     .map(|v| v.expect("vertex not found"))
                     .collect();
                 let formatted_path = format_path(vertex_path);
-                println!("{}", formatted_path);
+                println!("{formatted_path}");
             }
         }
         Command::Query { target } => {
