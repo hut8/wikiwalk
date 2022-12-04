@@ -7,3 +7,12 @@ edition = "2021"
 
 [dependencies]
 wikipedia-speedrun = { path = "../wikipedia-speedrun" }
+rocket = "0.5.0-rc.2"
+stderrlog = "*"
+log = "*"
+dirs = "4.0"
+sea-orm = { version = "^0", features = [
+  "sqlx-sqlite",
+  "runtime-tokio-rustls",
+  "macros",
+] }
