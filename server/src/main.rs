@@ -1,20 +1,33 @@
-use sea_orm::{Database, DbConn};
-use wikipedia_speedrun::GraphDB;
+use rocket::{serde::json::Json, fs::FileServer};
+use rocket::State;
+
+use sea_orm::{ColumnTrait, Database, DbConn, EntityTrait, QueryFilter};
+use wikipedia_speedrun::{schema, GraphDB, Vertex};
 
 #[rocket::get("/paths/<source_id>/<dest_id>")]
-fn paths(source_id: u32, dest_id: u32) -> &'static str {
-    "Hello, world!"
+fn paths(source_id: u32, dest_id: u32, gdb: &State<GraphDB>) -> Json<Vec<Vec<u32>>> {
+    let paths = gdb.bfs(source_id, dest_id);
+    Json(paths)
 }
 
 // API method to search pages based on title
 #[rocket::get("/pages?<title>")]
-fn pages(title: &str) -> &'static str {
-    "Hello, world!"
-}
-
-#[rocket::get("/")]
-fn index() -> &'static str {
-    "Hello, world!"
+async fn pages(title: &str, gdb: &State<GraphDB>) -> Json<Vec<Vertex>> {
+    let vertex_models = schema::vertex::Entity::find()
+        .filter(schema::vertex::Column::Title.starts_with(title))
+        .all(&gdb.db)
+        .await
+        .expect("find vertex by title");
+    Json(
+        vertex_models
+            .iter()
+            .map(|v| Vertex {
+                id: v.id,
+                is_redirect: v.is_redirect,
+                title: v.title.clone(),
+            })
+            .collect(),
+    )
 }
 
 #[rocket::launch]
@@ -40,12 +53,15 @@ async fn rocket() -> _ {
     log::debug!("using database: {}", conn_str);
     let db: DbConn = Database::connect(conn_str).await.expect("db connect");
 
-    let mut gdb = GraphDB::new(
-      vertex_ix_path.to_str().unwrap(),
-      vertex_al_path.to_str().unwrap(),
-      db,
-  )
-  .unwrap();
+    let gdb = GraphDB::new(
+        vertex_ix_path.to_str().unwrap(),
+        vertex_al_path.to_str().unwrap(),
+        db,
+    )
+    .unwrap();
 
-    rocket::build().mount("/", rocket::routes![index, paths, pages])
+    rocket::build()
+        .manage(gdb)
+        .mount("/", FileServer::from("../ui/public"))
+        .mount("/", rocket::routes![paths, pages])
 }
