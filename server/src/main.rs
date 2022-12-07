@@ -62,6 +62,6 @@ async fn rocket() -> _ {
 
     rocket::build()
         .manage(gdb)
-        .mount("/", FileServer::from("../ui/public"))
+        .mount("/", FileServer::from("../ui/dist"))
         .mount("/", rocket::routes![paths, pages])
 }

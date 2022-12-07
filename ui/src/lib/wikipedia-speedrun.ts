@@ -1,6 +1,25 @@
 import { writable } from "svelte/store";
 
-export async function runSearch(term: string) {
+export interface WPThumbnail {
+  source: string;
+  width: number;
+  height: number;
+}
+
+export interface WPTerms {
+  description: string[];
+}
+
+export interface WPPage {
+  pageid: number;
+  ns: number;
+  title: string;
+  index: number;
+  thumbnail: WPThumbnail;
+  terms: WPTerms;
+}
+
+export async function runSearch(term: string): Promise<WPPage[]> {
   const wikiParams = new URLSearchParams();
   wikiParams.set("action", "query");
   wikiParams.set("format", "json");
@@ -20,7 +39,15 @@ export async function runSearch(term: string) {
   const endpoint = new URL("https://en.wikipedia.org/w/api.php");
   endpoint.search = wikiParams.toString();
   const response = await fetch(endpoint);
-  return response.json();
+  const data = await response.json();
+  if ("error" in data) {
+    console.error("wikipedia api error:", data.error);
+    return [];
+  }
+  const pages = Object.values(data.query.pages) as WPPage[];
+  pages.sort((x: any, y: any) => x.index - y.index);
+  console.log(pages);
+  return pages;
 }
 
 export type Page = {
@@ -34,22 +61,25 @@ export type Page = {
 type PageIDPaths = {
   // [ [source, intermediate..., dest ], ... ]
   paths: number[][];
-}
+};
 
 // Run through Wikipedia API to get more data
 type PagePaths = {
-  paths: Page[][]
-}
+  paths: Page[][];
+};
 
 export async function findPaths(sourceId: number, targetId: number) {
   const endpoint = `/paths/${sourceId}/${targetId}`;
   const pageIdPaths = (await fetch(endpoint)) as unknown as PageIDPaths;
-
 }
 
-async function fetchPathPageData(pageIdPaths: PageIDPaths): PagePaths {
+async function fetchPathPageData(pageIdPaths: PageIDPaths): Promise<PagePaths> {
   const pageIdSet = new Set(pageIdPaths.paths.flatMap((x) => x));
-
+  return {
+    paths: [],
+  };
 }
 
-export const paths = writable<PagePaths>();
+export const paths = writable<PagePaths>({
+  paths: [],
+});

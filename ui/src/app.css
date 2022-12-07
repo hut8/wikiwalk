@@ -1,5 +1,6 @@
 body {
-  font-family: 'Roboto Mono', monospace;
+  font-family: "Roboto Mono", monospace;
+  margin: 0;
 }
 
 main {
@@ -7,9 +8,4 @@ main {
   flex-direction: column;
   align-items: center;
   min-height: 95vh;
-}
-
-footer {
-  display: flex;
-  justify-content: flex-end;
 }
