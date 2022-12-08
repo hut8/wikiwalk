@@ -5,20 +5,37 @@
     Title,
     AutoAdjust,
   } from "@smui/top-app-bar";
-  import { Text } from "@smui/list";
+  import Card, { Content } from "@smui/card";
+  import Button, { Label as ButtonLabel } from "@smui/button";
+  import List, {
+    Item,
+    Graphic,
+    Meta,
+    Text,
+    PrimaryText,
+    SecondaryText,
+  } from "@smui/list";
   import "svelte-material-ui/bare.css";
   import Autocomplete from "@smui-extra/autocomplete";
   import LinearProgress from "@smui/linear-progress";
+  import Snackbar, { Actions, Label as SnackbarLabel } from '@smui/snackbar';
   import IconButton from "@smui/icon-button";
-  import { runSearch, paths, type WPPage } from "./lib/wikipedia-speedrun";
+  import {
+    runSearch,
+    findPaths,
+    type WPPage,
+    type PagePaths,
+  } from "./lib/wikipedia-speedrun";
   import { Timer } from "./lib/timer";
 
   let sourcePage: WPPage;
   let targetPage: WPPage;
+  let pathData: PagePaths;
+  let snackbar: Snackbar;
 
   const searchTimer = new Timer(500);
 
-  async function search(term: string) : Promise<WPPage[]> {
+  async function search(term: string): Promise<WPPage[]> {
     return new Promise((resolve, _reject) => {
       searchTimer.run(async () => {
         console.log("running search for", term);
@@ -26,17 +43,27 @@
         resolve(results);
       });
     });
-
-
   }
 
-  async function autocomplete(term: string): Promise<WPPage[]|false> {
+  async function autocomplete(term: string): Promise<WPPage[] | false> {
     if (term === "") {
       console.debug("blank search term");
       return [];
     }
     console.log("searching for", term);
     return search(term);
+  }
+
+  async function computePaths() {
+    if (!(sourcePage && targetPage)) {
+      console.warn("tried to compute paths without pages set");
+      return;
+    }
+    const sourceId = sourcePage.pageid;
+    const targetId = targetPage.pageid;
+    snackbar.forceOpen();
+    pathData = await findPaths(sourceId, targetId);
+    snackbar.close();
   }
 </script>
 
@@ -61,25 +88,85 @@
 </TopAppBar>
 
 <main>
-  <Autocomplete
-    search={autocomplete}
-    bind:value={sourcePage}
-    getOptionLabel={(option) =>
-      option ? option.title : ''}
-    showMenuWithNoInput={false}
-    label="Source page"
-  >
-    <Text
-      slot="loading"
-      style="display: flex; width: 100%; justify-content: center; align-items: center;"
+  <div class="page-inputs">
+    <Autocomplete
+      search={autocomplete}
+      bind:value={sourcePage}
+      getOptionLabel={(option) => (option ? option.title : "")}
+      showMenuWithNoInput={false}
+      label="Source page"
     >
-      <LinearProgress style="height: 24px" indeterminate />
-    </Text>
-  </Autocomplete>
+      <Text
+        slot="loading"
+        style="display: flex; width: 100%; justify-content: center; align-items: center;"
+      >
+        <LinearProgress style="height: 24px" indeterminate />
+      </Text>
+    </Autocomplete>
+
+    <Autocomplete
+      search={autocomplete}
+      bind:value={targetPage}
+      getOptionLabel={(option) => (option ? option.title : "")}
+      showMenuWithNoInput={false}
+      label="Target page"
+    >
+      <Text
+        slot="loading"
+        style="display: flex; width: 100%; justify-content: center; align-items: center;"
+      >
+        <LinearProgress style="height: 24px" indeterminate />
+      </Text>
+    </Autocomplete>
+
+    <Button on:click={computePaths} variant="raised">
+      <ButtonLabel>Compute paths</ButtonLabel>
+    </Button>
+  </div>
+
+  {#if pathData}
+    <div class="path-list">
+      {#each pathData.paths as path}
+        <Card style="margin-bottom: 10px">
+          <Content>
+            <List twoLine avatarList>
+              {#each path as page}
+                <Item on:SMUI:action={() => window.open(page.url, "_blank")}>
+                  {#if page.iconUrl}
+                    <Graphic
+                      style="background-image: url({page.iconUrl}); background-size: cover;"
+                    />
+                  {:else}
+                    <Graphic />
+                  {/if}
+                  <Text>
+                    <PrimaryText>{page.title}</PrimaryText>
+                    <SecondaryText>{page.description}</SecondaryText>
+                  </Text>
+                </Item>
+              {/each}
+            </List>
+          </Content>
+        </Card>
+      {/each}
+    </div>
+  {/if}
+
+  <Snackbar bind:this={snackbar}>
+    <SnackbarLabel>Finding paths!</SnackbarLabel>
+    <Actions>
+      <IconButton class="material-icons" title="Dismiss">close</IconButton>
+    </Actions>
+  </Snackbar>
 </main>
 
 <style>
   main {
     padding-top: 64px;
+  }
+
+  .page-inputs {
+    display: flex;
+    flex-direction: row;
   }
 </style>

@@ -38,7 +38,11 @@ export async function runSearch(term: string): Promise<WPPage[]> {
 
   const endpoint = new URL("https://en.wikipedia.org/w/api.php");
   endpoint.search = wikiParams.toString();
-  const response = await fetch(endpoint);
+  const response = await fetch(endpoint, {
+    headers: {
+      'User-Agent': 'Wikipedia Speedrun wikipediaspeedrun.com liambowen@gmail.com',
+    }
+  });
   const data = await response.json();
   if ("error" in data) {
     console.error("wikipedia api error:", data.error);
@@ -53,33 +57,121 @@ export async function runSearch(term: string): Promise<WPPage[]> {
 export type Page = {
   title: string;
   id: number;
-  iconUrl: string;
+  iconUrl?: string;
   link: string;
-};
-
-// Given directly from backend
-type PageIDPaths = {
-  // [ [source, intermediate..., dest ], ... ]
-  paths: number[][];
+  description?: string;
 };
 
 // Run through Wikipedia API to get more data
-type PagePaths = {
+export type PagePaths = {
   paths: Page[][];
 };
 
-export async function findPaths(sourceId: number, targetId: number) {
+export async function findPaths(sourceId: number, targetId: number): Promise<PagePaths> {
   const endpoint = `/paths/${sourceId}/${targetId}`;
-  const pageIdPaths = (await fetch(endpoint)) as unknown as PageIDPaths;
+  const response = await fetch(endpoint);
+  const data = await response.json();
+  const pageIdPaths = data as unknown as number[][];
+  const pagePaths = await fetchPathPageData(pageIdPaths);
+  return pagePaths;
 }
 
-async function fetchPathPageData(pageIdPaths: PageIDPaths): Promise<PagePaths> {
-  const pageIdSet = new Set(pageIdPaths.paths.flatMap((x) => x));
-  return {
-    paths: [],
-  };
+const CHUNK_SIZE = 50;
+
+function batchArray<T>(arr: T[]): T[][] {
+  return arr.reduce((all,one,i) => {
+    const ch = Math.floor(i/CHUNK_SIZE);
+    all[ch] = [].concat((all[ch]||[]),one);
+    return all
+ }, []);
 }
 
-export const paths = writable<PagePaths>({
-  paths: [],
-});
+
+async function fetchPageDataChunk(pageIds: number[]) {
+  const pageIDStr = pageIds.join("|");
+  const wikiParams = new URLSearchParams();
+  wikiParams.set("action", "query");
+  wikiParams.set("format", "json");
+  wikiParams.set("pageids", pageIDStr);
+  wikiParams.set("prop", "info|pageprops|pageimages|pageterms");
+  wikiParams.set("inprop", "url");
+  wikiParams.set("piprop", "thumbnail");
+  wikiParams.set("pithumbsize", "160");
+  wikiParams.set("pilimit", "50");
+  wikiParams.set("wbptterms", "description");
+  wikiParams.set("origin", "*");
+
+  const endpoint = new URL("https://en.wikipedia.org/w/api.php");
+  endpoint.search = wikiParams.toString();
+  const response = await fetch(endpoint, {
+    headers: {
+      'User-Agent': 'Wikipedia Speedrun wikipediaspeedrun.com liambowen@gmail.com',
+    }
+  });
+  const data = await response.json();
+  if ("error" in data) {
+    console.error("wikipedia api error:", data.error);
+    return null;
+  }
+  return data.query.pages;
+}
+
+async function fetchPathPageData(pageIdPaths: number[][]): Promise<PagePaths> {
+  const pageIdSet = new Set(pageIdPaths.flatMap((x) => x));
+  let pageData = {};
+  console.log("running page info query for ids:", pageIdSet.keys())
+  let batches = batchArray(Array.from(pageIdSet.values()));
+  for (let batch of batches) {
+    let pageDataChunk = await fetchPageDataChunk(batch);
+    console.log("page data chunk:", pageDataChunk);
+    pageData = Object.assign(pageData, pageDataChunk);
+  }
+  console.log("page data:", pageData);
+
+  const pagePaths: PagePaths = {
+    paths:[],
+  }
+//   {
+//     "pageid": 17032293,
+//     "ns": 0,
+//     "title": "Treaty of Tellico",
+//     "contentmodel": "wikitext",
+//     "pagelanguage": "en",
+//     "pagelanguagehtmlcode": "en",
+//     "pagelanguagedir": "ltr",
+//     "touched": "2022-12-07T23:28:21Z",
+//     "lastrevid": 1124522136,
+//     "length": 4913,
+//     "pageprops": {
+//         "page_image_free": "Tellico-blockhouse-vonore-tennessee.jpg",
+//         "wikibase-shortdesc": "Peace Treaty Signed between the United States and the Cherokee Nation",
+//         "wikibase_item": "Q7837253"
+//     },
+//     "thumbnail": {
+//         "source": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Tellico-blockhouse-vonore-tennessee.jpg/160px-Tellico-blockhouse-vonore-tennessee.jpg",
+//         "width": 160,
+//         "height": 120
+//     }
+// }
+  for (const pageIdPath of pageIdPaths) {
+    const pages: Page[] = [];
+    for (const pageId of pageIdPath) {
+      const wpPage = pageData[pageId];
+      const p: Page = {
+        id: wpPage.pageid,
+        title: wpPage.title,
+        link: wpPage.fullurl,
+      }
+      if (wpPage.pageprops && wpPage.pageprops['wikibase-shortdesc']) {
+        p.description =  wpPage.pageprops['wikibase-shortdesc'];
+      }
+      if (wpPage.thumbnail && wpPage.thumbnail.source) {
+        p.iconUrl = wpPage.thumbnail.source
+      }
+      pages.push(p);
+    }
+    pagePaths.paths.push(pages);
+  }
+
+  return pagePaths;
+}
