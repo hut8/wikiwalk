@@ -26,8 +26,10 @@ fix:
 
 # Build for release
 build-release:
+  cd ui && npm run build
   cargo build --release
 
 # Build for development
 build:
+  cd ui && npm run build
   cargo build
