@@ -101,6 +101,7 @@
       bind:value={sourcePage}
       getOptionLabel={(option) => (option ? option.title : "")}
       showMenuWithNoInput={false}
+      noMatchesActionDisabled={true}
       label="Source page"
     >
       <Text
@@ -116,6 +117,7 @@
       bind:value={targetPage}
       getOptionLabel={(option) => (option ? option.title : "")}
       showMenuWithNoInput={false}
+      noMatchesActionDisabled={true}
       label="Target page"
     >
       <Text
