@@ -1,0 +1,11 @@
+[Unit]
+Description=Wikipedia Speedrun
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/wikipedia-speedrun
+EnvironmentFile=/etc/wikipedia-speedrun
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
