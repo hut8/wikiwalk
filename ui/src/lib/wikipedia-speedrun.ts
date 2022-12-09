@@ -131,28 +131,7 @@ async function fetchPathPageData(pageIdPaths: number[][]): Promise<PagePaths> {
   const pagePaths: PagePaths = {
     paths:[],
   }
-//   {
-//     "pageid": 17032293,
-//     "ns": 0,
-//     "title": "Treaty of Tellico",
-//     "contentmodel": "wikitext",
-//     "pagelanguage": "en",
-//     "pagelanguagehtmlcode": "en",
-//     "pagelanguagedir": "ltr",
-//     "touched": "2022-12-07T23:28:21Z",
-//     "lastrevid": 1124522136,
-//     "length": 4913,
-//     "pageprops": {
-//         "page_image_free": "Tellico-blockhouse-vonore-tennessee.jpg",
-//         "wikibase-shortdesc": "Peace Treaty Signed between the United States and the Cherokee Nation",
-//         "wikibase_item": "Q7837253"
-//     },
-//     "thumbnail": {
-//         "source": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Tellico-blockhouse-vonore-tennessee.jpg/160px-Tellico-blockhouse-vonore-tennessee.jpg",
-//         "width": 160,
-//         "height": 120
-//     }
-// }
+
   for (const pageIdPath of pageIdPaths) {
     const pages: Page[] = [];
     for (const pageId of pageIdPath) {
