@@ -52,6 +52,7 @@ async fn rocket() -> _ {
     let conn_str = format!("sqlite:///{}?mode=ro", db_path.to_string_lossy());
     log::debug!("using database: {}", conn_str);
     let db: DbConn = Database::connect(conn_str).await.expect("db connect");
+    let static_root = std::env::var("STATIC_ROOT").unwrap_or("../ui/dist".into());
 
     let gdb = GraphDB::new(
         vertex_ix_path.to_str().unwrap(),
@@ -62,6 +63,6 @@ async fn rocket() -> _ {
 
     rocket::build()
         .manage(gdb)
-        .mount("/", FileServer::from("../ui/dist"))
+        .mount("/", FileServer::from(static_root))
         .mount("/", rocket::routes![paths, pages])
 }
