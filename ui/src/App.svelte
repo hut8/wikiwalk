@@ -18,7 +18,7 @@
   import "svelte-material-ui/bare.css";
   import Autocomplete from "@smui-extra/autocomplete";
   import LinearProgress from "@smui/linear-progress";
-  import Snackbar, { Actions, Label as SnackbarLabel } from '@smui/snackbar';
+  import Snackbar, { Actions, Label as SnackbarLabel } from "@smui/snackbar";
   import IconButton from "@smui/icon-button";
   import {
     runSearch,
@@ -46,6 +46,13 @@
   }
 
   async function autocomplete(term: string): Promise<WPPage[] | false> {
+    if (
+      (sourcePage && term === sourcePage.title) ||
+      (targetPage && term === targetPage.title)
+    ) {
+      console.debug("autocomplete attempted with same value:", term);
+      return [];
+    }
     if (term === "") {
       console.debug("blank search term");
       return [];
@@ -127,11 +134,11 @@
   {#if pathData}
     <div class="path-list">
       {#each pathData.paths as path}
-        <Card style="margin-bottom: 10px">
+        <Card class="path-card">
           <Content>
             <List twoLine avatarList>
               {#each path as page}
-                <Item on:SMUI:action={() => window.open(page.url, "_blank")}>
+                <Item on:SMUI:action={() => window.open(page.link, "_blank")}>
                   {#if page.iconUrl}
                     <Graphic
                       style="background-image: url({page.iconUrl}); background-size: cover;"
@@ -168,5 +175,24 @@
   .page-inputs {
     display: flex;
     flex-direction: row;
+    gap: 24px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .path-list {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-evenly;
+  }
+
+  /* shouldn't have to be global, but class on a component doesn't work */
+  :global(.path-card) {
+    margin-bottom: 10px;
+    min-width: 386px;
+    width: 30vw;
   }
 </style>
