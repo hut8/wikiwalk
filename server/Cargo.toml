@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 wikipedia-speedrun = { path = "../wikipedia-speedrun" }
-rocket = { version = "0.5.0-rc.2", features = ["json"] }
+rocket = { version = "0.5.0-rc.2", features = ["json", "tls"] }
 stderrlog = "*"
 log = "*"
 dirs = "4.0"
