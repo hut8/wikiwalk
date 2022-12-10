@@ -8,6 +8,8 @@ EnvironmentFile=/etc/wikipedia-speedrun
 Type=simple
 User=speedrun
 Group=speedrun
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target
