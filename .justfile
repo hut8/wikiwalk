@@ -33,3 +33,11 @@ build-release:
 build:
   cd ui && npm run build
   cargo build
+
+# Deploy (must be run on server)
+deploy: build-release
+  rm -rf /var/wikipedia-speedrun/public
+  cp -rav ui/dist /var/wikipedia/public
+  rm /usr/local/bin/wikipedia-speedrun
+  cp target/release/server /usr/local/bin/wikipedia-speedrun
+  sudo systemctl restart wikipedia-speedrun

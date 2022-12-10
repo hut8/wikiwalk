@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use rocket::{serde::json::Json, fs::FileServer};
 use rocket::State;
 
@@ -42,8 +44,10 @@ async fn rocket() -> _ {
 
     let home_dir = dirs::home_dir().unwrap();
     let default_data_dir = home_dir.join("data").join("speedrun-data");
-    // TODO: Env var
-    let data_dir = default_data_dir;
+    let data_dir = match std::env::var("DATA_ROOT").ok() {
+      Some(data_dir_str) => PathBuf::from(data_dir_str),
+      None => default_data_dir
+    };
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
     let vertex_al_path = data_dir.join("vertex_al");
