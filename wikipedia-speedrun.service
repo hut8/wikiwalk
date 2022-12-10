@@ -6,6 +6,8 @@ After=network.target
 ExecStart=/usr/local/bin/wikipedia-speedrun
 EnvironmentFile=/etc/wikipedia-speedrun
 Type=simple
+User=speedrun
+Group=speedrun
 
 [Install]
 WantedBy=multi-user.target
