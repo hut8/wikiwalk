@@ -9,6 +9,7 @@ edition = "2021"
 wikipedia-speedrun = { path = "../wikipedia-speedrun" }
 rocket = { version = "0.5.0-rc.2", features = ["json", "tls"] }
 stderrlog = "*"
+hyper = { version = "^0.14" }
 log = "*"
 dirs = "4.0"
 sea-orm = { version = "^0", features = [
@@ -16,3 +17,6 @@ sea-orm = { version = "^0", features = [
   "runtime-tokio-rustls",
   "macros",
 ] }
+
+[features]
+tls-redirect = []

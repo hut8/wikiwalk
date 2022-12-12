@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
-use rocket::{serde::json::Json, fs::FileServer};
 use rocket::State;
+use rocket::{fs::FileServer, serde::json::Json};
 
 use sea_orm::{ColumnTrait, Database, DbConn, EntityTrait, QueryFilter};
 use wikipedia_speedrun::{schema, GraphDB, Vertex};
+
+mod tls;
 
 #[rocket::get("/paths/<source_id>/<dest_id>")]
 fn paths(source_id: u32, dest_id: u32, gdb: &State<GraphDB>) -> Json<Vec<Vec<u32>>> {
@@ -32,13 +34,14 @@ async fn pages(title: &str, gdb: &State<GraphDB>) -> Json<Vec<Vertex>> {
     )
 }
 
+
 #[rocket::launch]
 async fn rocket() -> _ {
     let home_dir = dirs::home_dir().unwrap();
     let default_data_dir = home_dir.join("data").join("speedrun-data");
     let data_dir = match std::env::var("DATA_ROOT").ok() {
-      Some(data_dir_str) => PathBuf::from(data_dir_str),
-      None => default_data_dir
+        Some(data_dir_str) => PathBuf::from(data_dir_str),
+        None => default_data_dir,
     };
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
@@ -56,6 +59,8 @@ async fn rocket() -> _ {
         db,
     )
     .unwrap();
+
+    std::thread::spawn(|| async { tls::launch_tls_redirect().await });
 
     rocket::build()
         .manage(gdb)
