@@ -34,14 +34,6 @@ async fn pages(title: &str, gdb: &State<GraphDB>) -> Json<Vec<Vertex>> {
 
 #[rocket::launch]
 async fn rocket() -> _ {
-    stderrlog::new()
-        .module(module_path!())
-        .quiet(false)
-        .verbosity(4)
-        .timestamp(stderrlog::Timestamp::Second)
-        .init()
-        .unwrap();
-
     let home_dir = dirs::home_dir().unwrap();
     let default_data_dir = home_dir.join("data").join("speedrun-data");
     let data_dir = match std::env::var("DATA_ROOT").ok() {
