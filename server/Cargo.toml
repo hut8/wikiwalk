@@ -19,4 +19,5 @@ sea-orm = { version = "^0", features = [
 ] }
 
 [features]
+# default = ["tls-redirect"]
 tls-redirect = []

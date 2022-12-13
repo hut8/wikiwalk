@@ -1,10 +1,10 @@
 use std::convert::Infallible;
 
-use hyper::{Body, Request, Response, Uri, http};
+use hyper::{http, Body, Request, Response, Uri};
 
-#[cfg(not(redirect_tls))]
+#[cfg(not(feature = "tls-redirect"))]
 pub async fn launch_tls_redirect() {
-  log::debug!("not launching tls redirect due to feature config");
+    log::debug!("not launching tls redirect due to feature config");
 }
 
 async fn tls_redirect(req: Request<Body>) -> http::Result<Response<Body>> {
@@ -27,7 +27,7 @@ async fn tls_redirect(req: Request<Body>) -> http::Result<Response<Body>> {
     res.body("".into())
 }
 
-#[cfg(redirect_tls)]
+#[cfg(feature = "tls-redirect")]
 pub async fn launch_tls_redirect() {
     use std::net::SocketAddr;
 
@@ -36,7 +36,7 @@ pub async fn launch_tls_redirect() {
         service::{make_service_fn, service_fn},
     };
 
-    let addr = SocketAddr::from(([0,0,0,0],80));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 80));
 
     // A `Service` is needed for every connection, so this
     // creates one from our `hello_world` function.
