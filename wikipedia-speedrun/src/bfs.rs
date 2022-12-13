@@ -178,8 +178,6 @@ pub fn breadth_first_search(
                         .collect_vec();
                     if !paths.contains(&current_path) {
                         paths.push(current_path);
-                    } else {
-                        log::warn!("paths already contains just-computed path");
                     }
                 }
             }

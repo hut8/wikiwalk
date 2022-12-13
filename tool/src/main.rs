@@ -1,10 +1,9 @@
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
 use itertools::Itertools;
-use memmap2::{Mmap, MmapMut, MmapOptions};
+use memmap2::{Mmap, MmapMut};
 use memory_stats::memory_stats;
 use rayon::slice::ParallelSliceMut;
-use redirect::RedirectMap;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
@@ -17,65 +16,16 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+use std::io::Write;
 use std::io::{prelude::*, BufWriter};
-use std::io::{Write};
 use std::path::PathBuf;
 use std::thread;
-use std::time::Instant;
+use wikipedia_speedrun::redirect::RedirectMap;
+use wikipedia_speedrun::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
 
-mod bfs;
-mod dump;
-mod edge_db;
 mod page_source;
 mod pagelink_source;
-mod redirect;
-mod schema;
-
-#[derive(Clone, Debug)]
-pub struct Vertex {
-    pub id: u32,
-    pub title: String,
-    pub is_redirect: bool,
-}
-
-impl Hash for Vertex {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-    }
-}
-
-impl PartialEq for Vertex {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl Eq for Vertex {}
-
-#[derive(PartialEq, Eq, Debug, Copy, Clone, Default)]
-#[repr(align(8))]
-pub struct Edge {
-    pub source_vertex_id: u32,
-    pub dest_vertex_id: u32,
-}
-
-impl Edge {
-    fn from_bytes(buf: &[u8]) -> Edge {
-        let mut val = Edge::default();
-        let source_ptr = buf.as_ptr() as *const Edge;
-        let dest_ptr = &mut val as *mut Edge;
-        unsafe {
-            *dest_ptr = *source_ptr;
-        }
-        val
-    }
-}
-
-pub struct Link<'a> {
-    pub source: &'a Vertex,
-    pub dest: &'a Vertex,
-}
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -252,7 +202,7 @@ impl EdgeProcDB {
 
 // AdjacencySet is an AdjacencyList combined with its vertex
 struct AdjacencySet {
-    adjacency_list: edge_db::AdjacencyList,
+    adjacency_list: wikipedia_speedrun::edge_db::AdjacencyList,
 }
 
 struct AdjacencySetIterator {
@@ -808,64 +758,6 @@ impl GraphDBBuilder {
         al_writer.write_all(&(0u32).to_le_bytes()).unwrap();
 
         al_position
-    }
-}
-
-pub struct GraphDB {
-    pub db: DbConn,
-    pub edge_db: edge_db::EdgeDB,
-}
-
-impl GraphDB {
-    pub fn new(path_ix: &str, path_al: &str, db: DbConn) -> Result<GraphDB, std::io::Error> {
-        let file_ix = File::open(path_ix)?;
-        let file_al = File::open(path_al)?;
-        let mmap_ix = unsafe { MmapOptions::new().map(&file_ix)? };
-        let mmap_al = unsafe { MmapOptions::new().map(&file_al)? };
-        let edge_db = edge_db::EdgeDB::new(mmap_al, mmap_ix);
-        Ok(GraphDB { edge_db, db })
-    }
-
-    pub async fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
-        let canon_title = title.replace('_', " ");
-        log::debug!("loading vertex: {}", canon_title);
-        let vertex_model = schema::vertex::Entity::find()
-            .filter(schema::vertex::Column::Title.eq(title))
-            .one(&self.db)
-            .await
-            .expect("find vertex by title");
-        match vertex_model {
-            Some(v) => Some(Vertex {
-                id: v.id,
-                title: v.title,
-                is_redirect: v.is_redirect,
-            }),
-            None => None,
-        }
-    }
-
-    pub async fn find_vertex_by_id(&self, id: u32) -> Option<Vertex> {
-        let vertex_model = schema::vertex::Entity::find_by_id(id)
-            .one(&self.db)
-            .await
-            .expect("find vertex by title");
-        match vertex_model {
-            Some(v) => Some(Vertex {
-                id: v.id,
-                title: v.title,
-                is_redirect: v.is_redirect,
-            }),
-            None => None,
-        }
-    }
-
-    pub fn bfs(&mut self, src: u32, dest: u32) -> Vec<Vec<u32>> {
-        // self.edge_db.check_db();
-        let start_time = Instant::now();
-        let paths = bfs::breadth_first_search(src, dest, &self.edge_db);
-        let elapsed = start_time.elapsed();
-        println!("\nelapsed time: {} seconds", elapsed.as_secs());
-        paths
     }
 }
 

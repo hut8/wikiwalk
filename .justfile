@@ -26,8 +26,28 @@ fix:
 
 # Build for release
 build-release:
-  cargo build --release
+  cd ui && npm run build
+  cargo build --release --features tls-redirect
 
 # Build for development
 build:
+  cd ui && npm run build
   cargo build
+
+# Install lego for TLS certificates
+install-lego:
+  go install github.com/go-acme/lego/v4/cmd/lego@latest
+  sudo mv "$HOME/go/bin/lego" /usr/local/bin/lego
+
+# Get production TLS certificate
+issue-tls-cert:
+  sudo /usr/local/bin/lego --path /var/wikipedia-speedrun/certs --email="LiamBowen@gmail.com" --domains="wikipediaspeedrun.com" --key-type rsa4096 --http run
+
+# Deploy (must be run on server)
+deploy: build-release
+  rm -rf /var/wikipedia-speedrun/public
+  cp -rav ui/dist /var/wikipedia-speedrun/public
+  sudo rm -f /usr/local/bin/wikipedia-speedrun
+  sudo cp target/release/server /usr/local/bin/wikipedia-speedrun
+  sudo setcap cap_net_bind_service+eip /usr/local/bin/wikipedia-speedrun
+  sudo systemctl restart wikipedia-speedrun
