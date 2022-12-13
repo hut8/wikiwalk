@@ -23,13 +23,16 @@
   import {
     runSearch,
     findPaths,
+    pageStore,
     type WPPage,
     type PagePaths,
   } from "./lib/wikipedia-speedrun";
   import { Timer } from "./lib/timer";
 
-  let sourcePage: WPPage;
-  let targetPage: WPPage;
+  // let sourcePage: WPPage|undefined = undefined;
+  // let targetPage: WPPage|undefined = undefined;
+  let sourcePageID: number | undefined = undefined;
+  let targetPageID: number | undefined = undefined;
   let pathData: PagePaths;
   let snackbar: Snackbar;
 
@@ -45,33 +48,49 @@
     });
   }
 
-  async function autocomplete(term: string): Promise<WPPage[] | false> {
-    if (
-      (sourcePage && term === sourcePage.title) ||
-      (targetPage && term === targetPage.title)
-    ) {
-      console.debug("autocomplete attempted with same value:", term);
-      return [];
-    }
+  let searchCount = 0;
+
+  async function autocomplete(term: string): Promise<number[] | false> {
+    // if (
+    //   (sourcePage && term === sourcePage.title) ||
+    //   (targetPage && term === targetPage.title)
+    // ) {
+    //   console.debug("autocomplete attempted with same value:", term);
+    //   return false;
+    // }
     if (term === "") {
       console.debug("blank search term");
       return [];
     }
+    const searchID = ++searchCount;
+
     console.log("searching for", term);
-    return search(term);
+    const matches = await search(term);
+    if (searchID !== searchCount) {
+      return false;
+    }
+    console.log("matches", matches);
+    return matches.map((p) => p.pageid);
   }
 
   async function computePaths() {
-    if (!(sourcePage && targetPage)) {
+    if (!(sourcePageID && targetPageID)) {
       console.warn("tried to compute paths without pages set");
       return;
     }
-    const sourceId = sourcePage.pageid;
-    const targetId = targetPage.pageid;
     snackbar.forceOpen();
-    pathData = await findPaths(sourceId, targetId);
+    pathData = await findPaths(sourcePageID, targetPageID);
     snackbar.close();
   }
+
+  function getOptionLabel(option: number): string {
+    if (!option) {
+      return "";
+    }
+    return $pageStore.get(option)?.title;
+  }
+
+  $: console.log("source page:", sourcePageID);
 </script>
 
 <TopAppBar>
@@ -84,12 +103,12 @@
 
 <main>
   <div class="page-inputs">
+    <!--  -->
     <Autocomplete
       search={autocomplete}
-      bind:value={sourcePage}
-      getOptionLabel={(option) => (option ? option.title : "")}
+      bind:value={sourcePageID}
       showMenuWithNoInput={false}
-      noMatchesActionDisabled={true}
+      {getOptionLabel}
       label="Source page"
     >
       <Text
@@ -102,10 +121,9 @@
 
     <Autocomplete
       search={autocomplete}
-      bind:value={targetPage}
-      getOptionLabel={(option) => (option ? option.title : "")}
+      bind:value={targetPageID}
       showMenuWithNoInput={false}
-      noMatchesActionDisabled={true}
+      {getOptionLabel}
       label="Target page"
     >
       <Text
@@ -116,7 +134,11 @@
       </Text>
     </Autocomplete>
 
-    <Button on:click={computePaths} variant="raised">
+    <Button
+      on:click={computePaths}
+      disabled={!(sourcePageID && targetPageID)}
+      variant="raised"
+    >
       <ButtonLabel>Compute paths</ButtonLabel>
     </Button>
   </div>

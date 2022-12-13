@@ -19,6 +19,8 @@ export interface WPPage {
   terms: WPTerms;
 }
 
+export const pageStore = writable<Map<number, WPPage>>(new Map());
+
 export async function runSearch(term: string): Promise<WPPage[]> {
   const wikiParams = new URLSearchParams();
   wikiParams.set("action", "query");
@@ -40,8 +42,9 @@ export async function runSearch(term: string): Promise<WPPage[]> {
   endpoint.search = wikiParams.toString();
   const response = await fetch(endpoint, {
     headers: {
-      'User-Agent': 'Wikipedia Speedrun wikipediaspeedrun.com liambowen@gmail.com',
-    }
+      "User-Agent":
+        "Wikipedia Speedrun wikipediaspeedrun.com liambowen@gmail.com",
+    },
   });
   const data = await response.json();
   if ("error" in data) {
@@ -51,6 +54,12 @@ export async function runSearch(term: string): Promise<WPPage[]> {
   const pages = Object.values(data.query.pages) as WPPage[];
   pages.sort((x: any, y: any) => x.index - y.index);
   console.log(pages);
+  pageStore.update(($pageStore) => {
+    for (const p of pages) {
+      $pageStore.set(p.pageid, p);
+    }
+    return $pageStore;
+  });
   return pages;
 }
 
@@ -67,7 +76,10 @@ export type PagePaths = {
   paths: Page[][];
 };
 
-export async function findPaths(sourceId: number, targetId: number): Promise<PagePaths> {
+export async function findPaths(
+  sourceId: number,
+  targetId: number
+): Promise<PagePaths> {
   const endpoint = `/paths/${sourceId}/${targetId}`;
   const response = await fetch(endpoint);
   const data = await response.json();
@@ -79,13 +91,12 @@ export async function findPaths(sourceId: number, targetId: number): Promise<Pag
 const CHUNK_SIZE = 50;
 
 function batchArray<T>(arr: T[]): T[][] {
-  return arr.reduce((all,one,i) => {
-    const ch = Math.floor(i/CHUNK_SIZE);
-    all[ch] = [].concat((all[ch]||[]),one);
-    return all
- }, []);
+  return arr.reduce((all, one, i) => {
+    const ch = Math.floor(i / CHUNK_SIZE);
+    all[ch] = [].concat(all[ch] || [], one);
+    return all;
+  }, []);
 }
-
 
 async function fetchPageDataChunk(pageIds: number[]) {
   const pageIDStr = pageIds.join("|");
@@ -105,8 +116,9 @@ async function fetchPageDataChunk(pageIds: number[]) {
   endpoint.search = wikiParams.toString();
   const response = await fetch(endpoint, {
     headers: {
-      'User-Agent': 'Wikipedia Speedrun wikipediaspeedrun.com liambowen@gmail.com',
-    }
+      "User-Agent":
+        "Wikipedia Speedrun wikipediaspeedrun.com liambowen@gmail.com",
+    },
   });
   const data = await response.json();
   if ("error" in data) {
@@ -119,7 +131,7 @@ async function fetchPageDataChunk(pageIds: number[]) {
 async function fetchPathPageData(pageIdPaths: number[][]): Promise<PagePaths> {
   const pageIdSet = new Set(pageIdPaths.flatMap((x) => x));
   let pageData = {};
-  console.log("running page info query for ids:", pageIdSet.keys())
+  console.log("running page info query for ids:", pageIdSet.keys());
   let batches = batchArray(Array.from(pageIdSet.values()));
   for (let batch of batches) {
     let pageDataChunk = await fetchPageDataChunk(batch);
@@ -129,8 +141,8 @@ async function fetchPathPageData(pageIdPaths: number[][]): Promise<PagePaths> {
   console.log("page data:", pageData);
 
   const pagePaths: PagePaths = {
-    paths:[],
-  }
+    paths: [],
+  };
 
   for (const pageIdPath of pageIdPaths) {
     const pages: Page[] = [];
@@ -140,12 +152,12 @@ async function fetchPathPageData(pageIdPaths: number[][]): Promise<PagePaths> {
         id: wpPage.pageid,
         title: wpPage.title,
         link: wpPage.fullurl,
-      }
-      if (wpPage.pageprops && wpPage.pageprops['wikibase-shortdesc']) {
-        p.description =  wpPage.pageprops['wikibase-shortdesc'];
+      };
+      if (wpPage.pageprops && wpPage.pageprops["wikibase-shortdesc"]) {
+        p.description = wpPage.pageprops["wikibase-shortdesc"];
       }
       if (wpPage.thumbnail && wpPage.thumbnail.source) {
-        p.iconUrl = wpPage.thumbnail.source
+        p.iconUrl = wpPage.thumbnail.source;
       }
       pages.push(p);
     }
