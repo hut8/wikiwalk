@@ -27,6 +27,7 @@
     type WPPage,
     type PagePaths,
   } from "./lib/wikipedia-speedrun";
+  import Activity from "./components/Activity.svelte";
   import { Timer } from "./lib/timer";
 
   // let sourcePage: WPPage|undefined = undefined;
@@ -34,7 +35,7 @@
   let sourcePageID: number | undefined = undefined;
   let targetPageID: number | undefined = undefined;
   let pathData: PagePaths;
-  let snackbar: Snackbar;
+  let errorSnackbar: Snackbar;
 
   const searchTimer = new Timer(500);
 
@@ -49,26 +50,20 @@
   }
 
   let searchCount = 0;
+  let loading = false;
 
   async function autocomplete(term: string): Promise<number[] | false> {
-    // if (
-    //   (sourcePage && term === sourcePage.title) ||
-    //   (targetPage && term === targetPage.title)
-    // ) {
-    //   console.debug("autocomplete attempted with same value:", term);
-    //   return false;
-    // }
     if (term === "") {
       console.debug("blank search term");
       return [];
     }
-    const searchID = ++searchCount;
+    //const searchID = ++searchCount;
 
     console.log("searching for", term);
     const matches = await search(term);
-    if (searchID !== searchCount) {
-      return false;
-    }
+    // if (searchID !== searchCount) {
+    //   return false;
+    // }
     console.log("matches", matches);
     return matches.map((p) => p.pageid);
   }
@@ -78,9 +73,14 @@
       console.warn("tried to compute paths without pages set");
       return;
     }
-    snackbar.forceOpen();
-    pathData = await findPaths(sourcePageID, targetPageID);
-    snackbar.close();
+    try {
+      loading = true;
+      pathData = await findPaths(sourcePageID, targetPageID);
+    } catch(e: any) {
+      errorSnackbar.forceOpen();
+    } finally {
+      loading = false;
+    }
   }
 
   function getOptionLabel(option: number): string {
@@ -89,8 +89,6 @@
     }
     return $pageStore.get(option)?.title;
   }
-
-  $: console.log("source page:", sourcePageID);
 </script>
 
 <TopAppBar>
@@ -171,8 +169,14 @@
     </div>
   {/if}
 
-  <Snackbar bind:this={snackbar}>
-    <SnackbarLabel>Finding paths!</SnackbarLabel>
+  {#if loading}
+    <div class="loading-container">
+      <Activity />
+    </div>
+  {/if}
+
+  <Snackbar bind:this={errorSnackbar}>
+    <SnackbarLabel>Something has gone terribly wrong ☹️</SnackbarLabel>
     <Actions>
       <IconButton class="material-icons" title="Dismiss">close</IconButton>
     </Actions>
@@ -182,6 +186,18 @@
 <style>
   main {
     padding-top: 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 90vh;
+  }
+
+  .loading-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-grow: 1;
   }
 
   .page-inputs {
