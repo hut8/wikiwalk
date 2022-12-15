@@ -76,7 +76,7 @@
     try {
       loading = true;
       pathData = await findPaths(sourcePageID, targetPageID);
-    } catch(e: any) {
+    } catch (e: any) {
       errorSnackbar.forceOpen();
     } finally {
       loading = false;
@@ -158,7 +158,9 @@
                   {/if}
                   <Text>
                     <PrimaryText>{page.title}</PrimaryText>
-                    <SecondaryText>{page.description}</SecondaryText>
+                    {#if page.description}
+                      <SecondaryText>{page.description}</SecondaryText>
+                    {/if}
                   </Text>
                 </Item>
               {/each}
