@@ -4,7 +4,7 @@ use hyper::{http, Body, Request, Response, Uri};
 
 #[cfg(not(feature = "tls-redirect"))]
 pub async fn launch_tls_redirect() {
-    log::debug!("not launching tls redirect due to feature config");
+    log::info!("not launching tls redirect due to feature config");
 }
 
 async fn tls_redirect(req: Request<Body>) -> http::Result<Response<Body>> {
@@ -16,7 +16,7 @@ async fn tls_redirect(req: Request<Body>) -> http::Result<Response<Body>> {
         .scheme("https")
         .build()
         .unwrap();
-    log::debug!("redirecting http to https: {}", destination.to_string());
+    log::info!("redirecting http to https: {}", destination.to_string());
 
     let res = Response::builder()
         .status(rocket::http::Status::MovedPermanently.code)
@@ -47,9 +47,9 @@ pub async fn launch_tls_redirect() {
 
     //let server = Server::bind(&addr).serve(make_svc);
     let server = Server::bind(&addr).serve(make_svc);
-
+    log::info!("launching tls redirect");
     // Run this server for... forever!
     if let Err(e) = server.await {
-        eprintln!("tls redirect server error: {e}");
+        log::error!("tls redirect server error: {e}");
     }
 }
