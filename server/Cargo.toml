@@ -17,6 +17,7 @@ sea-orm = { version = "^0", features = [
   "runtime-tokio-rustls",
   "macros",
 ] }
+tokio = "1.23.0"
 
 [features]
 # default = ["tls-redirect"]

@@ -4,16 +4,22 @@ use hyper::{http, Body, Request, Response, Uri};
 
 #[cfg(not(feature = "tls-redirect"))]
 pub async fn launch_tls_redirect() {
-    log::info!("not launching tls redirect due to feature config");
+    println!("not launching tls redirect due to feature config");
 }
 
 async fn tls_redirect(req: Request<Body>) -> http::Result<Response<Body>> {
-    let plain_uri = req.uri().to_owned().into_parts();
-    let authority = plain_uri.authority.unwrap();
-    let host = authority.host();
+    log::info!("plaintext request at {u}", u = req.uri());
+    let host = match req.headers().get(http::header::HOST) {
+        Some(host) => host.to_str().unwrap_or("wikipediaspeedrun.com"),
+        None => {
+            // just guess
+            "wikipediaspeedrun.com"
+        }
+    };
     let destination = Uri::builder()
         .authority(host)
         .scheme("https")
+        .path_and_query(req.uri().path_and_query().unwrap().to_owned())
         .build()
         .unwrap();
     log::info!("redirecting http to https: {}", destination.to_string());
@@ -47,9 +53,9 @@ pub async fn launch_tls_redirect() {
 
     //let server = Server::bind(&addr).serve(make_svc);
     let server = Server::bind(&addr).serve(make_svc);
-    log::info!("launching tls redirect");
+    println!("launching tls redirect");
     // Run this server for... forever!
     if let Err(e) = server.await {
-        log::error!("tls redirect server error: {e}");
+        panic!("tls redirect server error: {e}");
     }
 }

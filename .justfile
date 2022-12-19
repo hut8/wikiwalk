@@ -27,7 +27,8 @@ fix:
 # Build for release
 build-release:
   cd ui && npm run build
-  cargo build --release --features tls-redirect
+  rm -f target/release/server
+  cargo build --release --features tls-redirect --bin server
 
 # Build for development
 build:

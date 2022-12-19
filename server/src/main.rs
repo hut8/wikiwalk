@@ -34,9 +34,8 @@ async fn pages(title: &str, gdb: &State<GraphDB>) -> Json<Vec<Vertex>> {
     )
 }
 
-
-#[rocket::launch]
-async fn rocket() -> _ {
+#[rocket::main]
+async fn main() {
     let home_dir = dirs::home_dir().unwrap();
     let default_data_dir = home_dir.join("data").join("speedrun-data");
     let data_dir = match std::env::var("DATA_ROOT").ok() {
@@ -60,10 +59,14 @@ async fn rocket() -> _ {
     )
     .unwrap();
 
-    std::thread::spawn(|| async { tls::launch_tls_redirect().await });
+    tokio::spawn(async move {
+        tls::launch_tls_redirect().await
+    });
 
-    rocket::build()
+    let _ = rocket::build()
         .manage(gdb)
         .mount("/", FileServer::from(static_root))
         .mount("/", rocket::routes![paths, pages])
+        .launch()
+        .await;
 }
