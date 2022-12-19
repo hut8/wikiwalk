@@ -30,8 +30,6 @@
   import Activity from "./components/Activity.svelte";
   import { Timer } from "./lib/timer";
 
-  // let sourcePage: WPPage|undefined = undefined;
-  // let targetPage: WPPage|undefined = undefined;
   let sourcePageID: number | undefined = undefined;
   let targetPageID: number | undefined = undefined;
   let pathData: PagePaths;
@@ -42,7 +40,6 @@
   async function search(term: string): Promise<WPPage[]> {
     return new Promise((resolve, _reject) => {
       searchTimer.run(async () => {
-        console.log("running search for", term);
         const results = await runSearch(term);
         resolve(results);
       });
@@ -57,14 +54,8 @@
       console.debug("blank search term");
       return [];
     }
-    //const searchID = ++searchCount;
 
-    console.log("searching for", term);
     const matches = await search(term);
-    // if (searchID !== searchCount) {
-    //   return false;
-    // }
-    console.log("matches", matches);
     return matches.map((p) => p.pageid);
   }
 
@@ -101,7 +92,6 @@
 
 <main>
   <div class="page-inputs">
-    <!--  -->
     <Autocomplete
       search={autocomplete}
       bind:value={sourcePageID}
