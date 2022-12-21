@@ -24,6 +24,7 @@ use std::thread;
 use wikipedia_speedrun::redirect::RedirectMap;
 use wikipedia_speedrun::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
 
+mod fetch;
 mod page_source;
 mod pagelink_source;
 
@@ -252,7 +253,7 @@ impl Iterator for AdjacencySetIterator {
             }
             if current_edge.source_vertex_id < self.vertex_id {
                 panic!("current edge source vertex id={} is before current vertex id={}; edge was missed",
-            current_edge.source_vertex_id, self.vertex_id);
+                       current_edge.source_vertex_id, self.vertex_id);
             }
 
             if current_edge.dest_vertex_id > self.max_page_id {
@@ -286,7 +287,7 @@ impl Iterator for AdjacencySetIterator {
 
             if current_edge.dest_vertex_id < self.vertex_id {
                 panic!("current edge dest vertex id={} is before current vertex id={}; edge was missed",
-              current_edge.dest_vertex_id, self.vertex_id);
+                       current_edge.dest_vertex_id, self.vertex_id);
             }
 
             if current_edge.source_vertex_id > self.max_page_id {
@@ -568,7 +569,7 @@ impl GraphDBBuilder {
                         }
                         None => {
                             log::debug!("tried to resolve redirect for page: [{}: {}] but no entry was in redirects",
-                    v.id, v.title);
+                                        v.id, v.title);
                         }
                     }
                     continue;
@@ -808,6 +809,8 @@ enum Command {
         /// Article to query
         target: String,
     },
+    /// Fetch latest dumps
+    Fetch,
 }
 
 #[tokio::main]
@@ -930,5 +933,18 @@ async fn main() {
                 }
             }
         }
+        Command::Fetch => match fetch::find_latest().await {
+            Some(status) => {
+                let dump_dir = data_dir.join("dumps");
+                fetch::fetch_dump(&dump_dir, &status).await.expect("fetch dumps");
+            }
+            None => {
+                log::error!(
+                    "could not find any dumps in the last {days} days",
+                    days = fetch::OLDEST_DUMP
+                );
+                std::process::exit(1);
+            }
+        },
     }
 }
