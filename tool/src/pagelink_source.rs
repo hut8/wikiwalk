@@ -65,7 +65,6 @@ impl WPPageLinkSource {
         let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
         let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_sql_file);
         let pagelinks_sql = BufReader::new(pagelinks_sql);
-        // 56034
         pagelinks_sql
             .lines()
             .filter(|line_res| {

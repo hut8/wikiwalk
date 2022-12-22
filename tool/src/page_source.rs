@@ -61,7 +61,10 @@ impl WPPageSource {
     }
 
     pub fn count_vertex_inserts(&self) -> usize {
-        log::debug!("counting inserts in page sql");
+        log::debug!(
+            "counting inserts in page sql: {}",
+            &self.source_path.display()
+        );
         let page_sql_file = File::open(&self.source_path).expect("open page file");
         let page_sql = flate2::read::GzDecoder::new(page_sql_file);
         let page_sql = BufReader::new(page_sql);

@@ -6,7 +6,6 @@ use itertools::Itertools;
 use parse_mediawiki_sql::field_types::PageNamespace;
 use parse_mediawiki_sql::iterate_sql_insertions;
 use parse_mediawiki_sql::schemas::Redirect;
-use parse_mediawiki_sql::utils::memory_map;
 use sea_orm::{ColumnTrait, DbConn, EntityTrait, QueryFilter};
 
 use crate::schema;

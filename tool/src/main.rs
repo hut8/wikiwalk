@@ -843,9 +843,7 @@ async fn main() {
 
     // directory used for processing import
     match cli.command {
-        Command::Build {
-            dump_date,
-        } => {
+        Command::Build { dump_date } => {
             // TODO: validate dump date
             let page = dump_path(&data_dir, &dump_date, "page");
             let redirects = dump_path(&data_dir, &dump_date, "redirects");
@@ -943,7 +941,9 @@ async fn main() {
         Command::Fetch => match fetch::find_latest().await {
             Some(status) => {
                 let dump_dir = data_dir.join("dumps");
-                fetch::fetch_dump(&dump_dir, &status).await.expect("fetch dumps");
+                fetch::fetch_dump(&dump_dir, &status)
+                    .await
+                    .expect("fetch dumps");
             }
             None => {
                 log::error!(
