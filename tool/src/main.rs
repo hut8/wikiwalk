@@ -787,15 +787,9 @@ enum Command {
     /// Build the database from a MediaWiki Dump
     /// https://dumps.wikimedia.org/enwiki/latest/
     Build {
-        /// Path to page.sql
+        /// Dump date to import
         #[clap(long)]
-        page: PathBuf,
-        /// Path to pagelinks.sql
-        #[clap(long)]
-        pagelinks: PathBuf,
-        /// Path to redirects.sql
-        #[clap(long)]
-        redirects: PathBuf,
+        dump_date: String,
     },
     /// Find the shortest path
     Run {
@@ -811,6 +805,12 @@ enum Command {
     },
     /// Fetch latest dumps
     Fetch,
+}
+
+fn dump_path(data_dir: &PathBuf, date: &str, table: &str) -> PathBuf {
+    let dumps_dir = data_dir.join("dumps");
+    let basename = format!("enwiki-{date}-{table}.sql.gz");
+    dumps_dir.join(basename)
 }
 
 #[tokio::main]
@@ -840,10 +840,13 @@ async fn main() {
     // directory used for processing import
     match cli.command {
         Command::Build {
-            page,
-            pagelinks,
-            redirects,
+            dump_date,
         } => {
+            // TODO: validate dump date
+            let page = dump_path(&data_dir, &dump_date, "page");
+            let redirects = dump_path(&data_dir, &dump_date, "redirects");
+            let pagelinks = dump_path(&data_dir, &dump_date, "pagelinks");
+
             log::info!("building database");
             let mut gddb = GraphDBBuilder::new(
                 page,

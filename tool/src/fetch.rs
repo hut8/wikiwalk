@@ -1,9 +1,18 @@
 use chrono::{NaiveDate, Utc};
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
-use reqwest::Client;
+use reqwest::{
+    header::{HeaderMap, HeaderValue},
+    Client,
+};
 use serde::{Deserialize, Serialize};
-use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::PathBuf};
+use std::{
+    cmp::min,
+    collections::HashMap,
+    fs::File,
+    io::Write,
+    path::PathBuf,
+};
 
 /// Look back this many days for the oldest dump
 pub static OLDEST_DUMP: u64 = 60;
@@ -77,7 +86,7 @@ async fn fetch_job(
             "https://dumps.wikimedia.org{rel_url}",
             rel_url = file_info.url
         );
-        fetch_file(client, &url, dump_dir, file).await?;
+        fetch_file(client, &url, dump_dir, file, file_info).await?;
     }
     Ok(())
 }
@@ -87,14 +96,10 @@ pub async fn fetch_file(
     url: &str,
     dump_dir: &PathBuf,
     basename: &String,
+    file_info: &DumpFileInfo,
 ) -> Result<(), anyhow::Error> {
     let sink_path = dump_dir.join(basename);
-    // Reqwest setup
-    let res = client.get(url).send().await?;
-    res.error_for_status_ref()?;
-    let total_size = res
-        .content_length()
-        .ok_or(anyhow::anyhow!("could not determine size of file"))?;
+    let total_size = file_info.size as u64;
 
     // Indicatif setup
     let pb = ProgressBar::new(total_size);
@@ -103,8 +108,35 @@ pub async fn fetch_file(
     pb.set_style(style);
     pb.set_message(basename.clone());
 
+    // Partial resume support
+    let offset = match std::fs::metadata(&sink_path) {
+        Ok(metadata) => {
+            log::info!(
+                "resuming download at byte {offset} to {sink_path}",
+                offset = metadata.len(),
+                sink_path = sink_path.display()
+            );
+            metadata.len()
+        }
+        Err(_) => 0,
+    };
+
+    // Reqwest setup
+    let mut headers = HeaderMap::new();
+    if offset > 0 {
+        let header_val =
+            HeaderValue::from_str(format!("{}-", offset).as_str()).expect("construct range header");
+        headers.insert(reqwest::header::RANGE, header_val);
+    }
+    let res = client.get(url).headers(headers).send().await?;
+    res.error_for_status_ref()?;
+
     // download chunks
-    let mut file = File::create(&sink_path)?;
+    let mut file = File::options()
+        .append(true)
+        .write(true)
+        .read(true)
+        .create(true).open(&sink_path)?;
     let mut downloaded: u64 = 0;
     let mut stream = res.bytes_stream();
 

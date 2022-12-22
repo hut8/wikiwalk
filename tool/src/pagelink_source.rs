@@ -41,7 +41,8 @@ impl WPPageLinkSource {
         progress.set_draw_target(draw_target);
 
         let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
-        let pagelinks_sql = BufReader::new(pagelinks_sql_file);
+        let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_sql_file);
+        let pagelinks_sql = BufReader::new(pagelinks_sql);
         let pagelinks_line_iter = pagelinks_sql.lines();
 
         pagelinks_line_iter.par_bridge().for_each(|chunk| {
@@ -62,7 +63,8 @@ impl WPPageLinkSource {
     pub fn count_edge_inserts(&self) -> usize {
         log::debug!("counting inserts in pagelinks sql");
         let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
-        let pagelinks_sql = BufReader::new(pagelinks_sql_file);
+        let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_sql_file);
+        let pagelinks_sql = BufReader::new(pagelinks_sql);
         // 56034
         pagelinks_sql
             .lines()

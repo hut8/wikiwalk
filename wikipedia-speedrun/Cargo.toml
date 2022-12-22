@@ -11,6 +11,7 @@ crossbeam = "*"
 hex = "*"
 dirs = "4.0"
 dotenv = "0.15.0"
+flate2 = "1.0"
 futures = "*"
 sha3 = "0.10.6"
 sea-orm = { version = "^0", features = [
