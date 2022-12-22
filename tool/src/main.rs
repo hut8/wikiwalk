@@ -343,8 +343,8 @@ impl DBStatus {
     pub fn compute(page_path: PathBuf, pagelinks_path: PathBuf) -> DBStatus {
         let wp_page_hash_thread = thread::spawn(|| Self::hash_file(page_path));
         let wp_pagelinks_hash_thread = thread::spawn(|| Self::hash_file(pagelinks_path));
-        let wp_page_hash = Some(wp_page_hash_thread.join().unwrap());
-        let wp_pagelinks_hash = Some(wp_pagelinks_hash_thread.join().unwrap());
+        let wp_page_hash = wp_page_hash_thread.join().unwrap();
+        let wp_pagelinks_hash = wp_pagelinks_hash_thread.join().unwrap();
         DBStatus {
             wp_page_hash,
             wp_pagelinks_hash,
@@ -378,15 +378,19 @@ impl DBStatus {
         serde_json::to_writer_pretty(&sink, self).unwrap();
     }
 
-    fn hash_file(path: PathBuf) -> Vec<u8> {
-        let source = File::open(path).unwrap();
-        let source = unsafe { Mmap::map(&source).unwrap() };
-        let mut hasher = Sha3_256::new();
-        let max_tail_size: usize = 1024 * 1024;
-        let tail_size = source.len().min(max_tail_size);
-        let tail = (source.len() - tail_size)..source.len() - 1;
-        hasher.update(&source[tail]);
-        hasher.finalize().to_vec()
+    fn hash_file(path: PathBuf) -> Option<Vec<u8>> {
+        match File::open(path) {
+            Ok(source) => {
+                let source = unsafe { Mmap::map(&source).unwrap() };
+                let mut hasher = Sha3_256::new();
+                let max_tail_size: usize = 1024 * 1024;
+                let tail_size = source.len().min(max_tail_size);
+                let tail = (source.len() - tail_size)..source.len() - 1;
+                hasher.update(&source[tail]);
+                Some(hasher.finalize().to_vec())
+            }
+            Err(_) => None,
+        }
     }
 }
 
