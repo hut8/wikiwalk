@@ -6,7 +6,7 @@ use reqwest::{
     Client,
 };
 use serde::{Deserialize, Serialize};
-use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::{PathBuf, Path}};
+use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::{Path}};
 
 /// Look back this many days for the oldest dump
 pub static OLDEST_DUMP: u64 = 60;
