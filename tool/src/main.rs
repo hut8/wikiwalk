@@ -20,7 +20,7 @@ use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io::Write;
 use std::io::{prelude::*, BufWriter};
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::thread;
 use wikipedia_speedrun::redirect::RedirectMap;
 use wikipedia_speedrun::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
@@ -853,7 +853,7 @@ async fn run_build(
     gddb.build_database().await;
 }
 
-async fn run_fetch(data_dir: &PathBuf) -> DumpStatus {
+async fn run_fetch(data_dir: &Path) -> DumpStatus {
     match fetch::find_latest().await {
         Some(status) => {
             let dump_dir = data_dir.join("dumps");

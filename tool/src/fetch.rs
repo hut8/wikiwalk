@@ -6,7 +6,7 @@ use reqwest::{
     Client,
 };
 use serde::{Deserialize, Serialize};
-use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::PathBuf};
+use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::{PathBuf, Path}};
 
 /// Look back this many days for the oldest dump
 pub static OLDEST_DUMP: u64 = 60;
@@ -70,7 +70,7 @@ pub async fn fetch_dump(dump_dir: &PathBuf, status: &DumpStatus) -> Result<(), a
 }
 
 async fn fetch_job(
-    dump_dir: &PathBuf,
+    dump_dir: &Path,
     client: &Client,
     job: &JobStatus,
 ) -> Result<(), anyhow::Error> {
@@ -89,7 +89,7 @@ async fn fetch_job(
 pub async fn fetch_file(
     client: &Client,
     url: &str,
-    dump_dir: &PathBuf,
+    dump_dir: &Path,
     basename: &String,
     file_info: &DumpFileInfo,
 ) -> Result<(), anyhow::Error> {
