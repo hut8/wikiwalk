@@ -19,7 +19,7 @@ fn paths(source_id: u32, dest_id: u32, gdb: &State<GraphDB>) -> Json<Vec<Vec<u32
 async fn pages(title: &str, gdb: &State<GraphDB>) -> Json<Vec<Vertex>> {
     let vertex_models = schema::vertex::Entity::find()
         .filter(schema::vertex::Column::Title.starts_with(title))
-        .all(&gdb.db)
+        .all(&gdb.graph_db)
         .await
         .expect("find vertex by title");
     Json(
@@ -46,16 +46,19 @@ async fn main() {
     std::fs::create_dir_all(&data_dir).unwrap();
     let vertex_al_path = data_dir.join("vertex_al");
     let vertex_ix_path = data_dir.join("vertex_al_ix");
-    let db_path = data_dir.join("wikipedia-speedrun.db");
-    let conn_str = format!("sqlite:///{}?mode=ro", db_path.to_string_lossy());
-    log::debug!("using database: {}", conn_str);
-    let db: DbConn = Database::connect(conn_str).await.expect("db connect");
+    let graph_db_path = data_dir.join("graph.db");
+    let conn_str = format!("sqlite:///{}?mode=ro", graph_db_path.to_string_lossy());
+    let graph_db: DbConn = Database::connect(conn_str).await.expect("graph db connect");
+    let master_db_path = data_dir.join("master.db");
+    let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());
+    let master_db: DbConn = Database::connect(master_conn_str).await.expect("master db connect");
     let static_root = std::env::var("STATIC_ROOT").unwrap_or("../ui/dist".into());
 
     let gdb = GraphDB::new(
         vertex_ix_path.to_str().unwrap(),
         vertex_al_path.to_str().unwrap(),
-        db,
+        graph_db,
+        master_db,
     )
     .unwrap();
 

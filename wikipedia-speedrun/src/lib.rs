@@ -56,18 +56,19 @@ pub struct Link<'a> {
 }
 
 pub struct GraphDB {
-    pub db: DbConn,
+    pub master_db: DbConn,
+    pub graph_db: DbConn,
     pub edge_db: edge_db::EdgeDB,
 }
 
 impl GraphDB {
-    pub fn new(path_ix: &str, path_al: &str, db: DbConn) -> Result<GraphDB, std::io::Error> {
+    pub fn new(path_ix: &str, path_al: &str, graph_db: DbConn, master_db: DbConn) -> Result<GraphDB, std::io::Error> {
         let file_ix = File::open(path_ix)?;
         let file_al = File::open(path_al)?;
         let mmap_ix = unsafe { MmapOptions::new().map(&file_ix)? };
         let mmap_al = unsafe { MmapOptions::new().map(&file_al)? };
         let edge_db = edge_db::EdgeDB::new(mmap_al, mmap_ix);
-        Ok(GraphDB { edge_db, db })
+        Ok(GraphDB { edge_db, graph_db, master_db })
     }
 
     pub async fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
@@ -75,7 +76,7 @@ impl GraphDB {
         log::debug!("loading vertex: {}", canon_title);
         let vertex_model = schema::vertex::Entity::find()
             .filter(schema::vertex::Column::Title.eq(title))
-            .one(&self.db)
+            .one(&self.graph_db)
             .await
             .expect("find vertex by title");
         match vertex_model {
@@ -90,7 +91,7 @@ impl GraphDB {
 
     pub async fn find_vertex_by_id(&self, id: u32) -> Option<Vertex> {
         let vertex_model = schema::vertex::Entity::find_by_id(id)
-            .one(&self.db)
+            .one(&self.graph_db)
             .await
             .expect("find vertex by title");
         match vertex_model {

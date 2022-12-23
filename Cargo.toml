@@ -1,2 +1,2 @@
 [workspace]
-members = ["wikipedia-speedrun", "server", "tool"]
+members = ["wikipedia-speedrun", "server", "tool", "migration"]
