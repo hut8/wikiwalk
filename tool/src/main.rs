@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
+use fetch::DumpStatus;
 use itertools::Itertools;
 use memmap2::{Mmap, MmapMut};
 use memory_stats::memory_stats;
@@ -396,20 +397,20 @@ impl DBStatus {
 
 impl GraphDBBuilder {
     pub fn new(
-        page: PathBuf,
-        pagelinks: PathBuf,
-        redirects_path: PathBuf,
-        ix_path: PathBuf,
-        al_path: PathBuf,
-        process_path: PathBuf,
+        page: &PathBuf,
+        pagelinks: &PathBuf,
+        redirects_path: &PathBuf,
+        ix_path: &PathBuf,
+        al_path: &PathBuf,
+        process_path: &PathBuf,
     ) -> GraphDBBuilder {
         GraphDBBuilder {
-            page_path: page,
-            pagelinks_path: pagelinks,
-            ix_path,
-            al_path,
-            process_path,
-            redirects_path,
+            page_path: page.into(),
+            pagelinks_path: pagelinks.into(),
+            ix_path: ix_path.into(),
+            al_path: al_path.into(),
+            process_path: process_path.into(),
+            redirects_path: redirects_path.into(),
         }
     }
 
@@ -716,9 +717,8 @@ impl GraphDBBuilder {
 
     pub async fn create_paths_table(&self, db: &DbConn) {
         let schema = Schema::new(DbBackend::Sqlite);
-        let mut create_stmt = schema
-            .create_table_from_entity(schema::path::Entity);
-        let mut stmt = create_stmt.if_not_exists();
+        let mut create_stmt = schema.create_table_from_entity(schema::path::Entity);
+        let stmt = create_stmt.if_not_exists();
 
         db.execute(db.get_database_backend().build(stmt))
             .await
@@ -821,12 +821,55 @@ enum Command {
     },
     /// Fetch latest dumps
     Fetch,
+    /// Fetch latest dump and import it
+    Pull,
 }
 
 fn dump_path(data_dir: &PathBuf, date: &str, table: &str) -> PathBuf {
     let dumps_dir = data_dir.join("dumps");
     let basename = format!("enwiki-{date}-{table}.sql.gz");
     dumps_dir.join(basename)
+}
+
+async fn run_build(
+    data_dir: &PathBuf,
+    dump_date: String,
+    vertex_ix_path: &PathBuf,
+    vertex_al_path: &PathBuf,
+) {
+    let page = dump_path(&data_dir, &dump_date, "page");
+    let redirects = dump_path(&data_dir, &dump_date, "redirect");
+    let pagelinks = dump_path(&data_dir, &dump_date, "pagelinks");
+
+    log::info!("building database");
+    let mut gddb = GraphDBBuilder::new(
+        &page,
+        &pagelinks,
+        &redirects,
+        vertex_ix_path,
+        vertex_al_path,
+        data_dir,
+    );
+    gddb.build_database().await;
+}
+
+async fn run_fetch(data_dir: &PathBuf) -> DumpStatus {
+    match fetch::find_latest().await {
+        Some(status) => {
+            let dump_dir = data_dir.join("dumps");
+            fetch::fetch_dump(&dump_dir, &status)
+                .await
+                .expect("fetch dumps");
+            status
+        }
+        None => {
+            log::error!(
+                "could not find any dumps in the last {days} days",
+                days = fetch::OLDEST_DUMP
+            );
+            std::process::exit(1);
+        }
+    }
 }
 
 #[tokio::main]
@@ -860,21 +903,7 @@ async fn main() {
     // directory used for processing import
     match cli.command {
         Command::Build { dump_date } => {
-            // TODO: validate dump date
-            let page = dump_path(&data_dir, &dump_date, "page");
-            let redirects = dump_path(&data_dir, &dump_date, "redirects");
-            let pagelinks = dump_path(&data_dir, &dump_date, "pagelinks");
-
-            log::info!("building database");
-            let mut gddb = GraphDBBuilder::new(
-                page,
-                pagelinks,
-                redirects,
-                vertex_ix_path,
-                vertex_al_path,
-                data_dir,
-            );
-            gddb.build_database().await;
+            run_build(&data_dir, dump_date, &vertex_ix_path, &vertex_al_path).await;
         }
         Command::Run {
             source,
@@ -956,20 +985,22 @@ async fn main() {
                 }
             }
         }
-        Command::Fetch => match fetch::find_latest().await {
-            Some(status) => {
-                let dump_dir = data_dir.join("dumps");
-                fetch::fetch_dump(&dump_dir, &status)
-                    .await
-                    .expect("fetch dumps");
-            }
-            None => {
-                log::error!(
-                    "could not find any dumps in the last {days} days",
-                    days = fetch::OLDEST_DUMP
-                );
-                std::process::exit(1);
-            }
-        },
+        Command::Fetch => {
+            run_fetch(&data_dir).await;
+        }
+        Command::Pull => {
+            let dump_status = run_fetch(&data_dir).await;
+            log::info!(
+                "fetched data from {dump_date}",
+                dump_date = dump_status.dump_date
+            );
+            run_build(
+                &data_dir,
+                dump_status.dump_date,
+                &vertex_ix_path,
+                &vertex_al_path,
+            )
+            .await;
+        }
     }
 }

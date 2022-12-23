@@ -24,9 +24,9 @@ impl RedirectMap {
     }
 
     pub async fn parse(&mut self, db: DbConn) {
-        log::debug!("parsing redirects table");
+        log::debug!("parsing redirects table at {}", &self.path.display());
 
-        let redirect_sql_file = File::open(&self.path).expect("open page file");
+        let redirect_sql_file = File::open(&self.path).expect("open redirects file");
         let redirect_sql = flate2::read::GzDecoder::new(redirect_sql_file);
         let redirect_sql = BufReader::new(redirect_sql);
         let redirect_line_iter = redirect_sql.lines();

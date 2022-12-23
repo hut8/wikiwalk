@@ -42,13 +42,14 @@ pub async fn fetch_dump_status(
     let date_fmt = date.format("%Y%m%d").to_string();
     let url_str = format!("https://dumps.wikimedia.org/enwiki/{date_fmt}/dumpstatus.json");
     log::info!("fetching dump status from: {url_str}");
-    let dump_status: DumpStatus = client
+    let mut dump_status: DumpStatus = client
         .get(url_str)
         .send()
         .await?
         .error_for_status()?
         .json()
         .await?;
+    dump_status.dump_date = date_fmt;
     Ok(dump_status)
 }
 
@@ -168,6 +169,8 @@ pub async fn fetch_file(
 pub struct DumpStatus {
     pub jobs: Jobs,
     pub version: String,
+    #[serde(skip)]
+    pub dump_date: String,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
