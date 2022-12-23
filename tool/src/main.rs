@@ -839,7 +839,11 @@ async fn main() {
     let vertex_ix_path = data_dir.join("vertex_al_ix");
     let db_path = data_dir.join("wikipedia-speedrun.db");
     let conn_str = format!("sqlite:///{}?mode=ro", db_path.to_string_lossy());
-    log::debug!("using database: {}", conn_str);
+    let master_db_path = data_dir.join("master.db");
+    let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());
+    let master_db: DbConn = Database::connect(master_conn_str)
+        .await
+        .expect("master db connect");
 
     // directory used for processing import
     match cli.command {
@@ -871,6 +875,7 @@ async fn main() {
                 vertex_ix_path.to_str().unwrap(),
                 vertex_al_path.to_str().unwrap(),
                 db,
+                master_db,
             )
             .unwrap();
             let source_title = source.replace('_', " ");
@@ -889,7 +894,7 @@ async fn main() {
 
             log::info!("speedrun: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
 
-            let paths = gdb.bfs(source_vertex.id, dest_vertex.id);
+            let paths = gdb.bfs(source_vertex.id, dest_vertex.id).await;
             if paths.is_empty() {
                 println!("\nno path found");
                 return;
@@ -913,6 +918,7 @@ async fn main() {
                 vertex_ix_path.to_str().unwrap(),
                 vertex_al_path.to_str().unwrap(),
                 db,
+                master_db,
             )
             .unwrap();
             let vertex = gdb

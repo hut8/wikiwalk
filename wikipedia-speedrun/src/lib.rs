@@ -127,7 +127,7 @@ impl GraphDB {
             path_data: Set(paths_ser),
             ..Default::default()
         };
-        let path_entity = path_entity
+        path_entity
             .insert(&self.graph_db)
             .await
             .expect("insert path record");

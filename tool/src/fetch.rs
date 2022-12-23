@@ -6,13 +6,7 @@ use reqwest::{
     Client,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    cmp::min,
-    collections::HashMap,
-    fs::File,
-    io::Write,
-    path::PathBuf,
-};
+use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::PathBuf};
 
 /// Look back this many days for the oldest dump
 pub static OLDEST_DUMP: u64 = 60;
@@ -111,6 +105,18 @@ pub async fn fetch_file(
     // Partial resume support
     let offset = match std::fs::metadata(&sink_path) {
         Ok(metadata) => {
+            if metadata.len() == total_size {
+                pb.finish_with_message(format!(
+                    "{} already downloaded to {}",
+                    url,
+                    sink_path.clone().display()
+                ));
+                log::info!(
+                    "{sink_path} is already complete",
+                    sink_path = sink_path.display()
+                );
+                return Ok(());
+            }
             log::info!(
                 "resuming download at byte {offset} to {sink_path}",
                 offset = metadata.len(),
@@ -136,7 +142,8 @@ pub async fn fetch_file(
         .append(true)
         .write(true)
         .read(true)
-        .create(true).open(&sink_path)?;
+        .create(true)
+        .open(&sink_path)?;
     let mut downloaded: u64 = 0;
     let mut stream = res.bytes_stream();
 
