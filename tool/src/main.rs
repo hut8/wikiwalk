@@ -825,7 +825,7 @@ enum Command {
     Pull,
 }
 
-fn dump_path(data_dir: &PathBuf, date: &str, table: &str) -> PathBuf {
+fn dump_path(data_dir: &Path, date: &str, table: &str) -> PathBuf {
     let dumps_dir = data_dir.join("dumps");
     let basename = format!("enwiki-{date}-{table}.sql.gz");
     dumps_dir.join(basename)

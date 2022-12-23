@@ -53,7 +53,7 @@ pub async fn fetch_dump_status(
     Ok(dump_status)
 }
 
-pub async fn fetch_dump(dump_dir: &PathBuf, status: &DumpStatus) -> Result<(), anyhow::Error> {
+pub async fn fetch_dump(dump_dir: &Path, status: &DumpStatus) -> Result<(), anyhow::Error> {
     log::info!("fetching dump for {status:?}");
     let client = reqwest::Client::default();
     for job in [
