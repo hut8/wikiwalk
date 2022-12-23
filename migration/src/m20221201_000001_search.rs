@@ -22,7 +22,6 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Search::TargetPageId).integer().not_null())
                     .col(ColumnDef::new(Search::Timestamp).timestamp().not_null())
                     .col(ColumnDef::new(Search::Duration).float().not_null())
-                    .col(ColumnDef::new(Search::PathId).integer().not_null())
                     .to_owned(),
             )
             .await
@@ -45,5 +44,4 @@ enum Search {
     TargetPageId,
     Timestamp,
     Duration,
-    PathId
 }
