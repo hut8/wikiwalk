@@ -837,9 +837,9 @@ async fn run_build(
     vertex_ix_path: &PathBuf,
     vertex_al_path: &PathBuf,
 ) {
-    let page = dump_path(&data_dir, &dump_date, "page");
-    let redirects = dump_path(&data_dir, &dump_date, "redirect");
-    let pagelinks = dump_path(&data_dir, &dump_date, "pagelinks");
+    let page = dump_path(data_dir, &dump_date, "page");
+    let redirects = dump_path(data_dir, &dump_date, "redirect");
+    let pagelinks = dump_path(data_dir, &dump_date, "pagelinks");
 
     log::info!("building database");
     let mut gddb = GraphDBBuilder::new(

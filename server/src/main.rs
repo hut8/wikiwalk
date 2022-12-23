@@ -65,7 +65,7 @@ async fn main() {
     let master_db: DbConn = Database::connect(master_conn_str).await.expect("master db connect");
     make_database(&master_db).await;
 
-    let static_root = std::env::var("STATIC_ROOT").unwrap_or("../ui/dist".into());
+    let static_root = std::env::var("STATIC_ROOT").unwrap_or_else(|_|"../ui/dist".into());
 
     let gdb = GraphDB::new(
         vertex_ix_path.to_str().unwrap(),
