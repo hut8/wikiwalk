@@ -3,14 +3,14 @@ use std::path::PathBuf;
 use rocket::State;
 use rocket::{fs::FileServer, serde::json::Json};
 
-use sea_orm::{ColumnTrait, Database, DbConn, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, Database, DbConn, EntityTrait, QueryFilter, Schema, DbBackend, ConnectionTrait};
 use wikipedia_speedrun::{schema, GraphDB, Vertex};
 
 mod tls;
 
 #[rocket::get("/paths/<source_id>/<dest_id>")]
-fn paths(source_id: u32, dest_id: u32, gdb: &State<GraphDB>) -> Json<Vec<Vec<u32>>> {
-    let paths = gdb.bfs(source_id, dest_id);
+async fn paths(source_id: u32, dest_id: u32, gdb: &State<GraphDB>) -> Json<Vec<Vec<u32>>> {
+    let paths = gdb.bfs(source_id, dest_id).await;
     Json(paths)
 }
 
@@ -34,6 +34,17 @@ async fn pages(title: &str, gdb: &State<GraphDB>) -> Json<Vec<Vertex>> {
     )
 }
 
+async fn make_database(db: &DbConn) {
+    let schema = Schema::new(DbBackend::Sqlite);
+    let mut create_stmt = schema
+        .create_table_from_entity(schema::search::Entity);
+    let mut stmt = create_stmt.if_not_exists();
+
+    db.execute(db.get_database_backend().build(stmt))
+        .await
+        .expect("create table");
+}
+
 #[rocket::main]
 async fn main() {
     let home_dir = dirs::home_dir().unwrap();
@@ -52,6 +63,8 @@ async fn main() {
     let master_db_path = data_dir.join("master.db");
     let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());
     let master_db: DbConn = Database::connect(master_conn_str).await.expect("master db connect");
+    make_database(&master_db).await;
+
     let static_root = std::env::var("STATIC_ROOT").unwrap_or("../ui/dist".into());
 
     let gdb = GraphDB::new(

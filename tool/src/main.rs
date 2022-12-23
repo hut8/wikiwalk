@@ -654,6 +654,7 @@ impl GraphDBBuilder {
             .to_owned();
         let _ = db.execute(db.get_database_backend().build(&stmt)).await;
         self.create_vertex_table(&db).await;
+        self.create_paths_table(&db).await;
 
         if let Some(usage) = memory_stats() {
             println!("Current physical memory usage: {}", usage.physical_mem);
@@ -711,6 +712,17 @@ impl GraphDBBuilder {
         let stmt = db.get_database_backend().build(&stmt);
         db.execute(stmt).await.expect("vertex title index");
         log::debug!("vertex table: title index created");
+    }
+
+    pub async fn create_paths_table(&self, db: &DbConn) {
+        let schema = Schema::new(DbBackend::Sqlite);
+        let mut create_stmt = schema
+            .create_table_from_entity(schema::path::Entity);
+        let mut stmt = create_stmt.if_not_exists();
+
+        db.execute(db.get_database_backend().build(stmt))
+            .await
+            .expect("create table");
     }
 
     pub async fn create_vertex_table(&self, db: &DbConn) {
