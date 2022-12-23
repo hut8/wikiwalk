@@ -637,7 +637,7 @@ impl GraphDBBuilder {
         redirects.parse(db.clone()).await;
 
         log::debug!("loading edges dump");
-        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(32);
+        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(64);
         let pagelink_source = pagelink_source::WPPageLinkSource::new(path, pagelink_tx);
 
         log::debug!("truncating edge db");

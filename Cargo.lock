@@ -2536,6 +2536,8 @@ dependencies = [
  "log",
  "rocket",
  "sea-orm",
+ "serde",
+ "serde_json",
  "stderrlog",
  "tokio",
  "wikipedia-speedrun",
