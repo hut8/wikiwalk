@@ -84,6 +84,10 @@ impl RedirectMap {
             }
         }
 
+        if self.redirects.len() < 1024 {
+            panic!("suspiciously low number of redirects");
+        }
+
         log::debug!("parsed {} redirects", self.redirects.len());
     }
 

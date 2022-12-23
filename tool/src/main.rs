@@ -20,7 +20,7 @@ use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io::Write;
 use std::io::{prelude::*, BufWriter};
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 use std::thread;
 use wikipedia_speedrun::redirect::RedirectMap;
 use wikipedia_speedrun::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
@@ -312,6 +312,7 @@ impl Iterator for AdjacencySetIterator {
 
 struct GraphDBBuilder {
     // inputs
+    pub dump_date: String,
     pub page_path: PathBuf,
     pub pagelinks_path: PathBuf,
     pub redirects_path: PathBuf,
@@ -320,8 +321,10 @@ struct GraphDBBuilder {
     pub ix_path: PathBuf,
     pub al_path: PathBuf,
 
-    // process directory
+    // dump-specific process directory
     data_dir: PathBuf,
+    // parent of all dump process directories
+    root_data_dir: PathBuf,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
@@ -331,6 +334,7 @@ enum QueryAs {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct DBStatus {
+    dump_date: Option<String>,
     wp_page_hash: Option<Vec<u8>>,
     wp_pagelinks_hash: Option<Vec<u8>>,
     edges_resolved: Option<bool>,
@@ -353,6 +357,7 @@ impl DBStatus {
             edges_sorted: None,
             build_complete: None,
             status_path: None,
+            dump_date: None,
         }
     }
 
@@ -370,6 +375,7 @@ impl DBStatus {
                 edges_resolved: None,
                 edges_sorted: None,
                 status_path: Some(status_path),
+                dump_date: None,
             },
         }
     }
@@ -406,24 +412,31 @@ impl GraphDBBuilder {
         let redirects = dump_path(data_dir, &dump_date, "redirect");
         let pagelinks = dump_path(data_dir, &dump_date, "pagelinks");
 
+        let dump_data_dir = data_dir.join(&dump_date);
+
         GraphDBBuilder {
             page_path: page.into(),
             pagelinks_path: pagelinks.into(),
             ix_path: ix_path.into(),
             al_path: al_path.into(),
-            data_dir: data_dir.into(),
+            data_dir: dump_data_dir.into(),
             redirects_path: redirects.into(),
+            dump_date: dump_date.into(),
+            root_data_dir: data_dir.into(),
         }
     }
 
     /// load vertexes from page.sql and put them in a sqlite file
     pub async fn build_database(&mut self) {
+        std::fs::create_dir_all(&self.data_dir).unwrap();
+
         let db_status_path = self.data_dir.join("status.json");
 
         log::debug!("computing current and finished state of data files");
         let mut db_status = DBStatus::load(db_status_path.clone());
         let db_status_complete =
             DBStatus::compute(self.page_path.clone(), self.pagelinks_path.clone());
+        db_status.dump_date = Some(self.dump_date.clone());
 
         // adjust status if pagelinks hash is mismatched
         let pagelink_data_changed = match db_status.wp_pagelinks_hash.as_ref() {
@@ -437,7 +450,7 @@ impl GraphDBBuilder {
             db_status.edges_sorted = Some(false);
         }
 
-        let db_path = self.data_dir.join("wikipedia-speedrun.db");
+        let db_path = self.data_dir.join("graph.db");
         let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
         log::debug!("using database: {}", conn_str);
         let opts = SqliteConnectOptions::new()
@@ -537,6 +550,11 @@ impl GraphDBBuilder {
         }
         db_status.build_complete = Some(true);
         db_status.save();
+
+        // symlink that which was just built from the "current" link
+        let current_data_dir = self.root_data_dir.join("current");
+        symlink::symlink_dir(&self.data_dir, &current_data_dir).expect("symlink current directory");
+
         log::info!("database build complete");
     }
 
@@ -840,12 +858,7 @@ async fn run_build(
     vertex_al_path: &PathBuf,
 ) {
     log::info!("building database");
-    let mut gddb = GraphDBBuilder::new(
-        dump_date,
-        vertex_ix_path,
-        vertex_al_path,
-        data_dir,
-    );
+    let mut gddb = GraphDBBuilder::new(dump_date, vertex_ix_path, vertex_al_path, data_dir);
     gddb.build_database().await;
 }
 
