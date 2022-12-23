@@ -321,7 +321,7 @@ struct GraphDBBuilder {
     pub al_path: PathBuf,
 
     // process directory
-    process_path: PathBuf,
+    data_dir: PathBuf,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
@@ -397,26 +397,28 @@ impl DBStatus {
 
 impl GraphDBBuilder {
     pub fn new(
-        page: &PathBuf,
-        pagelinks: &PathBuf,
-        redirects_path: &PathBuf,
+        dump_date: String,
         ix_path: &PathBuf,
         al_path: &PathBuf,
-        process_path: &PathBuf,
+        data_dir: &PathBuf,
     ) -> GraphDBBuilder {
+        let page = dump_path(data_dir, &dump_date, "page");
+        let redirects = dump_path(data_dir, &dump_date, "redirect");
+        let pagelinks = dump_path(data_dir, &dump_date, "pagelinks");
+
         GraphDBBuilder {
             page_path: page.into(),
             pagelinks_path: pagelinks.into(),
             ix_path: ix_path.into(),
             al_path: al_path.into(),
-            process_path: process_path.into(),
-            redirects_path: redirects_path.into(),
+            data_dir: data_dir.into(),
+            redirects_path: redirects.into(),
         }
     }
 
     /// load vertexes from page.sql and put them in a sqlite file
     pub async fn build_database(&mut self) {
-        let db_status_path = self.process_path.join("status.json");
+        let db_status_path = self.data_dir.join("status.json");
 
         log::debug!("computing current and finished state of data files");
         let mut db_status = DBStatus::load(db_status_path.clone());
@@ -435,7 +437,7 @@ impl GraphDBBuilder {
             db_status.edges_sorted = Some(false);
         }
 
-        let db_path = self.process_path.join("wikipedia-speedrun.db");
+        let db_path = self.data_dir.join("wikipedia-speedrun.db");
         let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
         log::debug!("using database: {}", conn_str);
         let opts = SqliteConnectOptions::new()
@@ -604,7 +606,7 @@ impl GraphDBBuilder {
         db: DbConn,
         db_status: &mut DBStatus,
     ) -> EdgeProcDB {
-        let edge_db = EdgeProcDB::new(self.process_path.join("edge-db"));
+        let edge_db = EdgeProcDB::new(self.data_dir.join("edge-db"));
 
         if let Some(resolved) = db_status.edges_resolved {
             if resolved {
@@ -837,15 +839,9 @@ async fn run_build(
     vertex_ix_path: &PathBuf,
     vertex_al_path: &PathBuf,
 ) {
-    let page = dump_path(data_dir, &dump_date, "page");
-    let redirects = dump_path(data_dir, &dump_date, "redirect");
-    let pagelinks = dump_path(data_dir, &dump_date, "pagelinks");
-
     log::info!("building database");
     let mut gddb = GraphDBBuilder::new(
-        &page,
-        &pagelinks,
-        &redirects,
+        dump_date,
         vertex_ix_path,
         vertex_al_path,
         data_dir,
