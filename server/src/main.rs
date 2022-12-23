@@ -38,7 +38,7 @@ async fn make_database(db: &DbConn) {
     let schema = Schema::new(DbBackend::Sqlite);
     let mut create_stmt = schema
         .create_table_from_entity(schema::search::Entity);
-    let mut stmt = create_stmt.if_not_exists();
+    let stmt = create_stmt.if_not_exists();
 
     db.execute(db.get_database_backend().build(stmt))
         .await

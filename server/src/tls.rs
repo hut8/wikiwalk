@@ -1,5 +1,6 @@
+#[cfg(feature = "tls-redirect")]
 use std::convert::Infallible;
-
+#[cfg(feature = "tls-redirect")]
 use hyper::{http, Body, Request, Response, Uri};
 
 #[cfg(not(feature = "tls-redirect"))]
@@ -7,6 +8,7 @@ pub async fn launch_tls_redirect() {
     println!("not launching tls redirect due to feature config");
 }
 
+#[cfg(feature = "tls-redirect")]
 async fn tls_redirect(req: Request<Body>) -> http::Result<Response<Body>> {
     log::info!("plaintext request at {u}", u = req.uri());
     let host = match req.headers().get(http::header::HOST) {
