@@ -76,14 +76,22 @@ export type PagePaths = {
   paths: Page[][];
 };
 
+export type PathData = {
+  paths: number[][],
+  degrees?: number,
+  count: number,
+}
 export async function findPaths(
   sourceId: number,
   targetId: number
 ): Promise<PagePaths> {
   const endpoint = `/paths/${sourceId}/${targetId}`;
   const response = await fetch(endpoint);
-  const data = await response.json();
-  const pageIdPaths = data as unknown as number[][];
+  if (!response.ok) {
+    throw new Error("bad response code from server");
+  }
+  const data = await response.json() as PathData;
+  const pageIdPaths = data.paths;
   const pagePaths = await fetchPathPageData(pageIdPaths);
   return pagePaths;
 }
