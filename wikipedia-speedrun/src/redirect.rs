@@ -38,7 +38,7 @@ impl RedirectMap {
         for chunk in redirect_line_iter {
             let line = chunk.expect("read line");
             if !line.starts_with("INSERT ") {
-                return;
+                continue;
             }
 
             let mut redirect_iter = iterate_sql_insertions(line.as_bytes());

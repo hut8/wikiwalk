@@ -633,6 +633,10 @@ impl GraphDBBuilder {
             }
         }
 
+        log::info!(
+            "loading redirects from {}",
+            self.redirects_path.clone().display()
+        );
         let mut redirects = redirect::RedirectMap::new(self.redirects_path.clone());
         redirects.parse(db.clone()).await;
         redirects.dump().expect("dump redirects");
@@ -887,8 +891,9 @@ async fn run_fetch(data_dir: &Path) -> DumpStatus {
 async fn main() {
     stderrlog::new()
         .module(module_path!())
+        .show_module_names(true)
         .quiet(false)
-        .verbosity(4)
+        .verbosity(3)
         .timestamp(stderrlog::Timestamp::Second)
         .init()
         .unwrap();
