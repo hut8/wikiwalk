@@ -635,6 +635,8 @@ impl GraphDBBuilder {
 
         let mut redirects = redirect::RedirectMap::new(self.redirects_path.clone());
         redirects.parse(db.clone()).await;
+        redirects.dump().expect("dump redirects");
+        log::info!("loaded {} redirects", redirects.len());
 
         log::debug!("loading edges dump");
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(64);

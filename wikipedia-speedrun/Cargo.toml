@@ -10,6 +10,7 @@ clap = { version = "3.0", features = ["derive"] }
 crossbeam = "*"
 hex = "*"
 
+anyhow = "*"
 dirs = "4.0"
 dotenv = "0.15.0"
 flate2 = "1.0"

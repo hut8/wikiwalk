@@ -3385,6 +3385,7 @@ dependencies = [
 name = "wikipedia-speedrun"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "clap",
  "crossbeam",

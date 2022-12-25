@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs::File};
 
@@ -23,8 +23,12 @@ impl RedirectMap {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.redirects.len()
+    }
+
     pub async fn parse(&mut self, db: DbConn) {
-        log::debug!("parsing redirects table at {}", &self.path.display());
+        log::info!("parsing redirects table at {}", &self.path.display());
 
         let redirect_sql_file = File::open(&self.path).expect("open redirects file");
         let redirect_sql = flate2::read::GzDecoder::new(redirect_sql_file);
@@ -77,18 +81,30 @@ impl RedirectMap {
                             self.redirects.insert(redir.0, *dest_id);
                         }
                         None => {
-                            log::debug!("page title: {} in redirects has no page entry", redir.1);
+                            log::warn!("page title: {} in redirects has no page entry", redir.1);
                         }
                     }
                 }
             }
         }
 
-        if self.redirects.len() < 1024 {
+        if self.redirects.len() < 1_000_000 {
             panic!("suspiciously low number of redirects");
         }
 
-        log::debug!("parsed {} redirects", self.redirects.len());
+        log::info!("parsed {} redirects", self.redirects.len());
+    }
+
+    pub fn dump(&self) -> Result<(), anyhow::Error> {
+        let mut dump_path = self.path.clone();
+        dump_path.set_extension("debug");
+        let mut sink = File::create(&dump_path)?;
+        log::info!("dumping redirects to {}", dump_path.display());
+        for (source, dest) in self.redirects.iter() {
+            writeln!(sink, "{source},{dest}")?;
+        }
+        log::info!("dump complete");
+        Ok(())
     }
 
     pub fn get(&self, from: u32) -> Option<u32> {
