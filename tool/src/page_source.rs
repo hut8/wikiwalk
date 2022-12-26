@@ -9,7 +9,6 @@ use std::{
 };
 
 use crossbeam::channel::Sender;
-use indicatif::{ProgressDrawTarget, ProgressStyle};
 use rayon::prelude::*;
 
 use crate::Vertex;
@@ -31,50 +30,23 @@ impl WPPageSource {
     }
 
     pub fn run(self) -> u32 {
-        let insert_count = self.count_vertex_inserts();
-        log::debug!("insert count: {}", insert_count);
-        let draw_target = ProgressDrawTarget::stderr_with_hz(1);
-        let progress = indicatif::ProgressBar::new(insert_count as u64);
-        progress.set_style(
-              ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {human_pos}/{human_len:7} {percent}% {per_sec:5} {eta}").unwrap(),
-          );
-        progress.set_draw_target(draw_target);
-
         let page_sql_file = File::open(&self.source_path).expect("open page file");
         let page_sql = flate2::read::GzDecoder::new(page_sql_file);
         let page_sql = BufReader::new(page_sql);
         let page_line_iter = page_sql.lines();
-
+        log::info!("loading page file");
         page_line_iter.par_bridge().for_each(|chunk| {
             let line = chunk.expect("read line");
             if !line.starts_with("INSERT ") {
                 return;
             }
             let lines = vec![line];
-            progress.inc(1);
             let sender = self.sender.clone();
             let vertex_count = self.vertex_count.clone();
             Self::load_vertexes_dump_chunk(lines, sender, vertex_count);
         });
-        progress.finish();
+        log::info!("page file load complete");
         self.vertex_count.load(Ordering::Relaxed)
-    }
-
-    pub fn count_vertex_inserts(&self) -> usize {
-        log::debug!(
-            "counting inserts in page sql: {}",
-            &self.source_path.display()
-        );
-        let page_sql_file = File::open(&self.source_path).expect("open page file");
-        let page_sql = flate2::read::GzDecoder::new(page_sql_file);
-        let page_sql = BufReader::new(page_sql);
-        page_sql
-            .lines()
-            .filter(|line_res| {
-                let line = line_res.as_ref().expect("read line");
-                line.starts_with("INSERT ")
-            })
-            .count()
     }
 
     fn load_vertexes_dump_chunk(chunk: Vec<String>, sender: Sender<Vertex>, count: Arc<AtomicU32>) {
