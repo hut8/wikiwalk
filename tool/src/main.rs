@@ -550,6 +550,7 @@ impl GraphDBBuilder {
 
         // symlink that which was just built from the "current" link
         let current_data_dir = self.root_data_dir.join("current");
+        let _ = std::fs::remove_file(&current_data_dir);
         symlink::symlink_dir(&self.data_dir, &current_data_dir).expect("symlink current directory");
 
         log::info!("database build complete");
@@ -885,6 +886,8 @@ async fn run_fetch(data_dir: &Path) -> DumpStatus {
         }
     }
 }
+
+async fn build_master_db(db: &DbConn) {}
 
 #[tokio::main]
 async fn main() {
