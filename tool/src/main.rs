@@ -427,6 +427,8 @@ impl GraphDBBuilder {
     pub async fn build_database(&mut self) {
         std::fs::create_dir_all(&self.data_dir).unwrap();
 
+        self.create_master_db().await;
+
         let db_status_path = self.data_dir.join("status.json");
 
         log::debug!("computing current and finished state of data files");
@@ -746,10 +748,21 @@ impl GraphDBBuilder {
         log::debug!("vertex table: title index created");
     }
 
-    pub async fn create_master_db(&self, db:&DbConn) {
+    pub async fn create_master_db(&self) {
+        let db_path = self.root_data_dir.join("master.db");
+        let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
+        log::debug!("creating master database: {}", conn_str);
+        let opts = SqliteConnectOptions::new()
+            .synchronous(SqliteSynchronous::Off)
+            .journal_mode(SqliteJournalMode::Memory)
+            .filename(&db_path)
+            .create_if_missing(true);
+        let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+        let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
         let schema = Schema::new(DbBackend::Sqlite);
-        let create_stmt: TableCreateStatement =
+        let mut create_stmt: TableCreateStatement =
             schema.create_table_from_entity(schema::search::Entity);
+        create_stmt.if_not_exists();
         db.execute(db.get_database_backend().build(&create_stmt))
             .await
             .expect("create table");
@@ -896,7 +909,6 @@ async fn run_fetch(data_dir: &Path) -> DumpStatus {
     }
 }
 
-async fn build_master_db(db: &DbConn) {}
 
 #[tokio::main]
 async fn main() {
