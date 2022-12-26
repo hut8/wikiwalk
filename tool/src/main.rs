@@ -567,6 +567,7 @@ impl GraphDBBuilder {
         // look up and write in chunks
         let mut received_count = 0u32;
         let mut hit_count = 0u32;
+        let mut redirect_failures = Vec::new();
         for page_link_chunk in &rx.iter().chunks(32760) {
             let page_links: Vec<WPPageLink> = page_link_chunk.collect();
             received_count += page_links.len() as u32;
@@ -593,8 +594,7 @@ impl GraphDBBuilder {
                             title_map.insert(v.title, dest);
                         }
                         None => {
-                            log::debug!("tried to resolve redirect for page: [{}: {}] but no entry was in redirects",
-                                        v.id, v.title);
+                            redirect_failures.push(v);
                         }
                     }
                     continue;
@@ -614,6 +614,13 @@ impl GraphDBBuilder {
                 }
             }
         }
+
+        let failed_ids = redirect_failures.iter().map(|p| p.id).collect_vec();
+
+        log::info!(
+            "redirection failures: {}",
+            serde_json::to_string(&failed_ids).unwrap()
+        );
         (received_count, hit_count)
     }
 
