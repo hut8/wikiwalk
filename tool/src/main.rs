@@ -665,7 +665,7 @@ impl GraphDBBuilder {
         let pagelink_count = pagelink_thread.join().unwrap();
         log::debug!("pagelink count = {}", pagelink_count);
 
-        log::debug!("\nflushing edge database");
+        log::debug!("flushing edge database");
         edge_db.flush();
 
         db_status.edges_resolved = Some(true);
@@ -741,12 +741,11 @@ impl GraphDBBuilder {
         log::debug!("vertex table: title index created");
     }
 
-    pub async fn create_paths_table(&self, db: &DbConn) {
+    pub async fn create_master_db(&self, db:&DbConn) {
         let schema = Schema::new(DbBackend::Sqlite);
-        let mut create_stmt = schema.create_table_from_entity(schema::path::Entity);
-        let stmt = create_stmt.if_not_exists();
-
-        db.execute(db.get_database_backend().build(stmt))
+        let create_stmt: TableCreateStatement =
+            schema.create_table_from_entity(schema::search::Entity);
+        db.execute(db.get_database_backend().build(&create_stmt))
             .await
             .expect("create table");
     }
@@ -756,6 +755,16 @@ impl GraphDBBuilder {
         let create_stmt: TableCreateStatement =
             schema.create_table_from_entity(schema::vertex::Entity);
         db.execute(db.get_database_backend().build(&create_stmt))
+            .await
+            .expect("create table");
+    }
+
+    pub async fn create_paths_table(&self, db: &DbConn) {
+        let schema = Schema::new(DbBackend::Sqlite);
+        let mut create_stmt = schema.create_table_from_entity(schema::path::Entity);
+        let stmt = create_stmt.if_not_exists();
+
+        db.execute(db.get_database_backend().build(stmt))
             .await
             .expect("create table");
     }
