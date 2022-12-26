@@ -71,8 +71,6 @@ async fn main() {
     };
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
-    let vertex_al_path = data_dir.join("vertex_al");
-    let vertex_ix_path = data_dir.join("vertex_al_ix");
     let graph_db_path = data_dir.join("graph.db");
     let conn_str = format!("sqlite:///{}?mode=ro", graph_db_path.to_string_lossy());
     let graph_db: DbConn = Database::connect(conn_str).await.expect("graph db connect");
@@ -86,8 +84,8 @@ async fn main() {
     let static_root = std::env::var("STATIC_ROOT").unwrap_or_else(|_| "../ui/dist".into());
 
     let gdb = GraphDB::new(
-        vertex_ix_path.to_str().unwrap(),
-        vertex_al_path.to_str().unwrap(),
+        "current".into(),
+        &data_dir,
         graph_db,
         master_db,
     )
