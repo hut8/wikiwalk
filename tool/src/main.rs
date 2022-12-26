@@ -402,17 +402,14 @@ impl DBStatus {
 }
 
 impl GraphDBBuilder {
-    pub fn new(
-        dump_date: String,
-        ix_path: &PathBuf,
-        al_path: &PathBuf,
-        data_dir: &PathBuf,
-    ) -> GraphDBBuilder {
-        let page = dump_path(data_dir, &dump_date, "page");
-        let redirects = dump_path(data_dir, &dump_date, "redirect");
-        let pagelinks = dump_path(data_dir, &dump_date, "pagelinks");
+    pub fn new(dump_date: String, root_data_dir: &PathBuf) -> GraphDBBuilder {
+        let page = dump_path(root_data_dir, &dump_date, "page");
+        let redirects = dump_path(root_data_dir, &dump_date, "redirect");
+        let pagelinks = dump_path(root_data_dir, &dump_date, "pagelinks");
 
-        let dump_data_dir = data_dir.join(&dump_date);
+        let dump_data_dir = root_data_dir.join(&dump_date);
+        let ix_path = dump_data_dir.join("vertex-al-ix");
+        let al_path = dump_data_dir.join("vertex-al");
 
         GraphDBBuilder {
             page_path: page.into(),
@@ -422,7 +419,7 @@ impl GraphDBBuilder {
             data_dir: dump_data_dir.into(),
             redirects_path: redirects.into(),
             dump_date: dump_date.into(),
-            root_data_dir: data_dir.into(),
+            root_data_dir: root_data_dir.into(),
         }
     }
 
@@ -553,6 +550,7 @@ impl GraphDBBuilder {
 
         // symlink that which was just built from the "current" link
         let current_data_dir = self.root_data_dir.join("current");
+        let _ = std::fs::remove_file(&current_data_dir);
         symlink::symlink_dir(&self.data_dir, &current_data_dir).expect("symlink current directory");
 
         log::info!("database build complete");
@@ -567,6 +565,7 @@ impl GraphDBBuilder {
         // look up and write in chunks
         let mut received_count = 0u32;
         let mut hit_count = 0u32;
+        let mut redirect_failures = Vec::new();
         for page_link_chunk in &rx.iter().chunks(32760) {
             let page_links: Vec<WPPageLink> = page_link_chunk.collect();
             received_count += page_links.len() as u32;
@@ -593,8 +592,7 @@ impl GraphDBBuilder {
                             title_map.insert(v.title, dest);
                         }
                         None => {
-                            log::debug!("tried to resolve redirect for page: [{}: {}] but no entry was in redirects",
-                                        v.id, v.title);
+                            redirect_failures.push(v);
                         }
                     }
                     continue;
@@ -614,6 +612,13 @@ impl GraphDBBuilder {
                 }
             }
         }
+
+        let failed_ids = redirect_failures.iter().map(|p| p.id).collect_vec();
+
+        log::info!(
+            "redirection failures: {}",
+            serde_json::to_string(&failed_ids).unwrap()
+        );
         (received_count, hit_count)
     }
 
@@ -866,14 +871,9 @@ fn dump_path(data_dir: &Path, date: &str, table: &str) -> PathBuf {
     dumps_dir.join(basename)
 }
 
-async fn run_build(
-    data_dir: &PathBuf,
-    dump_date: String,
-    vertex_ix_path: &PathBuf,
-    vertex_al_path: &PathBuf,
-) {
+async fn run_build(data_dir: &PathBuf, dump_date: String) {
     log::info!("building database");
-    let mut gddb = GraphDBBuilder::new(dump_date, vertex_ix_path, vertex_al_path, data_dir);
+    let mut gddb = GraphDBBuilder::new(dump_date, data_dir);
     gddb.build_database().await;
 }
 
@@ -896,6 +896,8 @@ async fn run_fetch(data_dir: &Path) -> DumpStatus {
     }
 }
 
+async fn build_master_db(db: &DbConn) {}
+
 #[tokio::main]
 async fn main() {
     stderrlog::new()
@@ -915,8 +917,6 @@ async fn main() {
     let data_dir = cli.data_path.unwrap_or(default_data_dir);
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
-    let vertex_al_path = data_dir.join("vertex_al");
-    let vertex_ix_path = data_dir.join("vertex_al_ix");
     let db_path = data_dir.join("wikipedia-speedrun.db");
     let conn_str = format!("sqlite:///{}?mode=ro", db_path.to_string_lossy());
     let master_db_path = data_dir.join("master.db");
@@ -928,7 +928,7 @@ async fn main() {
     // directory used for processing import
     match cli.command {
         Command::Build { dump_date } => {
-            run_build(&data_dir, dump_date, &vertex_ix_path, &vertex_al_path).await;
+            run_build(&data_dir, dump_date).await;
         }
         Command::Run {
             source,
@@ -937,13 +937,7 @@ async fn main() {
             let db: DbConn = Database::connect(conn_str).await.expect("db connect");
 
             log::info!("computing path");
-            let mut gdb = GraphDB::new(
-                vertex_ix_path.to_str().unwrap(),
-                vertex_al_path.to_str().unwrap(),
-                db,
-                master_db,
-            )
-            .unwrap();
+            let mut gdb = GraphDB::new("current".into(), &data_dir, db, master_db).unwrap();
             let source_title = source.replace('_', " ");
             let dest_title = destination.replace('_', " ");
 
@@ -980,13 +974,7 @@ async fn main() {
             let target = target.replace('_', " ");
             log::info!("querying target: {}", target);
             let db: DbConn = Database::connect(conn_str).await.expect("db connect");
-            let mut gdb = GraphDB::new(
-                vertex_ix_path.to_str().unwrap(),
-                vertex_al_path.to_str().unwrap(),
-                db,
-                master_db,
-            )
-            .unwrap();
+            let mut gdb = GraphDB::new("current".into(), &data_dir, db, master_db).unwrap();
             let vertex = gdb
                 .find_vertex_by_title(target)
                 .await
@@ -1019,13 +1007,7 @@ async fn main() {
                 "fetched data from {dump_date}",
                 dump_date = dump_status.dump_date
             );
-            run_build(
-                &data_dir,
-                dump_status.dump_date,
-                &vertex_ix_path,
-                &vertex_al_path,
-            )
-            .await;
+            run_build(&data_dir, dump_status.dump_date).await;
         }
     }
 }

@@ -23,33 +23,30 @@ impl EdgeDB {
         AdjacencyList::read(&self.vertex_al[offset..])
     }
 
-
     pub fn check_db(&mut self) {
-      //self.check_al();
-      println!("checking index file");
-      self.check_ix();
-      println!("done");
-  }
+        println!("checking index file");
+        self.check_ix();
+        println!("done");
+    }
 
     fn check_ix(&mut self) {
-      // read index file and ensure that all 64-bit entries
-      // point to within range
-      let max_sz: u64 = (self.vertex_al.len() - 4) as u64;
-      let mut buf: [u8; 8] = [0; 8];
-      let mut position: usize = 0;
-      while position <= (self.vertex_al_ix.len() - 8) {
-          buf.copy_from_slice(&self.vertex_al_ix[position..position + 8]);
-          let value: u64 = u64::from_le_bytes(buf);
-          if value > max_sz {
-              let msg = format!(
+        // read index file and ensure that all 64-bit entries
+        // point to within range
+        let max_sz: u64 = (self.vertex_al.len() - 4) as u64;
+        let mut buf: [u8; 8] = [0; 8];
+        let mut position: usize = 0;
+        while position <= (self.vertex_al_ix.len() - 8) {
+            buf.copy_from_slice(&self.vertex_al_ix[position..position + 8]);
+            let value: u64 = u64::from_le_bytes(buf);
+            if value > max_sz {
+                let msg = format!(
                   "check_ix: at index file: {position}, got pointer to {value} in AL file (maximum: {max_sz})"
               );
-              panic!("{}", msg);
-          }
-          position += 8;
-      }
-  }
-
+                panic!("{}", msg);
+            }
+            position += 8;
+        }
+    }
 }
 
 #[derive(Debug, Default)]

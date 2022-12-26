@@ -1,4 +1,4 @@
-use std::{fs::File, hash::Hash, hash::Hasher, time::Instant};
+use std::{fs::File, hash::Hash, hash::Hasher, path::PathBuf, time::Instant};
 
 use memmap2::MmapOptions;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DbConn, EntityTrait, QueryFilter, Set};
@@ -63,11 +63,14 @@ pub struct GraphDB {
 
 impl GraphDB {
     pub fn new(
-        path_ix: &str,
-        path_al: &str,
+        dump_date: String,
+        root_data_dir: &PathBuf,
         graph_db: DbConn,
         master_db: DbConn,
     ) -> Result<GraphDB, std::io::Error> {
+        let data_dir = root_data_dir.join(dump_date);
+        let path_ix = data_dir.join("vertex-al-ix");
+        let path_al = data_dir.join("vertex-al");
         let file_ix = File::open(path_ix)?;
         let file_al = File::open(path_al)?;
         let mmap_ix = unsafe { MmapOptions::new().map(&file_ix)? };
