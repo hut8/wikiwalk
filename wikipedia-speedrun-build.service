@@ -5,7 +5,6 @@ After=network.target
 [Service]
 ExecStart=/usr/local/bin/wikipedia-speedrun-tool --data-path /var/wikipedia-speedrun/data pull
 EnvironmentFile=/etc/wikipedia-speedrun
-RemainAfterExit=yes
 Type=oneshot
 User=speedrun
 Group=speedrun
