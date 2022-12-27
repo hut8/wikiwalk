@@ -11,7 +11,6 @@ pub struct Model {
     pub target_page_id: i32,
     pub timestamp: String,
     pub duration: f64,
-    pub path_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
