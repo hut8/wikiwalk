@@ -152,10 +152,10 @@
   >
   <BannerLabel slot="label">
     {#if pathData && pathData.count > 0}
-      Found {pathData.count} {pathData.count === 1 ? 'path' : 'paths'} of degree {pathData.degrees} in {(elapsed/1000).toFixed(3)} milliseconds
+      Found {pathData.count} {pathData.count === 1 ? 'path' : 'paths'} of degree {pathData.degrees} in {(elapsed/1000).toFixed(3)} seconds
     {/if}
     {#if pathData && pathData.count === 0}
-      Found no paths in {(elapsed/1000).toFixed(3)} milliseconds
+      Found no paths in {(elapsed/1000).toFixed(3)} seconds
     {/if}
   </BannerLabel>
   <svelte:fragment slot="actions">
