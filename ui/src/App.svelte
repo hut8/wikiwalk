@@ -3,9 +3,7 @@
     Row,
     Section,
     Title,
-    AutoAdjust,
   } from "@smui/top-app-bar";
-  import Paper, { Content as PaperContent } from '@smui/paper';
   import Card, { Content } from "@smui/card";
   import Button, { Label as ButtonLabel } from "@smui/button";
   import Banner, { Label as BannerLabel } from "@smui/banner";
@@ -54,7 +52,6 @@
     });
   }
 
-  let searchCount = 0;
   let loading = false;
   let elapsed: number|null = null;
 
@@ -100,53 +97,51 @@
   </Row>
 </TopAppBar>
 
-<Paper>
-  <PaperContent class="parameter-container">
-    <Autocomplete
-      style="min-width: 350px; width: 30vw;"
-      textfield$style="width: 100%;"
-      textfield$helperLine$style="width: 100%;"
-      search={autocomplete}
-      bind:value={sourcePageID}
-      showMenuWithNoInput={false}
-      {getOptionLabel}
-      label="Source page"
+<div class="parameter-container">
+  <Autocomplete
+    style="min-width: 350px; width: 30vw;"
+    textfield$style="width: 100%;"
+    textfield$helperLine$style="width: 100%;"
+    search={autocomplete}
+    bind:value={sourcePageID}
+    showMenuWithNoInput={false}
+    {getOptionLabel}
+    label="Source page"
+    >
+    <Text
+      slot="loading"
+      style="display: flex; width: 100%; justify-content: center; align-items: center;"
       >
-      <Text
-        slot="loading"
-        style="display: flex; width: 100%; justify-content: center; align-items: center;"
-        >
-        <LinearProgress style="height: 24px" indeterminate />
-      </Text>
-    </Autocomplete>
+      <LinearProgress style="height: 24px" indeterminate />
+    </Text>
+  </Autocomplete>
 
-    <Autocomplete
-      style="min-width: 350px; width: 30vw;"
-      textfield$style="width: 100%;"
-      textfield$helperLine$style="width: 100%;"
-      search={autocomplete}
-      bind:value={targetPageID}
-      showMenuWithNoInput={false}
-      {getOptionLabel}
-      label="Target page"
+  <Autocomplete
+    style="min-width: 350px; width: 30vw;"
+    textfield$style="width: 100%;"
+    textfield$helperLine$style="width: 100%;"
+    search={autocomplete}
+    bind:value={targetPageID}
+    showMenuWithNoInput={false}
+    {getOptionLabel}
+    label="Target page"
+    >
+    <Text
+      slot="loading"
+      style="display: flex; width: 100%; justify-content: center; align-items: center;"
       >
-      <Text
-        slot="loading"
-        style="display: flex; width: 100%; justify-content: center; align-items: center;"
-        >
-        <LinearProgress style="height: 24px" indeterminate />
-      </Text>
-    </Autocomplete>
+      <LinearProgress style="height: 24px" indeterminate />
+    </Text>
+  </Autocomplete>
 
-    <Button
-      on:click={computePaths}
-      disabled={!(sourcePageID && targetPageID)}
-      variant="raised"
-      >
-      <ButtonLabel>Compute paths</ButtonLabel>
-    </Button>
-  </PaperContent>
-</Paper>
+  <Button
+    on:click={computePaths}
+    disabled={!(sourcePageID && targetPageID)}
+    variant="raised"
+    >
+    <ButtonLabel>Compute paths</ButtonLabel>
+  </Button>
+</div>
 
 <Banner
   open={!!pathData}
@@ -172,7 +167,7 @@
   {#if pathData}
     <div class="path-list">
       {#each pathData.paths as path}
-        <Card class="path-card">
+        <Card class="path-card" variant="outlined" padded>
           <Content>
             <List twoLine avatarList>
               {#each path as page}
