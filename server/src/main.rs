@@ -4,9 +4,7 @@ use rocket::serde::Serialize;
 use rocket::State;
 use rocket::{fs::FileServer, serde::json::Json};
 
-use sea_orm::{
-    ColumnTrait, EntityTrait, QueryFilter,
-};
+use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter};
 use wikipedia_speedrun::{schema, GraphDB, Vertex};
 
 mod tls;
@@ -18,9 +16,32 @@ struct PathData {
     degrees: Option<usize>,
 }
 
+async fn fetch_cache(source_id: u32, dest_id: u32, gdb: &GraphDB) -> Option<Vec<Vec<u32>>> {
+    let path = schema::path::Entity::find()
+        .filter(
+            Condition::all()
+                .add(schema::path::Column::SourcePageId.eq(source_id))
+                .add(schema::path::Column::TargetPageId.eq(dest_id)),
+        )
+        .one(&gdb.graph_db)
+        .await
+        .expect("find cached path");
+
+    match path {
+        Some(path) => serde_json::from_str(&path.path_data).ok(),
+        None => None,
+    }
+}
+
 #[rocket::get("/paths/<source_id>/<dest_id>")]
 async fn paths(source_id: u32, dest_id: u32, gdb: &State<GraphDB>) -> Json<PathData> {
-    let paths = gdb.bfs(source_id, dest_id).await;
+    let paths = match fetch_cache(source_id, dest_id, gdb).await {
+        Some(paths) => {
+            log::debug!("fetched cached entry for {source_id} - {dest_id}");
+            paths
+        }
+        None => gdb.bfs(source_id, dest_id).await,
+    };
     let count = paths.len();
     let lengths = paths.iter().map(|p| p.len());
     let degrees = lengths.max();
@@ -64,11 +85,7 @@ async fn main() {
 
     let static_root = std::env::var("STATIC_ROOT").unwrap_or_else(|_| "../ui/dist".into());
 
-    let gdb = GraphDB::new(
-        "current".into(),
-        &data_dir,
-    ).await
-    .unwrap();
+    let gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
 
     tokio::spawn(async move { tls::launch_tls_redirect().await });
 
