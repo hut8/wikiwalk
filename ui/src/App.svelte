@@ -5,6 +5,7 @@
     Title,
     AutoAdjust,
   } from "@smui/top-app-bar";
+  import Paper, { Content as PaperContent } from '@smui/paper';
   import Card, { Content } from "@smui/card";
   import Button, { Label as ButtonLabel } from "@smui/button";
   import Banner, { Label as BannerLabel } from "@smui/banner";
@@ -91,13 +92,61 @@
   }
 </script>
 
-<TopAppBar>
+<TopAppBar variant="static">
   <Row>
     <Section>
       <Title>Wikipedia Speedrun</Title>
     </Section>
   </Row>
 </TopAppBar>
+
+<Paper>
+  <PaperContent class="parameter-container">
+    <Autocomplete
+      style="min-width: 350px; width: 30vw;"
+      textfield$style="width: 100%;"
+      textfield$helperLine$style="width: 100%;"
+      search={autocomplete}
+      bind:value={sourcePageID}
+      showMenuWithNoInput={false}
+      {getOptionLabel}
+      label="Source page"
+      >
+      <Text
+        slot="loading"
+        style="display: flex; width: 100%; justify-content: center; align-items: center;"
+        >
+        <LinearProgress style="height: 24px" indeterminate />
+      </Text>
+    </Autocomplete>
+
+    <Autocomplete
+      style="min-width: 350px; width: 30vw;"
+      textfield$style="width: 100%;"
+      textfield$helperLine$style="width: 100%;"
+      search={autocomplete}
+      bind:value={targetPageID}
+      showMenuWithNoInput={false}
+      {getOptionLabel}
+      label="Target page"
+      >
+      <Text
+        slot="loading"
+        style="display: flex; width: 100%; justify-content: center; align-items: center;"
+        >
+        <LinearProgress style="height: 24px" indeterminate />
+      </Text>
+    </Autocomplete>
+
+    <Button
+      on:click={computePaths}
+      disabled={!(sourcePageID && targetPageID)}
+      variant="raised"
+      >
+      <ButtonLabel>Compute paths</ButtonLabel>
+    </Button>
+  </PaperContent>
+</Paper>
 
 <Banner
   open={!!pathData}
@@ -107,8 +156,11 @@
   content$style="max-width: max-content;"
   >
   <BannerLabel slot="label">
-    {#if pathData}
-      Found {pathData.count} paths in {(elapsed/1000).toFixed(3)} milliseconds
+    {#if pathData && pathData.count > 0}
+      Found {pathData.count} {pathData.count === 1 ? 'path' : 'paths'} of degree {pathData.degrees} in {(elapsed/1000).toFixed(3)} milliseconds
+    {/if}
+    {#if pathData && pathData.count === 0}
+      Found no paths in {(elapsed/1000).toFixed(3)} milliseconds
     {/if}
   </BannerLabel>
   <svelte:fragment slot="actions">
@@ -117,46 +169,6 @@
 </Banner>
 
 <main>
-  <div class="page-inputs">
-    <Autocomplete
-      search={autocomplete}
-      bind:value={sourcePageID}
-      showMenuWithNoInput={false}
-      {getOptionLabel}
-      label="Source page"
-    >
-      <Text
-        slot="loading"
-        style="display: flex; width: 100%; justify-content: center; align-items: center;"
-      >
-        <LinearProgress style="height: 24px" indeterminate />
-      </Text>
-    </Autocomplete>
-
-    <Autocomplete
-      search={autocomplete}
-      bind:value={targetPageID}
-      showMenuWithNoInput={false}
-      {getOptionLabel}
-      label="Target page"
-    >
-      <Text
-        slot="loading"
-        style="display: flex; width: 100%; justify-content: center; align-items: center;"
-      >
-        <LinearProgress style="height: 24px" indeterminate />
-      </Text>
-    </Autocomplete>
-
-    <Button
-      on:click={computePaths}
-      disabled={!(sourcePageID && targetPageID)}
-      variant="raised"
-    >
-      <ButtonLabel>Compute paths</ButtonLabel>
-    </Button>
-  </div>
-
   {#if pathData}
     <div class="path-list">
       {#each pathData.paths as path}
@@ -168,16 +180,16 @@
                   {#if page.iconUrl}
                     <Graphic
                       style="background-image: url({page.iconUrl}); background-size: cover;"
-                    />
-                  {:else}
-                    <Graphic />
-                  {/if}
-                  <Text>
-                    <PrimaryText>{page.title}</PrimaryText>
-                    {#if page.description}
-                      <SecondaryText>{page.description}</SecondaryText>
+                      />
+                    {:else}
+                      <Graphic />
                     {/if}
-                  </Text>
+                    <Text>
+                      <PrimaryText>{page.title}</PrimaryText>
+                      {#if page.description}
+                        <SecondaryText>{page.description}</SecondaryText>
+                      {/if}
+                    </Text>
                 </Item>
               {/each}
             </List>
@@ -187,18 +199,18 @@
     </div>
   {/if}
 
-  {#if loading}
-    <div class="loading-container">
-      <Activity />
-    </div>
-  {/if}
+{#if loading}
+  <div class="loading-container">
+    <Activity />
+  </div>
+{/if}
 
-  <Snackbar bind:this={errorSnackbar}>
-    <SnackbarLabel>Something has gone terribly wrong ☹️</SnackbarLabel>
-    <Actions>
-      <IconButton class="material-icons" title="Dismiss">close</IconButton>
-    </Actions>
-  </Snackbar>
+<Snackbar bind:this={errorSnackbar}>
+  <SnackbarLabel>Something has gone terribly wrong ☹️</SnackbarLabel>
+  <Actions>
+    <IconButton class="material-icons" title="Dismiss">close</IconButton>
+  </Actions>
+</Snackbar>
 </main>
 
 <style>
@@ -218,14 +230,13 @@
     flex-grow: 1;
   }
 
-  .page-inputs {
+  :global(.parameter-container) {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 24px;
     align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
+    justify-content: space-around;
   }
 
   .path-list {
