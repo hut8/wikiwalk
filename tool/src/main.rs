@@ -8,8 +8,8 @@ use rayon::slice::ParallelSliceMut;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, DatabaseBackend, DbBackend, DbConn, DeriveColumn,
-    EntityTrait, EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
+    ColumnTrait, ConnectionTrait, DatabaseBackend, DbBackend, DbConn, DeriveColumn, EntityTrait,
+    EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
 use sha3::{Digest, Sha3_256};
@@ -427,8 +427,6 @@ impl GraphDBBuilder {
     pub async fn build_database(&mut self) {
         std::fs::create_dir_all(&self.data_dir).unwrap();
 
-        self.create_master_db().await;
-
         let db_status_path = self.data_dir.join("status.json");
 
         log::debug!("computing current and finished state of data files");
@@ -748,26 +746,6 @@ impl GraphDBBuilder {
         log::debug!("vertex table: title index created");
     }
 
-    pub async fn create_master_db(&self) {
-        let db_path = self.root_data_dir.join("master.db");
-        let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
-        log::debug!("creating master database: {}", conn_str);
-        let opts = SqliteConnectOptions::new()
-            .synchronous(SqliteSynchronous::Off)
-            .journal_mode(SqliteJournalMode::Memory)
-            .filename(&db_path)
-            .create_if_missing(true);
-        let pool = SqlitePool::connect_with(opts).await.expect("db connect");
-        let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
-        let schema = Schema::new(DbBackend::Sqlite);
-        let mut create_stmt: TableCreateStatement =
-            schema.create_table_from_entity(schema::search::Entity);
-        create_stmt.if_not_exists();
-        db.execute(db.get_database_backend().build(&create_stmt))
-            .await
-            .expect("create table");
-    }
-
     pub async fn create_vertex_table(&self, db: &DbConn) {
         let schema = Schema::new(DbBackend::Sqlite);
         let create_stmt: TableCreateStatement =
@@ -908,7 +886,6 @@ async fn run_fetch(data_dir: &Path) -> DumpStatus {
         }
     }
 }
-
 
 #[tokio::main]
 async fn main() {

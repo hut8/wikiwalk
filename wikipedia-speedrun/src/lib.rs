@@ -1,8 +1,15 @@
 use std::{fs::File, hash::Hash, hash::Hasher, path::PathBuf, time::Instant};
 
 use memmap2::MmapOptions;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbConn, EntityTrait, QueryFilter, Set, Database};
+use sea_orm::{
+    sea_query::TableCreateStatement, ActiveModelTrait, ColumnTrait, ConnectionTrait, Database,
+    DbBackend, DbConn, EntityTrait, QueryFilter, Schema, Set, SqlxSqliteConnector,
+};
 use serde::Serialize;
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
+    SqlitePool,
+};
 
 pub mod bfs;
 pub mod dump;
@@ -68,6 +75,7 @@ impl GraphDB {
     ) -> Result<GraphDB, std::io::Error> {
         let master_db_path = root_data_dir.join("master.db");
         let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());
+        Self::create_master_db(&master_db_path).await;
         let master_db: DbConn = Database::connect(master_conn_str)
             .await
             .expect("master db connect");
@@ -75,8 +83,10 @@ impl GraphDB {
         let data_dir = root_data_dir.join(dump_date);
 
         let graph_db_path = data_dir.join("graph.db");
-        let graph_db_conn_str = format!("sqlite:///{}?mode=ro", graph_db_path.to_string_lossy());
-        let graph_db: DbConn = Database::connect(graph_db_conn_str).await.expect("graph db connect");
+        let graph_db_conn_str = format!("sqlite:///{}?mode=rw", graph_db_path.to_string_lossy());
+        let graph_db: DbConn = Database::connect(graph_db_conn_str)
+            .await
+            .expect("graph db connect");
 
         let path_ix = data_dir.join("vertex-al-ix");
         let path_al = data_dir.join("vertex-al");
@@ -90,6 +100,23 @@ impl GraphDB {
             graph_db,
             master_db,
         })
+    }
+
+    async fn create_master_db(db_path: &PathBuf) {
+        let opts = SqliteConnectOptions::new()
+            .synchronous(SqliteSynchronous::Off)
+            .journal_mode(SqliteJournalMode::Memory)
+            .filename(&db_path)
+            .create_if_missing(true);
+        let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+        let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
+        let schema = Schema::new(DbBackend::Sqlite);
+        let mut create_stmt: TableCreateStatement =
+            schema.create_table_from_entity(schema::search::Entity);
+        create_stmt.if_not_exists();
+        db.execute(db.get_database_backend().build(&create_stmt))
+            .await
+            .expect("create table");
     }
 
     pub async fn find_vertex_by_title(&mut self, title: String) -> Option<Vertex> {
