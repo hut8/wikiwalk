@@ -7,6 +7,7 @@
   } from "@smui/top-app-bar";
   import Card, { Content } from "@smui/card";
   import Button, { Label as ButtonLabel } from "@smui/button";
+  import Banner, { Label as BannerLabel } from "@smui/banner";
   import List, {
     Item,
     Graphic,
@@ -30,9 +31,15 @@
   import Activity from "./components/Activity.svelte";
   import { Timer } from "./lib/timer";
 
+  enum PageState {
+    Pristine,
+    Loading,
+    Complete
+  };
+
   let sourcePageID: number | undefined = undefined;
   let targetPageID: number | undefined = undefined;
-  let pathData: PagePaths;
+  let pathData: PagePaths|null = null;
   let errorSnackbar: Snackbar;
 
   const searchTimer = new Timer(500);
@@ -48,14 +55,16 @@
 
   let searchCount = 0;
   let loading = false;
+  let elapsed: number|null = null;
 
   async function autocomplete(term: string): Promise<number[] | false> {
     if (term === "") {
       console.debug("blank search term");
       return [];
     }
-
+    const instant = new Date().getTime();
     const matches = await search(term);
+    elapsed = (new Date().getTime()) - instant;
     return matches.map((p) => p.pageid);
   }
 
@@ -89,6 +98,23 @@
     </Section>
   </Row>
 </TopAppBar>
+
+<Banner
+  open={!!pathData}
+  centered={true}
+  mobileStacked={true}
+  fixed={false}
+  content$style="max-width: max-content;"
+  >
+  <BannerLabel slot="label">
+    {#if pathData}
+      Found {pathData.count} paths in {(elapsed/1000).toFixed(3)} milliseconds
+    {/if}
+  </BannerLabel>
+  <svelte:fragment slot="actions">
+    <Button>OK</Button>
+  </svelte:fragment>
+</Banner>
 
 <main>
   <div class="page-inputs">
