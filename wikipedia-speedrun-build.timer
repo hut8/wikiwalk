@@ -1,0 +1,11 @@
+[Unit]
+Description=Build Wikipedia Speedrun database
+Requires=wikipedia-speedrun-build.service
+
+[Timer]
+Unit=wikipedia-speedrun-build.service
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

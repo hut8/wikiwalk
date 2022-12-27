@@ -27,8 +27,12 @@ fix:
 # Build for release
 build-release:
   cd ui && npm run build
-  rm -f target/release/server
+  rm -f target/release/server target/release/tool
   cargo build --release --features tls-redirect --bin server
+
+build-release-tool:
+    rm -f target/release/tool
+    cargo build --release --bin tool
 
 # Build for development
 build:
@@ -44,11 +48,23 @@ install-lego:
 issue-tls-cert:
   sudo /usr/local/bin/lego --path /var/wikipedia-speedrun/certs --email="LiamBowen@gmail.com" --domains="wikipediaspeedrun.com" --key-type rsa4096 --http run
 
-# Deploy (must be run on server)
-deploy: build-release
+# Deploy web server (must be run on server)
+deploy-web: build-release
   rm -rf /var/wikipedia-speedrun/public
   cp -rav ui/dist /var/wikipedia-speedrun/public
   sudo rm -f /usr/local/bin/wikipedia-speedrun
   sudo cp target/release/server /usr/local/bin/wikipedia-speedrun
   sudo setcap cap_net_bind_service+eip /usr/local/bin/wikipedia-speedrun
   sudo systemctl restart wikipedia-speedrun
+
+# Deploy wikipedia-speedrun tool and periodic builds
+deploy-tool: build-release-tool
+  sudo rm -f /usr/local/bin/wikipedia-speedrun-tool
+  sudo cp target/release/tool /usr/local/bin/wikipedia-speedrun-tool
+  sudo cp ./wikipedia-speedrun-build.timer /lib/systemd/system/wikipedia-speedrun-build.timer
+  sudo cp ./wikipedia-speedrun-build.service /lib/systemd/system/wikipedia-speedrun-build.service
+  sudo systemctl daemon-reload
+  sudo systemctl start wikipedia-speedrun-build
+
+# Deploy web server and tool
+deploy: deploy-web deploy-tool
