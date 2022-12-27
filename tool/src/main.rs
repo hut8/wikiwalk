@@ -8,7 +8,7 @@ use rayon::slice::ParallelSliceMut;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, Database, DatabaseBackend, DbBackend, DbConn, DeriveColumn,
+    ColumnTrait, ConnectionTrait, DatabaseBackend, DbBackend, DbConn, DeriveColumn,
     EntityTrait, EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
@@ -929,13 +929,6 @@ async fn main() {
     let data_dir = cli.data_path.unwrap_or(default_data_dir);
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
-    let db_path = data_dir.join("wikipedia-speedrun.db");
-    let conn_str = format!("sqlite:///{}?mode=ro", db_path.to_string_lossy());
-    let master_db_path = data_dir.join("master.db");
-    let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());
-    let master_db: DbConn = Database::connect(master_conn_str)
-        .await
-        .expect("master db connect");
 
     // directory used for processing import
     match cli.command {
@@ -946,10 +939,8 @@ async fn main() {
             source,
             destination,
         } => {
-            let db: DbConn = Database::connect(conn_str).await.expect("db connect");
-
             log::info!("computing path");
-            let mut gdb = GraphDB::new("current".into(), &data_dir, db, master_db).unwrap();
+            let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
             let source_title = source.replace('_', " ");
             let dest_title = destination.replace('_', " ");
 
@@ -985,8 +976,7 @@ async fn main() {
         Command::Query { target } => {
             let target = target.replace('_', " ");
             log::info!("querying target: {}", target);
-            let db: DbConn = Database::connect(conn_str).await.expect("db connect");
-            let mut gdb = GraphDB::new("current".into(), &data_dir, db, master_db).unwrap();
+            let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
             let vertex = gdb
                 .find_vertex_by_title(target)
                 .await

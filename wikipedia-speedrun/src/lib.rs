@@ -1,7 +1,7 @@
 use std::{fs::File, hash::Hash, hash::Hasher, path::PathBuf, time::Instant};
 
 use memmap2::MmapOptions;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DbConn, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DbConn, EntityTrait, QueryFilter, Set, Database};
 use serde::Serialize;
 
 pub mod bfs;
@@ -62,13 +62,22 @@ pub struct GraphDB {
 }
 
 impl GraphDB {
-    pub fn new(
+    pub async fn new(
         dump_date: String,
         root_data_dir: &PathBuf,
-        graph_db: DbConn,
-        master_db: DbConn,
     ) -> Result<GraphDB, std::io::Error> {
+        let master_db_path = root_data_dir.join("master.db");
+        let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());
+        let master_db: DbConn = Database::connect(master_conn_str)
+            .await
+            .expect("master db connect");
+
         let data_dir = root_data_dir.join(dump_date);
+
+        let graph_db_path = data_dir.join("graph.db");
+        let graph_db_conn_str = format!("sqlite:///{}?mode=ro", graph_db_path.to_string_lossy());
+        let graph_db: DbConn = Database::connect(graph_db_conn_str).await.expect("graph db connect");
+
         let path_ix = data_dir.join("vertex-al-ix");
         let path_al = data_dir.join("vertex-al");
         let file_ix = File::open(path_ix)?;
