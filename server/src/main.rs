@@ -1,10 +1,11 @@
 use std::path::PathBuf;
+use std::time::Instant;
 
 use rocket::serde::Serialize;
 use rocket::State;
 use rocket::{fs::FileServer, serde::json::Json};
 
-use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, Condition, EntityTrait, QueryFilter, Set, ActiveModelTrait};
 use wikipedia_speedrun::{schema, GraphDB, Vertex};
 
 mod tls;
@@ -35,6 +36,8 @@ async fn fetch_cache(source_id: u32, dest_id: u32, gdb: &GraphDB) -> Option<Vec<
 
 #[rocket::get("/paths/<source_id>/<dest_id>")]
 async fn paths(source_id: u32, dest_id: u32, gdb: &State<GraphDB>) -> Json<PathData> {
+    let timestamp = chrono::Utc::now();
+    let start_time = Instant::now();
     let paths = match fetch_cache(source_id, dest_id, gdb).await {
         Some(paths) => {
             log::debug!("fetched cached entry for {source_id} - {dest_id}");
@@ -42,9 +45,22 @@ async fn paths(source_id: u32, dest_id: u32, gdb: &State<GraphDB>) -> Json<PathD
         }
         None => gdb.bfs(source_id, dest_id).await,
     };
+    let elapsed = start_time.elapsed();
     let count = paths.len();
     let lengths = paths.iter().map(|p| p.len());
     let degrees = lengths.max();
+    let search = schema::search::ActiveModel {
+        source_page_id: Set(source_id as i32),
+        target_page_id: Set(dest_id as i32),
+        timestamp: Set(timestamp.to_string()),
+        duration: Set(elapsed.as_secs_f64()),
+        ..Default::default()
+    };
+    search
+        .insert(&gdb.master_db)
+        .await
+        .expect("insert log record");
+
     Json(PathData {
         paths,
         count,

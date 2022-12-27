@@ -170,17 +170,6 @@ impl GraphDB {
             .insert(&self.graph_db)
             .await
             .expect("insert path record");
-        let search = schema::search::ActiveModel {
-            source_page_id: Set(src as i32),
-            target_page_id: Set(dest as i32),
-            timestamp: Set(timestamp.to_string()),
-            duration: Set(elapsed.as_secs_f64()),
-            ..Default::default()
-        };
-        search
-            .insert(&self.master_db)
-            .await
-            .expect("insert log record");
         println!("\nelapsed time: {} seconds", elapsed.as_secs());
         paths
     }

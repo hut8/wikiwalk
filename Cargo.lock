@@ -2531,6 +2531,7 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "dirs",
  "hyper",
  "log",
