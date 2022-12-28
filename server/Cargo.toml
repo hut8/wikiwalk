@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 wikipedia-speedrun = { path = "../wikipedia-speedrun" }
-rocket = { version = "0.5.0-rc.2", features = ["json", "tls"] }
 stderrlog = "*"
 hyper = { version = "^0.14" }
 log = "*"
@@ -17,10 +16,18 @@ sea-orm = { version = "^0", features = [
   "runtime-tokio-rustls",
   "macros",
 ] }
-serde = "*"
+serde = {version="1", features=["derive"]}
 serde_json = "1.0"
 tokio = "1.23.0"
 chrono = "0.4.23"
+actix-web = "4.2.1"
+actix-web-static-files = "4.0"
+static-files = "0.2.1"
+env_logger = "0.10.0"
+fern = {version="0.6.1", features=["chrono","colored"]}
+
+[build-dependencies]
+static-files = "0.2.1"
 
 [features]
 # default = ["tls-redirect"]
