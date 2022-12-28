@@ -170,7 +170,6 @@ impl GraphDB {
             .insert(&self.graph_db)
             .await
             .expect("insert path record");
-        println!("\nelapsed time: {} seconds", elapsed.as_secs());
         paths
     }
 }

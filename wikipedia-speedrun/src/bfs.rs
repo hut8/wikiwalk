@@ -110,7 +110,6 @@ pub fn breadth_first_search(
             count_edges(&unvisited_backward.all(), EdgeDirection::Incoming, edge_db);
 
         if forward_links_count < backward_links_count {
-            log::debug!("running forward bfs");
             // forward BFS
             //forward_depth += 1;
 
@@ -125,7 +124,6 @@ pub fn breadth_first_search(
             for current_source_id in outgoing_visit_q {
                 let outgoing_edges = edge_db.read_edges(current_source_id).outgoing;
                 for target_id in outgoing_edges {
-                    //log::debug!("visiting outgoing page {}", target_id);
                     // If we have not yet visited this target, mark it as unvisited.
                     if !visited_forward.contains(target_id) {
                         unvisited_forward.record(target_id, current_source_id);
@@ -133,7 +131,6 @@ pub fn breadth_first_search(
                 }
             }
         } else {
-            log::debug!("running backward bfs");
             // backward BFS
             //backward_depth += 1;
 
@@ -148,7 +145,6 @@ pub fn breadth_first_search(
             for current_target_id in incoming_visit_q {
                 let incoming_edges = edge_db.read_edges(current_target_id).incoming;
                 for source_id in incoming_edges {
-                    // log::debug!("visiting incoming page {}", source_id);
                     // If the source page has not been visited, mark it as unvisited.
                     if !visited_backward.contains(source_id) {
                         unvisited_backward.record(source_id, current_target_id);
