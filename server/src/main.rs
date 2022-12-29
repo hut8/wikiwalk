@@ -2,7 +2,7 @@ use std::fs::File;
 use std::time::Instant;
 use std::{io::BufReader, path::PathBuf};
 
-use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, web, App, HttpServer, Responder};
 use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 
 use fern::colors::{Color, ColoredLevelConfig};
@@ -97,7 +97,7 @@ async fn main() -> std::io::Result<()> {
         .debug(Color::White)
         // depending on the terminals color scheme, this is the same as the background color
         .trace(Color::BrightBlack);
-    let colors_level = colors_line.clone().info(Color::Green);
+    let colors_level = colors_line.info(Color::Green);
 
     fern::Dispatch::new()
         .format(move |out, message, record| {
@@ -126,14 +126,11 @@ async fn main() -> std::io::Result<()> {
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
     let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
-    let port = u16::from_str_radix(&port, 10).expect("parse port");
+    let port = port.parse::<u16>().expect("parse port");
     let bind_addr = std::env::var("ADDRESS").unwrap_or_else(|_| "localhost".to_string());
     let cert_path = std::env::var("TLS_CERT").ok();
     let key_path = std::env::var("TLS_KEY").ok();
-    let enable_https = match (&cert_path, &key_path) {
-        (Some(_), Some(_)) => true,
-        _ => false,
-    };
+    let enable_https = matches!((&cert_path, &key_path), (Some(_), Some(_)));
 
     let gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
     let gdb_data = web::Data::new(gdb);
@@ -173,8 +170,8 @@ fn load_rustls_config(cert_path: &str, key_path: &str) -> rustls::ServerConfig {
         .with_no_client_auth();
 
     // load TLS key/cert files
-    let cert_file = &mut BufReader::new(File::open(&cert_path).unwrap());
-    let key_file = &mut BufReader::new(File::open(&key_path).unwrap());
+    let cert_file = &mut BufReader::new(File::open(cert_path).unwrap());
+    let key_file = &mut BufReader::new(File::open(key_path).unwrap());
 
     // convert files to key/cert objects
     let cert_chain = certs(cert_file)
