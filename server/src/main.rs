@@ -1,9 +1,14 @@
-use std::path::PathBuf;
+use std::fs::File;
 use std::time::Instant;
+use std::{io::BufReader, path::PathBuf};
 
-use actix_web::{get, web, App, HttpServer, Responder};
+use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 
 use fern::colors::{Color, ColoredLevelConfig};
+
+use rustls::{Certificate, PrivateKey, ServerConfig};
+use rustls_pemfile::{certs, pkcs8_private_keys};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use wikipedia_speedrun::{schema, GraphDB};
@@ -11,8 +16,6 @@ use wikipedia_speedrun::{schema, GraphDB};
 use actix_web_static_files::ResourceFiles;
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
-
-mod tls;
 
 #[derive(Serialize)]
 struct PathData {
@@ -89,17 +92,17 @@ async fn main() -> std::io::Result<()> {
     let colors_line = ColoredLevelConfig::new()
         .error(Color::Red)
         .warn(Color::Yellow)
-    // we actually don't need to specify the color for debug and info, they are white by default
+        // we actually don't need to specify the color for debug and info, they are white by default
         .info(Color::White)
         .debug(Color::White)
-    // depending on the terminals color scheme, this is the same as the background color
+        // depending on the terminals color scheme, this is the same as the background color
         .trace(Color::BrightBlack);
     let colors_level = colors_line.clone().info(Color::Green);
 
     fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "{color_line}[{target}][{level}{color_line}] {message}\x1B[0m",
+                "{color_line}[{target}] [{level}{color_line}] {message}\x1B[0m",
                 color_line = format_args!(
                     "\x1B[{}m",
                     colors_line.get_color(&record.level()).to_fg_str()
@@ -125,23 +128,71 @@ async fn main() -> std::io::Result<()> {
     let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
     let port = u16::from_str_radix(&port, 10).expect("parse port");
     let bind_addr = std::env::var("ADDRESS").unwrap_or_else(|_| "localhost".to_string());
+    let cert_path = std::env::var("TLS_CERT").ok();
+    let key_path = std::env::var("TLS_KEY").ok();
+    let enable_https = match (&cert_path, &key_path) {
+        (Some(_), Some(_)) => true,
+        _ => false,
+    };
 
     let gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
     let gdb_data = web::Data::new(gdb);
 
-    tokio::spawn(async move { tls::launch_tls_redirect().await });
-
-    HttpServer::new(move || {
+    let mut server = HttpServer::new(move || {
         let generated = generate();
         App::new()
             .wrap(Logger::default())
+            .wrap(actix_web::middleware::Condition::new(
+                enable_https,
+                RedirectHttps::with_hsts(StrictTransportSecurity::default()),
+            ))
             .app_data(gdb_data.clone())
             .service(paths)
             .service(ResourceFiles::new("/", generated))
-    })
-    .bind((bind_addr, port))?
-    .run()
-    .await?;
+    });
+
+    if let (Some(cert_path), Some(key_path)) = (cert_path, key_path) {
+        // enable TLS
+        let tls_config = load_rustls_config(&cert_path, &key_path);
+        server = server.bind_rustls((bind_addr.clone(), port), tls_config)?;
+        // enable port 80 -> 443 redirects
+        server = server.bind((bind_addr.clone(), 80))?;
+    } else {
+        server = server.bind((bind_addr.clone(), port))?;
+    }
+
+    server.run().await?;
 
     Ok(())
+}
+
+fn load_rustls_config(cert_path: &str, key_path: &str) -> rustls::ServerConfig {
+    // init server config builder with safe defaults
+    let config = ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth();
+
+    // load TLS key/cert files
+    let cert_file = &mut BufReader::new(File::open(&cert_path).unwrap());
+    let key_file = &mut BufReader::new(File::open(&key_path).unwrap());
+
+    // convert files to key/cert objects
+    let cert_chain = certs(cert_file)
+        .unwrap()
+        .into_iter()
+        .map(Certificate)
+        .collect();
+    let mut keys: Vec<PrivateKey> = pkcs8_private_keys(key_file)
+        .unwrap()
+        .into_iter()
+        .map(PrivateKey)
+        .collect();
+
+    // exit if no keys could be parsed
+    if keys.is_empty() {
+        eprintln!("Could not locate PKCS 8 private keys.");
+        std::process::exit(1);
+    }
+
+    config.with_single_cert(cert_chain, keys.remove(0)).unwrap()
 }
