@@ -339,6 +339,8 @@ struct DBStatus {
     wp_pagelinks_hash: Option<Vec<u8>>,
     edges_resolved: Option<bool>,
     edges_sorted: Option<bool>,
+    vertex_al_hash: Option<bool>,
+    vertex_ix_hash: Option<bool>,
     build_complete: Option<bool>,
     #[serde(skip)]
     status_path: Option<PathBuf>,
@@ -357,11 +359,14 @@ impl DBStatus {
             edges_sorted: None,
             build_complete: None,
             status_path: None,
+            vertex_al_hash: None,
+            vertex_ix_hash: None,
             dump_date: None,
         }
     }
 
     pub fn load(status_path: PathBuf) -> DBStatus {
+
         match File::open(&status_path) {
             Ok(file) => {
                 let mut val: DBStatus = serde_json::from_reader(file).unwrap();
