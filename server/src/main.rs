@@ -8,7 +8,7 @@ use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 use fern::colors::{Color, ColoredLevelConfig};
 
 use rustls::{Certificate, PrivateKey, ServerConfig};
-use rustls_pemfile::{certs, pkcs8_private_keys};
+use rustls_pemfile::{certs, read_one, Item};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use wikipedia_speedrun::{schema, GraphDB};
@@ -150,8 +150,11 @@ async fn main() -> std::io::Result<()> {
 
     if let (Some(cert_path), Some(key_path)) = (cert_path, key_path) {
         // enable TLS
+        log::info!("enabling tls");
+        log::info!("tls cert={cert_path}");
+        log::info!("tls key={key_path}");
         let tls_config = load_rustls_config(&cert_path, &key_path);
-        server = server.bind_rustls((bind_addr.clone(), port), tls_config)?;
+        server = server.bind_rustls((bind_addr.clone(), port), tls_config).expect("unable to create tls listener");
         // enable port 80 -> 443 redirects
         server = server.bind((bind_addr.clone(), 80))?;
     } else {
@@ -173,23 +176,20 @@ fn load_rustls_config(cert_path: &str, key_path: &str) -> rustls::ServerConfig {
     let cert_file = &mut BufReader::new(File::open(cert_path).unwrap());
     let key_file = &mut BufReader::new(File::open(key_path).unwrap());
 
+    let key = match read_one(key_file).unwrap().expect("did not find key in key file") {
+        Item::ECKey(key) => PrivateKey(key),
+        _ => {
+            log::error!("expected to find valid key in keyfile at {key_path}");
+            std::process::exit(1);
+        }
+    };
+
     // convert files to key/cert objects
     let cert_chain = certs(cert_file)
         .unwrap()
         .into_iter()
         .map(Certificate)
         .collect();
-    let mut keys: Vec<PrivateKey> = pkcs8_private_keys(key_file)
-        .unwrap()
-        .into_iter()
-        .map(PrivateKey)
-        .collect();
 
-    // exit if no keys could be parsed
-    if keys.is_empty() {
-        eprintln!("Could not locate PKCS 8 private keys.");
-        std::process::exit(1);
-    }
-
-    config.with_single_cert(cert_chain, keys.remove(0)).unwrap()
+    config.with_single_cert(cert_chain, key).unwrap()
 }

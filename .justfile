@@ -46,7 +46,7 @@ install-lego:
 
 # Get production TLS certificate
 issue-tls-cert:
-  sudo /usr/local/bin/lego --path /var/wikipedia-speedrun/certs --email="LiamBowen@gmail.com" --domains="wikipediaspeedrun.com" --key-type rsa4096 --http run
+  sudo /usr/local/bin/lego --path /var/wikipedia-speedrun/certs --email="LiamBowen@gmail.com" --domains="wikipediaspeedrun.com" --key-type ec256 --http run
 
 # Deploy web server (must be run on server)
 deploy-web: build-release
