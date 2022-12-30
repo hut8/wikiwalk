@@ -1,2 +1,5 @@
 [workspace]
 members = ["wikipedia-speedrun", "server", "tool", "migration"]
+
+[profile.release]
+debug = true
