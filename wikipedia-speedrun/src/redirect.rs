@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::{collections::HashMap, fs::File};
 
@@ -93,18 +93,6 @@ impl RedirectMap {
         }
 
         log::info!("parsed {} redirects", self.redirects.len());
-    }
-
-    pub fn dump(&self) -> Result<(), anyhow::Error> {
-        let mut dump_path = self.path.clone();
-        dump_path.set_extension("debug");
-        let mut sink = File::create(&dump_path)?;
-        log::info!("dumping redirects to {}", dump_path.display());
-        for (source, dest) in self.redirects.iter() {
-            writeln!(sink, "{source},{dest}")?;
-        }
-        log::info!("dump complete");
-        Ok(())
     }
 
     pub fn get(&self, from: u32) -> Option<u32> {

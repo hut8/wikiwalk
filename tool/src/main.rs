@@ -649,7 +649,6 @@ impl GraphDBBuilder {
         );
         let mut redirects = redirect::RedirectMap::new(self.redirects_path.clone());
         redirects.parse(db.clone()).await;
-        redirects.dump().expect("dump redirects");
         log::info!("loaded {} redirects", redirects.len());
 
         log::debug!("loading edges dump");
