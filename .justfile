@@ -28,7 +28,7 @@ fix:
 build-release:
   cd ui && npm run build
   rm -f target/release/server target/release/tool
-  cargo build --release --features tls-redirect --bin server
+  cargo build --release --bin server
 
 build-release-tool:
     rm -f target/release/tool
@@ -50,8 +50,6 @@ issue-tls-cert:
 
 # Deploy web server (must be run on server)
 deploy-web: build-release
-  rm -rf /var/wikipedia-speedrun/public
-  cp -rav ui/dist /var/wikipedia-speedrun/public
   sudo rm -f /usr/local/bin/wikipedia-speedrun
   sudo cp target/release/server /usr/local/bin/wikipedia-speedrun
   sudo setcap cap_net_bind_service+eip /usr/local/bin/wikipedia-speedrun
