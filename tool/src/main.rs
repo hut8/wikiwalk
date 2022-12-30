@@ -118,7 +118,20 @@ impl EdgeProcDB {
         )
     }
 
-    fn open_sort_file(&self, sort_by: &EdgeSort) -> Mmap {
+    fn open_sort_file_write(&self, sort_by: &EdgeSort) -> MmapMut {
+        let basename = Self::sort_basename(sort_by);
+        let path = &self.root_path.join(basename);
+        let source_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .expect("open edge db sort file for writing");
+        let map = unsafe { MmapMut::map_mut(&source_file).expect("mmap edge sort file") };
+        Self::configure_mmap_mut(&map);
+        map
+    }
+
+    fn open_sort_file_read(&self, sort_by: &EdgeSort) -> Mmap {
         let basename = Self::sort_basename(sort_by);
         let path = &self.root_path.join(basename);
         let source_file = OpenOptions::new()
@@ -136,27 +149,32 @@ impl EdgeProcDB {
             .expect("set madvice sequential");
     }
 
+    #[cfg(unix)]
+    fn configure_mmap_mut(mmap: &MmapMut) {
+        mmap.advise(memmap2::Advice::Sequential)
+            .expect("set madvice sequential");
+    }
+
     #[cfg(windows)]
     /// configure_mmap is a nop in Windows
     fn configure_mmap(_mmap: &Mmap) {}
 
-    fn make_sort_file(&self, sort_by: &EdgeSort) -> (MmapMut, File) {
-        let sink_basename = Self::sort_basename(sort_by);
-        let sink_path = &self.root_path.join(sink_basename);
-        std::fs::copy(self.root_path.join("edges"), sink_path).expect("copy file for sort");
+    #[cfg(windows)]
+    /// configure_mmap is a nop in Windows
+    fn configure_mmap_mut(_mmap: &MmapMut) {}
 
-        let sink_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(sink_path)
-            .expect("open edge db sort file as sink");
-        let map = unsafe { MmapMut::map_mut(&sink_file).expect("mmap edge sort file") };
-        (map, sink_file)
+    fn make_sort_files(&self) {
+        let source_path = self.root_path.join("edges");
+        let incoming_sink_basename = Self::sort_basename(&EdgeSort::Incoming);
+        let incoming_sink_path = &self.root_path.join(incoming_sink_basename);
+        let outgoing_sink_basename = Self::sort_basename(&EdgeSort::Outgoing);
+        let outgoing_sink_path = &self.root_path.join(outgoing_sink_basename);
+        std::fs::copy(&source_path, outgoing_sink_path).expect("copy file for sort");
+        std::fs::rename(&source_path, incoming_sink_path).expect("rename file for sort");
     }
 
     pub fn write_sorted_by(&mut self, sort_by: EdgeSort) {
-        let (mut sink, sink_file) = self.make_sort_file(&sort_by);
+        let mut sink = self.open_sort_file_write(&sort_by);
 
         log::debug!(
             "sorting edge db for direction: {}",
@@ -179,8 +197,7 @@ impl EdgeProcDB {
             EdgeSort::Incoming => x.dest_vertex_id.cmp(&y.dest_vertex_id),
             EdgeSort::Outgoing => x.source_vertex_id.cmp(&y.source_vertex_id),
         });
-        sink.flush().expect("sink flush");
-        drop(sink_file);
+        drop(sink);
     }
 
     pub fn flush(&mut self) {
@@ -188,8 +205,8 @@ impl EdgeProcDB {
     }
 
     pub fn iter(&self, max_page_id: u32) -> AdjacencySetIterator {
-        let outgoing_source = self.open_sort_file(&EdgeSort::Outgoing);
-        let incoming_source = self.open_sort_file(&EdgeSort::Incoming);
+        let outgoing_source = self.open_sort_file_read(&EdgeSort::Outgoing);
+        let incoming_source = self.open_sort_file_read(&EdgeSort::Incoming);
 
         AdjacencySetIterator {
             outgoing_source,
@@ -366,7 +383,6 @@ impl DBStatus {
     }
 
     pub fn load(status_path: PathBuf) -> DBStatus {
-
         match File::open(&status_path) {
             Ok(file) => {
                 let mut val: DBStatus = serde_json::from_reader(file).unwrap();
@@ -381,6 +397,8 @@ impl DBStatus {
                 edges_sorted: None,
                 status_path: Some(status_path),
                 dump_date: None,
+                vertex_al_hash: None,
+                vertex_ix_hash: None,
             },
         }
     }
@@ -508,6 +526,8 @@ impl GraphDBBuilder {
         };
 
         if needs_sort {
+            log::debug!("making edge sort files");
+            edge_db.make_sort_files();
             log::debug!("writing sorted outgoing edges");
             edge_db.write_sorted_by(EdgeSort::Outgoing);
             log::debug!("writing sorted incoming edges");
