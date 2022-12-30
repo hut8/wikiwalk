@@ -115,6 +115,7 @@ async fn main() -> std::io::Result<()> {
         .level(log::LevelFilter::Debug)
         .level_for("sqlx", log::LevelFilter::Warn)
         .level_for("h2", log::LevelFilter::Warn)
+        .level_for("rustls", log::LevelFilter::Error)
         .chain(std::io::stdout())
         .apply()
         .expect("initialize logs");
