@@ -60,9 +60,7 @@
       console.debug("blank search term");
       return [];
     }
-    const instant = new Date().getTime();
     const matches = await search(term);
-    elapsed = (new Date().getTime()) - instant;
     return matches.map((p) => p.pageid);
   }
 
@@ -71,6 +69,7 @@
       console.warn("tried to compute paths without pages set");
       return;
     }
+    const instant = new Date().getTime();
     try {
       loading = true;
       pathData = await findPaths(sourcePageID, targetPageID);
@@ -78,6 +77,7 @@
       errorSnackbar.forceOpen();
     } finally {
       loading = false;
+      elapsed = (new Date().getTime()) - instant;
     }
   }
 

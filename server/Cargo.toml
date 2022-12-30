@@ -32,7 +32,3 @@ fern = {version="0.6.1", features=["chrono","colored"]}
 
 [build-dependencies]
 static-files = "0.2.1"
-
-[features]
-# default = ["tls-redirect"]
-tls-redirect = []
