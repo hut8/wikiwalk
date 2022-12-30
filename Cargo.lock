@@ -1741,17 +1741,6 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.17.1"
-source = "git+https://github.com/hut8/indicatif?branch=float-rate-limit#417f5af7c6268dabfa7bd6d2f2de7265abc68115"
-dependencies = [
- "console",
- "number_prefix",
- "portable-atomic",
- "unicode-width",
-]
-
-[[package]]
-name = "indicatif"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4295cbb7573c16d310e99e713cf9e75101eb190ab31fccd35f2d2691b4352b19"
@@ -3677,7 +3666,7 @@ dependencies = [
  "flate2",
  "futures",
  "hex",
- "indicatif 0.17.2",
+ "indicatif",
  "itertools",
  "log",
  "memmap2",
@@ -4062,7 +4051,7 @@ dependencies = [
  "flate2",
  "futures",
  "hex",
- "indicatif 0.17.1",
+ "indicatif",
  "itertools",
  "log",
  "memmap2",
@@ -4070,7 +4059,6 @@ dependencies = [
  "num_cpus",
  "parse-mediawiki-sql",
  "rayon",
- "rocket",
  "sea-orm",
  "serde",
  "serde_json",
