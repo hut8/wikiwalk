@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+# Script to figure out if the server segfaulted
+log_path="/var/wikipedia-speedrun/service-log"
+# Don't do anything if the service intentionally stopped successfully.
+(
+    date --iso8601=seconds
+    if [ $SERVICE_RESULT != "success" ]; then
+        echo "***ABNORMAL RESULT***"
+    fi
+    printenv
+    echo "========================="
+    echo
+) >> "$log_path"

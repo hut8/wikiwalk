@@ -53,6 +53,9 @@ deploy-web: build-release
   sudo rm -f /usr/local/bin/wikipedia-speedrun
   sudo cp target/release/server /usr/local/bin/wikipedia-speedrun
   sudo setcap cap_net_bind_service+eip /usr/local/bin/wikipedia-speedrun
+  sudo cp wikipedia-speedrun-monitor /usr/local/bin/wikipedia-speedrun-monitor
+  sudo cp ./wikipedia-speedrun.service /lib/systemd/system/wikipedia-speedrun.service
+  sudo systemctl daemon-reload
   sudo systemctl restart wikipedia-speedrun
 
 # Deploy wikipedia-speedrun tool and periodic builds
