@@ -87,6 +87,9 @@ export async function findPaths(
     sourceId: number,
     targetId: number
 ): Promise<PagePaths> {
+    gtag('event', 'search', {
+        search_term: `${sourceId}-${targetId}`,
+    });
     const endpoint = `/paths/${sourceId}/${targetId}`;
     const response = await fetch(endpoint);
     if (!response.ok) {
