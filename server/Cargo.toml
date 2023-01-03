@@ -7,8 +7,6 @@ edition = "2021"
 
 [dependencies]
 wikipedia-speedrun = { path = "../wikipedia-speedrun" }
-stderrlog = "*"
-hyper = { version = "^0.14" }
 log = "*"
 dirs = "4.0"
 sea-orm = { version = "^0", features = [
@@ -27,7 +25,6 @@ rustls-pemfile = "1"
 futures-util = { version = "0.3.17", default-features = false, features = ["std"] }
 actix-web-static-files = "4.0"
 static-files = "0.2.1"
-env_logger = "0.10.0"
 fern = {version="0.6.1", features=["chrono","colored"]}
 
 [build-dependencies]
