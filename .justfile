@@ -36,7 +36,6 @@ build-release-tool:
 
 # Build for development
 build:
-  cd ui && npm run build
   cargo build
 
 # Install lego for TLS certificates
