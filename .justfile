@@ -26,7 +26,6 @@ fix:
 
 # Build for release
 build-release:
-  cd ui && npm run build
   rm -f target/release/server target/release/tool
   cargo build --release --bin server
 
