@@ -12,7 +12,7 @@ use sea_orm::{
     EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
-use sha3::{Digest, Sha3_256};
+
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -25,9 +25,12 @@ use std::thread;
 use wikipedia_speedrun::redirect::RedirectMap;
 use wikipedia_speedrun::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
 
+use crate::dbstatus::DBStatus;
+
 mod fetch;
 mod page_source;
 mod pagelink_source;
+mod dbstatus;
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -349,80 +352,6 @@ enum QueryAs {
     MaxVertexId,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
-struct DBStatus {
-    dump_date: Option<String>,
-    wp_page_hash: Option<Vec<u8>>,
-    wp_pagelinks_hash: Option<Vec<u8>>,
-    edges_resolved: Option<bool>,
-    edges_sorted: Option<bool>,
-    vertex_al_hash: Option<bool>,
-    vertex_ix_hash: Option<bool>,
-    build_complete: Option<bool>,
-    #[serde(skip)]
-    status_path: Option<PathBuf>,
-}
-
-impl DBStatus {
-    pub fn compute(page_path: PathBuf, pagelinks_path: PathBuf) -> DBStatus {
-        let wp_page_hash_thread = thread::spawn(|| Self::hash_file(page_path));
-        let wp_pagelinks_hash_thread = thread::spawn(|| Self::hash_file(pagelinks_path));
-        let wp_page_hash = wp_page_hash_thread.join().unwrap();
-        let wp_pagelinks_hash = wp_pagelinks_hash_thread.join().unwrap();
-        DBStatus {
-            wp_page_hash,
-            wp_pagelinks_hash,
-            edges_resolved: None,
-            edges_sorted: None,
-            build_complete: None,
-            status_path: None,
-            vertex_al_hash: None,
-            vertex_ix_hash: None,
-            dump_date: None,
-        }
-    }
-
-    pub fn load(status_path: PathBuf) -> DBStatus {
-        match File::open(&status_path) {
-            Ok(file) => {
-                let mut val: DBStatus = serde_json::from_reader(file).unwrap();
-                val.status_path = Some(status_path);
-                val
-            }
-            Err(_) => DBStatus {
-                wp_page_hash: None,
-                wp_pagelinks_hash: None,
-                build_complete: None,
-                edges_resolved: None,
-                edges_sorted: None,
-                status_path: Some(status_path),
-                dump_date: None,
-                vertex_al_hash: None,
-                vertex_ix_hash: None,
-            },
-        }
-    }
-
-    pub fn save(&self) {
-        let sink = File::create(self.status_path.as_ref().unwrap()).unwrap();
-        serde_json::to_writer_pretty(&sink, self).unwrap();
-    }
-
-    fn hash_file(path: PathBuf) -> Option<Vec<u8>> {
-        match File::open(path) {
-            Ok(source) => {
-                let source = unsafe { Mmap::map(&source).unwrap() };
-                let mut hasher = Sha3_256::new();
-                let max_tail_size: usize = 1024 * 1024;
-                let tail_size = source.len().min(max_tail_size);
-                let tail = (source.len() - tail_size)..source.len() - 1;
-                hasher.update(&source[tail]);
-                Some(hasher.finalize().to_vec())
-            }
-            Err(_) => None,
-        }
-    }
-}
 
 impl GraphDBBuilder {
     pub fn new(dump_date: String, root_data_dir: &PathBuf) -> GraphDBBuilder {
