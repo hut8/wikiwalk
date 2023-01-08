@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew Wikipedia Speedrun TLS Certs
+Requires=wikipedia-speedrun-certs.service
+
+[Timer]
+Unit=wikipedia-speedrun-certs.service
+OnCalendar=weekly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Wikipedia Speedrun ACME TLS
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/lego --path /var/wikipedia-speedrun/certs --email="LiamBowen@gmail.com" --domains="wikipediaspeedrun.com" --key-type ec256 --http run
+Type=oneshot
+ExecStartPost=+/usr/bin/systemctl restart wikipedia-speedrun.service
+
+[Install]
+WantedBy=multi-user.target
+
