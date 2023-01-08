@@ -384,6 +384,11 @@ impl GraphDBBuilder {
 
         log::debug!("computing current and finished state of data files");
         let mut db_status = DBStatus::load(db_status_path.clone());
+        if let Some(true) = db_status.build_complete {
+            log::info!("build already complete; nothing to do");
+            return;
+        }
+
         let db_status_complete =
             DBStatus::compute(self.dump_paths.clone(), self.db_paths.clone());
         db_status.dump_date = Some(self.dump_date.clone());
