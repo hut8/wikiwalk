@@ -23,3 +23,4 @@ serde_json = "1.0"
 sqlx = { version = "*", features = ["sqlite"] }
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4.23"
+dirs = "4.0.0"
