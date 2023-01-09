@@ -1,4 +1,4 @@
-use std::{fs::File, hash::Hash, hash::Hasher, path::PathBuf, time::Instant};
+use std::{fs::File, hash::Hash, hash::Hasher, path::{PathBuf, Path}, time::Instant};
 
 use memmap2::MmapOptions;
 use sea_orm::{
@@ -72,7 +72,7 @@ pub struct GraphDB {
 impl GraphDB {
     pub async fn new(
         dump_date: String,
-        root_data_dir: &PathBuf,
+        root_data_dir: &Path,
     ) -> Result<GraphDB, std::io::Error> {
         let master_db_path = root_data_dir.join("master.db");
         let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());

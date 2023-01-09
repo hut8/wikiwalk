@@ -27,6 +27,10 @@ impl RedirectMap {
         self.redirects.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.redirects.is_empty()
+    }
+
     pub async fn parse(&mut self, db: DbConn) {
         log::info!("parsing redirects table at {}", &self.path.display());
 
