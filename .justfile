@@ -53,8 +53,15 @@ deploy-web: build-release
   sudo setcap cap_net_bind_service+eip /usr/local/bin/wikipedia-speedrun
   sudo cp wikipedia-speedrun-monitor /usr/local/bin/wikipedia-speedrun-monitor
   sudo cp ./wikipedia-speedrun.service /lib/systemd/system/wikipedia-speedrun.service
+  sudo cp ./wikipedia-speedrun-certs.service /lib/systemd/system/wikipedia-speedrun-certs.service
+  sudo cp ./wikipedia-speedrun-certs.timer /lib/systemd/system/wikipedia-speedrun-certs.timer
   sudo systemctl daemon-reload
-  sudo systemctl restart wikipedia-speedrun
+  sudo systemctl enable wikipedia-speedrun.service
+  sudo systemctl enable wikipedia-speedrun-certs.service
+  sudo systemctl enable wikipedia-speedrun-certs.timer
+  sudo systemctl start wikipedia-speedrun-certs.timer
+  sudo systemctl start wikipedia-speedrun-certs.service
+  sudo systemctl restart wikipedia-speedrun.service
 
 # Deploy wikipedia-speedrun tool and periodic builds
 deploy-tool: build-release-tool
@@ -63,7 +70,10 @@ deploy-tool: build-release-tool
   sudo cp ./wikipedia-speedrun-build.timer /lib/systemd/system/wikipedia-speedrun-build.timer
   sudo cp ./wikipedia-speedrun-build.service /lib/systemd/system/wikipedia-speedrun-build.service
   sudo systemctl daemon-reload
-  sudo systemctl start wikipedia-speedrun-build
+  sudo systemctl enable wikipedia-speedrun-build.service
+  sudo systemctl enable wikipedia-speedrun-build.timer
+  sudo systemctl start wikipedia-speedrun-build.service
+  sudo systemctl start wikipedia-speedrun-build.timer
 
 # Deploy web server and tool
 deploy: deploy-web deploy-tool

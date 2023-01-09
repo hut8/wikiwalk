@@ -12,9 +12,10 @@ use sea_orm::{
     EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
-use sha3::{Digest, Sha3_256};
+
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
+use wikipedia_speedrun::paths::{Paths, DumpPaths, DBPaths};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
@@ -25,9 +26,12 @@ use std::thread;
 use wikipedia_speedrun::redirect::RedirectMap;
 use wikipedia_speedrun::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
 
+use crate::dbstatus::DBStatus;
+
 mod fetch;
 mod page_source;
 mod pagelink_source;
+mod dbstatus;
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -334,14 +338,13 @@ struct GraphDBBuilder {
     pub pagelinks_path: PathBuf,
     pub redirects_path: PathBuf,
 
+    pub paths: Paths,
+    pub dump_paths: DumpPaths,
+    pub db_paths: DBPaths,
+
     // outputs
     pub ix_path: PathBuf,
     pub al_path: PathBuf,
-
-    // dump-specific process directory
-    data_dir: PathBuf,
-    // parent of all dump process directories
-    root_data_dir: PathBuf,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
@@ -349,113 +352,45 @@ enum QueryAs {
     MaxVertexId,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
-struct DBStatus {
-    dump_date: Option<String>,
-    wp_page_hash: Option<Vec<u8>>,
-    wp_pagelinks_hash: Option<Vec<u8>>,
-    edges_resolved: Option<bool>,
-    edges_sorted: Option<bool>,
-    vertex_al_hash: Option<bool>,
-    vertex_ix_hash: Option<bool>,
-    build_complete: Option<bool>,
-    #[serde(skip)]
-    status_path: Option<PathBuf>,
-}
-
-impl DBStatus {
-    pub fn compute(page_path: PathBuf, pagelinks_path: PathBuf) -> DBStatus {
-        let wp_page_hash_thread = thread::spawn(|| Self::hash_file(page_path));
-        let wp_pagelinks_hash_thread = thread::spawn(|| Self::hash_file(pagelinks_path));
-        let wp_page_hash = wp_page_hash_thread.join().unwrap();
-        let wp_pagelinks_hash = wp_pagelinks_hash_thread.join().unwrap();
-        DBStatus {
-            wp_page_hash,
-            wp_pagelinks_hash,
-            edges_resolved: None,
-            edges_sorted: None,
-            build_complete: None,
-            status_path: None,
-            vertex_al_hash: None,
-            vertex_ix_hash: None,
-            dump_date: None,
-        }
-    }
-
-    pub fn load(status_path: PathBuf) -> DBStatus {
-        match File::open(&status_path) {
-            Ok(file) => {
-                let mut val: DBStatus = serde_json::from_reader(file).unwrap();
-                val.status_path = Some(status_path);
-                val
-            }
-            Err(_) => DBStatus {
-                wp_page_hash: None,
-                wp_pagelinks_hash: None,
-                build_complete: None,
-                edges_resolved: None,
-                edges_sorted: None,
-                status_path: Some(status_path),
-                dump_date: None,
-                vertex_al_hash: None,
-                vertex_ix_hash: None,
-            },
-        }
-    }
-
-    pub fn save(&self) {
-        let sink = File::create(self.status_path.as_ref().unwrap()).unwrap();
-        serde_json::to_writer_pretty(&sink, self).unwrap();
-    }
-
-    fn hash_file(path: PathBuf) -> Option<Vec<u8>> {
-        match File::open(path) {
-            Ok(source) => {
-                let source = unsafe { Mmap::map(&source).unwrap() };
-                let mut hasher = Sha3_256::new();
-                let max_tail_size: usize = 1024 * 1024;
-                let tail_size = source.len().min(max_tail_size);
-                let tail = (source.len() - tail_size)..source.len() - 1;
-                hasher.update(&source[tail]);
-                Some(hasher.finalize().to_vec())
-            }
-            Err(_) => None,
-        }
-    }
-}
 
 impl GraphDBBuilder {
     pub fn new(dump_date: String, root_data_dir: &PathBuf) -> GraphDBBuilder {
-        let page = dump_path(root_data_dir, &dump_date, "page");
-        let redirects = dump_path(root_data_dir, &dump_date, "redirect");
-        let pagelinks = dump_path(root_data_dir, &dump_date, "pagelinks");
+        let paths = Paths::with_base(root_data_dir);
+        let dump_paths = paths.dump_paths(&dump_date);
+        let page = dump_paths.page();
+        let redirects = dump_paths.redirect();
+        let pagelinks = dump_paths.pagelinks();
 
-        let dump_data_dir = root_data_dir.join(&dump_date);
-        let ix_path = dump_data_dir.join("vertex-al-ix");
-        let al_path = dump_data_dir.join("vertex-al");
+        let db_paths = paths.db_paths(&dump_date);
+        let ix_path = db_paths.path_vertex_al_ix();
+        let al_path = db_paths.path_vertex_al();
 
         GraphDBBuilder {
             page_path: page.into(),
             pagelinks_path: pagelinks.into(),
             ix_path: ix_path.into(),
             al_path: al_path.into(),
-            data_dir: dump_data_dir.into(),
             redirects_path: redirects.into(),
             dump_date: dump_date.into(),
-            root_data_dir: root_data_dir.into(),
+            paths,
+            dump_paths,
+            db_paths,
         }
     }
 
     /// load vertexes from page.sql and put them in a sqlite file
     pub async fn build_database(&mut self) {
-        std::fs::create_dir_all(&self.data_dir).unwrap();
-
-        let db_status_path = self.data_dir.join("status.json");
+        let db_status_path = self.db_paths.path_db_status();
 
         log::debug!("computing current and finished state of data files");
         let mut db_status = DBStatus::load(db_status_path.clone());
+        if let Some(true) = db_status.build_complete {
+            log::info!("build already complete; nothing to do");
+            return;
+        }
+
         let db_status_complete =
-            DBStatus::compute(self.page_path.clone(), self.pagelinks_path.clone());
+            DBStatus::compute(self.dump_paths.clone(), self.db_paths.clone());
         db_status.dump_date = Some(self.dump_date.clone());
 
         // adjust status if pagelinks hash is mismatched
@@ -470,7 +405,7 @@ impl GraphDBBuilder {
             db_status.edges_sorted = Some(false);
         }
 
-        let db_path = self.data_dir.join("graph.db");
+        let db_path = self.db_paths.graph_db();
         let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
         log::debug!("using database: {}", conn_str);
         let opts = SqliteConnectOptions::new()
@@ -574,9 +509,9 @@ impl GraphDBBuilder {
         db_status.save();
 
         // symlink that which was just built from the "current" link
-        let current_data_dir = self.root_data_dir.join("current");
+        let current_data_dir = self.paths.db_paths("current").base;
         let _ = std::fs::remove_file(&current_data_dir);
-        symlink::symlink_dir(&self.data_dir, &current_data_dir).expect("symlink current directory");
+        symlink::symlink_dir(&self.db_paths.base, &current_data_dir).expect("symlink current directory");
 
         log::info!("database build complete");
     }
@@ -654,7 +589,7 @@ impl GraphDBBuilder {
         db: DbConn,
         db_status: &mut DBStatus,
     ) -> EdgeProcDB {
-        let edge_db = EdgeProcDB::new(self.data_dir.join("edge-db"));
+        let edge_db = EdgeProcDB::new(self.db_paths.base.join("edge-db"));
 
         if let Some(resolved) = db_status.edges_resolved {
             if resolved {
@@ -878,12 +813,6 @@ enum Command {
     Fetch,
     /// Fetch latest dump and import it
     Pull,
-}
-
-fn dump_path(data_dir: &Path, date: &str, table: &str) -> PathBuf {
-    let dumps_dir = data_dir.join("dumps");
-    let basename = format!("enwiki-{date}-{table}.sql.gz");
-    dumps_dir.join(basename)
 }
 
 async fn run_build(data_dir: &PathBuf, dump_date: String) {

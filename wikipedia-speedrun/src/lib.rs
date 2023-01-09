@@ -16,6 +16,7 @@ pub mod dump;
 pub mod edge_db;
 pub mod redirect;
 pub mod schema;
+pub mod paths;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Vertex {

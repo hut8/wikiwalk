@@ -8,4 +8,10 @@ EnvironmentFile=/etc/wikipedia-speedrun
 Type=oneshot
 User=speedrun
 Group=speedrun
+ExecStartPost=+/usr/bin/systemctl restart wikipedia-speedrun.service
+
+[Install]
+WantedBy=multi-user.target
+
+
 
