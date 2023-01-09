@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 #[derive(Clone)]
 pub struct Paths {
@@ -17,8 +17,8 @@ impl Paths {
         Paths { base: data_dir }
     }
 
-    pub fn with_base(base: &PathBuf) -> Self {
-        Paths { base: base.clone() }
+    pub fn with_base(base: &Path) -> Self {
+        Paths { base: base.to_path_buf() }
     }
 
     pub fn path_master(&self) -> PathBuf {

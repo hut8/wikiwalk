@@ -354,7 +354,7 @@ enum QueryAs {
 
 
 impl GraphDBBuilder {
-    pub fn new(dump_date: String, root_data_dir: &PathBuf) -> GraphDBBuilder {
+    pub fn new(dump_date: String, root_data_dir: &Path) -> GraphDBBuilder {
         let paths = Paths::with_base(root_data_dir);
         let dump_paths = paths.dump_paths(&dump_date);
         let page = dump_paths.page();
@@ -815,7 +815,7 @@ enum Command {
     Pull,
 }
 
-async fn run_build(data_dir: &PathBuf, dump_date: String) {
+async fn run_build(data_dir: &Path, dump_date: String) {
     log::info!("building database");
     let mut gddb = GraphDBBuilder::new(dump_date, data_dir);
     gddb.build_database().await;
