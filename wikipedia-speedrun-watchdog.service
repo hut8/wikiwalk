@@ -1,5 +1,5 @@
 [Unit]
-Description=Wikipedia Speedrun Build
+Description=Wikipedia Speedrun Watchdog
 After=wikipedia-speedrun.target
 
 [Service]
