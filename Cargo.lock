@@ -2682,6 +2682,7 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
+ "actix-files",
  "actix-web",
  "actix-web-lab",
  "actix-web-static-files",

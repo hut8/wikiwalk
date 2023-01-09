@@ -132,6 +132,7 @@ async fn main() -> std::io::Result<()> {
     let bind_addr = std::env::var("ADDRESS").unwrap_or_else(|_| "localhost".to_string());
     let cert_path = std::env::var("TLS_CERT").ok();
     let key_path = std::env::var("TLS_KEY").ok();
+    let well_known_path = std::env::var("WELL_KNOWN_ROOT").ok();
     let enable_https = matches!((&cert_path, &key_path), (Some(_), Some(_)));
 
     let gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
@@ -139,7 +140,7 @@ async fn main() -> std::io::Result<()> {
 
     let mut server = HttpServer::new(move || {
         let generated = generate();
-        App::new()
+        let app = App::new()
             .wrap(Logger::default())
             .wrap(actix_web::middleware::Condition::new(
                 enable_https,
@@ -147,7 +148,14 @@ async fn main() -> std::io::Result<()> {
             ))
             .app_data(gdb_data.clone())
             .service(paths)
-            .service(ResourceFiles::new("/", generated))
+            .service(ResourceFiles::new("/", generated));
+        match &well_known_path {
+            Some(well_known_path) => {
+                // optionally add .well-known static files path so that lego can do HTTP acme challenge on port 80
+                app.service(actix_files::Files::new("/.well-known", well_known_path))
+            }
+            None => app
+        }
     });
 
     if let (Some(cert_path), Some(key_path)) = (cert_path, key_path) {
