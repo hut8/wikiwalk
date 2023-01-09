@@ -12,7 +12,7 @@ send_query() {
 run_watchdog() {
     local graph_file="$DATA_PATH/current/graph.db"
     local query='SELECT id FROM vertexes ORDER BY random() LIMIT 2'
-    { read -r source_id; read -r target_id; } < <(echo "$query" | sqlite3 -batch -noheader "$graph_file")  
+    { read -r source_id; read -r target_id; } < <(echo "$query" | sqlite3 -batch -noheader "$graph_file")
     echo "checking path: $source_id -> $target_id"
 }
 
