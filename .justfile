@@ -70,7 +70,6 @@ deploy-web: build-release
   sudo systemctl enable wikipedia-speedrun-watchdog.service
   sudo systemctl restart wikipedia-speedrun.service
   sudo systemctl restart wikipedia-speedrun-certs.timer
-  sudo systemctl restart wikipedia-speedrun-certs.service
   sudo systemctl restart wikipedia-speedrun-watchdog.service
 
 # Deploy wikipedia-speedrun tool and periodic builds
