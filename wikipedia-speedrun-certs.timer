@@ -5,6 +5,7 @@ Requires=wikipedia-speedrun-certs.service
 [Timer]
 Unit=wikipedia-speedrun-certs.service
 OnCalendar=weekly
+RandomizedDelaySec=12h
 Persistent=true
 
 [Install]

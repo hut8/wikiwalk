@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+CERT_PATH="/var/wikipedia-speedrun/certs"
+WEBROOT_PATH="/var/wikipedia-speedrun/webroot"
+echo "fetching certificates"
+if [[ -d "$CERT_PATH" ]]
+then
+    echo "$CERT_PATH exists, using webroot"
+    /usr/local/bin/lego \
+        --accept-tos \
+        --path "$CERT_PATH" \
+        --email="LiamBowen@gmail.com" \
+        --domains="wikipediaspeedrun.com" \
+        --key-type ec256 \
+        --http \
+        --http.webroot "$WEBROOT_PATH" \
+        run
+else
+    echo "$CERT_PATH does not exist, using standalone"
+    /usr/local/bin/lego \
+        --accept-tos \
+        --path "$CERT_PATH" \
+        --email="LiamBowen@gmail.com" \
+        --domains="wikipediaspeedrun.com" \
+        --key-type ec256 \
+        --http \
+        run
+fi

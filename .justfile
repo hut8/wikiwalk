@@ -42,18 +42,22 @@ install-lego:
   go install github.com/go-acme/lego/v4/cmd/lego@latest
   sudo mv "$HOME/go/bin/lego" /usr/local/bin/lego
 
-# Get production TLS certificate
+# Get production TLS certificate once
 issue-tls-cert:
   sudo /usr/local/bin/lego --path /var/wikipedia-speedrun/certs --email="LiamBowen@gmail.com" --domains="wikipediaspeedrun.com" --key-type ec256 --http run
 
 # Deploy web server (must be run on server)
 deploy-web: build-release
+  sudo mkdir -p /var/wikipedia-speedrun/ /var/wikipedia-speedrun/webroot/.well-known
+  sudo chown -R speedrun:speedrun /var/wikipedia-speedrun
   sudo rm -f /usr/local/bin/wikipedia-speedrun
   sudo rm -f /usr/local/bin/wikipedia-speedrun-watchdog
   sudo rm -f /usr/local/bin/wikipedia-speedrun-monitor
+  sudo rm -f /usr/local/bin/wikipedia-speedrun-certs
   sudo cp target/release/server /usr/local/bin/wikipedia-speedrun
   sudo cp wikipedia-speedrun-watchdog /usr/local/bin/wikipedia-speedrun-watchdog
   sudo cp wikipedia-speedrun-monitor /usr/local/bin/wikipedia-speedrun-monitor
+  sudo cp wikipedia-speedrun-certs /usr/local/bin/wikipedia-speedrun-certs
   sudo setcap cap_net_bind_service+eip /usr/local/bin/wikipedia-speedrun
   sudo cp ./wikipedia-speedrun.service /lib/systemd/system/wikipedia-speedrun.service
   sudo cp ./wikipedia-speedrun-certs.service /lib/systemd/system/wikipedia-speedrun-certs.service
@@ -64,9 +68,9 @@ deploy-web: build-release
   sudo systemctl enable wikipedia-speedrun-certs.service
   sudo systemctl enable wikipedia-speedrun-certs.timer
   sudo systemctl enable wikipedia-speedrun-watchdog.service
+  sudo systemctl restart wikipedia-speedrun.service
   sudo systemctl restart wikipedia-speedrun-certs.timer
   sudo systemctl restart wikipedia-speedrun-certs.service
-  sudo systemctl restart wikipedia-speedrun.service
   sudo systemctl restart wikipedia-speedrun-watchdog.service
 
 # Deploy wikipedia-speedrun tool and periodic builds

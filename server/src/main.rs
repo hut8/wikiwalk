@@ -147,15 +147,17 @@ async fn main() -> std::io::Result<()> {
                 RedirectHttps::with_hsts(StrictTransportSecurity::default()),
             ))
             .app_data(gdb_data.clone())
-            .service(paths)
-            .service(ResourceFiles::new("/", generated));
+            .service(paths);
         match &well_known_path {
             Some(well_known_path) => {
                 // optionally add .well-known static files path so that lego can do HTTP acme challenge on port 80
-                app.service(actix_files::Files::new("/.well-known", well_known_path))
+                app.service(
+                    actix_files::Files::new("/.well-known", well_known_path).use_hidden_files(),
+                )
             }
-            None => app
+            None => app,
         }
+        .service(ResourceFiles::new("/", generated))
     });
 
     if let (Some(cert_path), Some(key_path)) = (cert_path, key_path) {
@@ -164,7 +166,9 @@ async fn main() -> std::io::Result<()> {
         log::info!("tls cert={cert_path}");
         log::info!("tls key={key_path}");
         let tls_config = load_rustls_config(&cert_path, &key_path);
-        server = server.bind_rustls((bind_addr.clone(), port), tls_config).expect("unable to create tls listener");
+        server = server
+            .bind_rustls((bind_addr.clone(), port), tls_config)
+            .expect("unable to create tls listener");
         // enable port 80 -> 443 redirects
         server = server.bind((bind_addr.clone(), 80))?;
     } else {
@@ -186,7 +190,10 @@ fn load_rustls_config(cert_path: &str, key_path: &str) -> rustls::ServerConfig {
     let cert_file = &mut BufReader::new(File::open(cert_path).unwrap());
     let key_file = &mut BufReader::new(File::open(key_path).unwrap());
 
-    let key = match read_one(key_file).unwrap().expect("did not find key in key file") {
+    let key = match read_one(key_file)
+        .unwrap()
+        .expect("did not find key in key file")
+    {
         Item::ECKey(key) => PrivateKey(key),
         _ => {
             log::error!("expected to find valid key in keyfile at {key_path}");

@@ -3,7 +3,7 @@ Description=Wikipedia Speedrun ACME TLS
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/lego --path /var/wikipedia-speedrun/certs --email="LiamBowen@gmail.com" --domains="wikipediaspeedrun.com" --key-type ec256 --http run
+ExecStart=/usr/local/bin/wikipedia-speedrun-certs
 Type=oneshot
 ExecStartPost=+/usr/bin/systemctl restart wikipedia-speedrun.service
 
