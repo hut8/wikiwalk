@@ -26,6 +26,7 @@ futures-util = { version = "0.3.17", default-features = false, features = ["std"
 actix-web-static-files = "4.0"
 static-files = "0.2.1"
 fern = {version="0.6.1", features=["chrono","colored"]}
+actix-files = "0.6.2"
 
 [build-dependencies]
 static-files = "0.2.1"
