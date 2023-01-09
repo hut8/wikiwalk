@@ -22,11 +22,11 @@ impl DBStatus {
     pub fn compute(dump_paths: DumpPaths, db_paths: DBPaths) -> DBStatus {
         let dump_paths_t = dump_paths.clone();
         let wp_page_hash_thread = thread::spawn(move || Self::hash_file(dump_paths_t.page()));
-        let dump_paths_t = dump_paths.clone();
+        let dump_paths_t = dump_paths;
         let wp_pagelinks_hash_thread = thread::spawn(move || Self::hash_file(dump_paths_t.pagelinks()));
         let db_paths_t = db_paths.clone();
         let vertex_al_hash_thread = thread::spawn(move || Self::hash_file(db_paths_t.path_vertex_al()));
-        let db_paths_t = db_paths.clone();
+        let db_paths_t = db_paths;
         let vertex_al_ix_hash_thread = thread::spawn(move || Self::hash_file(db_paths_t.path_vertex_al_ix()));
         let wp_page_hash = wp_page_hash_thread.join().unwrap();
         let wp_pagelinks_hash = wp_pagelinks_hash_thread.join().unwrap();

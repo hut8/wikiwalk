@@ -107,7 +107,7 @@ impl GraphDB {
         let opts = SqliteConnectOptions::new()
             .synchronous(SqliteSynchronous::Off)
             .journal_mode(SqliteJournalMode::Memory)
-            .filename(&db_path)
+            .filename(db_path)
             .create_if_missing(true);
         let pool = SqlitePool::connect_with(opts).await.expect("db connect");
         let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);

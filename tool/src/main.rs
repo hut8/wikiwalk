@@ -366,12 +366,12 @@ impl GraphDBBuilder {
         let al_path = db_paths.path_vertex_al();
 
         GraphDBBuilder {
-            page_path: page.into(),
-            pagelinks_path: pagelinks.into(),
-            ix_path: ix_path.into(),
-            al_path: al_path.into(),
-            redirects_path: redirects.into(),
-            dump_date: dump_date.into(),
+            page_path: page,
+            pagelinks_path: pagelinks,
+            ix_path,
+            al_path,
+            redirects_path: redirects,
+            dump_date,
             paths,
             dump_paths,
             db_paths,
