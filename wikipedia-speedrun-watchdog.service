@@ -1,0 +1,10 @@
+[Unit]
+Description=Wikipedia Speedrun Build
+After=wikipedia-speedrun.target
+
+[Service]
+ExecStart=/usr/local/bin/wikipedia-speedrun-tool
+Environment=DATA_PATH=/var/wikipedia-speedrun/data
+
+[Install]
+WantedBy=multi-user.target

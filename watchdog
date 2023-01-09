@@ -1,0 +1,23 @@
+#!/usr/bin/zsh
+set -euo pipefail
+DATA_PATH="${DATA_PATH:-$HOME/data/speedrun-data}"
+
+send_query() {
+    local source="$1"
+    local target="$2"
+    local url="https://wikipediaspeedrun.com/path/$source/$target"
+    curl -s "$url"
+}
+
+run_watchdog() {
+    local graph_file="$DATA_PATH/current/graph.db"
+    local query='SELECT id FROM vertexes ORDER BY random() LIMIT 2'
+    { read -r source_id; read -r target_id; } < <(echo "$query" | sqlite3 -batch -noheader "$graph_file")  
+    echo "checking path: $source_id -> $target_id"
+}
+
+while :
+do
+    run_watchdog
+    sleep 60
+done

@@ -49,19 +49,25 @@ issue-tls-cert:
 # Deploy web server (must be run on server)
 deploy-web: build-release
   sudo rm -f /usr/local/bin/wikipedia-speedrun
+  sudo rm -f /usr/local/bin/wikipedia-speedrun-watchdog
+  sudo rm -f /usr/local/bin/wikipedia-speedrun-monitor
   sudo cp target/release/server /usr/local/bin/wikipedia-speedrun
-  sudo setcap cap_net_bind_service+eip /usr/local/bin/wikipedia-speedrun
+  sudo cp wikipedia-speedrun-watchdog /usr/local/bin/wikipedia-speedrun-watchdog
   sudo cp wikipedia-speedrun-monitor /usr/local/bin/wikipedia-speedrun-monitor
+  sudo setcap cap_net_bind_service+eip /usr/local/bin/wikipedia-speedrun
   sudo cp ./wikipedia-speedrun.service /lib/systemd/system/wikipedia-speedrun.service
   sudo cp ./wikipedia-speedrun-certs.service /lib/systemd/system/wikipedia-speedrun-certs.service
   sudo cp ./wikipedia-speedrun-certs.timer /lib/systemd/system/wikipedia-speedrun-certs.timer
+  sudo cp ./wikipedia-speedrun-watchdog.service /lib/systemd/system/wikipedia-speedrun-watchdog.service
   sudo systemctl daemon-reload
   sudo systemctl enable wikipedia-speedrun.service
   sudo systemctl enable wikipedia-speedrun-certs.service
   sudo systemctl enable wikipedia-speedrun-certs.timer
-  sudo systemctl start wikipedia-speedrun-certs.timer
-  sudo systemctl start wikipedia-speedrun-certs.service
+  sudo systemctl enable wikipedia-speedrun-watchdog.service
+  sudo systemctl restart wikipedia-speedrun-certs.timer
+  sudo systemctl restart wikipedia-speedrun-certs.service
   sudo systemctl restart wikipedia-speedrun.service
+  sudo systemctl restart wikipedia-speedrun-watchdog.service
 
 # Deploy wikipedia-speedrun tool and periodic builds
 deploy-tool: build-release-tool
