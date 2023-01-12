@@ -6,7 +6,13 @@ log_path="/var/wikipedia-speedrun/service-log"
 (
     date --iso-8601=seconds
     if [ $SERVICE_RESULT != "success" ]; then
-        echo "***ABNORMAL RESULT***"
+        crash_pid="$SYSTEMD_EXEC_PID"
+        echo "*** ABNORMAL RESULT for $crash_pid ***"
+        dump_path="/var/wikipedia-speedrun/dumps/$crash_pid"
+        mkdir -p "/var/wikipedia-speedrun/dumps"
+        echo "dumping to $dump_path"
+        coredumpctl dump "$crash_pid" \
+                    --output="$dump_path"
     fi
     printenv
     echo "========================="
