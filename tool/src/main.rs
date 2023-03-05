@@ -15,7 +15,6 @@ use sea_orm::{
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
-use wikipedia_speedrun::paths::{Paths, DumpPaths, DBPaths};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
@@ -23,15 +22,16 @@ use std::io::Write;
 use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
 use std::thread;
+use wikipedia_speedrun::paths::{DBPaths, Paths};
 use wikipedia_speedrun::redirect::RedirectMap;
 use wikipedia_speedrun::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
 
 use crate::dbstatus::DBStatus;
 
+mod dbstatus;
 mod fetch;
 mod page_source;
 mod pagelink_source;
-mod dbstatus;
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -175,6 +175,10 @@ impl EdgeProcDB {
         let outgoing_sink_path = &self.root_path.join(outgoing_sink_basename);
         std::fs::copy(&source_path, outgoing_sink_path).expect("copy file for sort");
         std::fs::rename(&source_path, incoming_sink_path).expect("rename file for sort");
+    }
+
+    fn destroy(&self) {
+        std::fs::remove_dir_all(&self.root_path).expect("remove edge proc db directory");
     }
 
     pub fn write_sorted_by(&mut self, sort_by: EdgeSort) {
@@ -339,7 +343,6 @@ struct GraphDBBuilder {
     pub redirects_path: PathBuf,
 
     pub paths: Paths,
-    pub dump_paths: DumpPaths,
     pub db_paths: DBPaths,
 
     // outputs
@@ -352,28 +355,26 @@ enum QueryAs {
     MaxVertexId,
 }
 
-
 impl GraphDBBuilder {
     pub fn new(dump_date: String, root_data_dir: &Path) -> GraphDBBuilder {
         let paths = Paths::with_base(root_data_dir);
         let dump_paths = paths.dump_paths(&dump_date);
-        let page = dump_paths.page();
-        let redirects = dump_paths.redirect();
-        let pagelinks = dump_paths.pagelinks();
+        let page_path = dump_paths.page();
+        let redirects_path = dump_paths.redirect();
+        let pagelinks_path = dump_paths.pagelinks();
 
         let db_paths = paths.db_paths(&dump_date);
         let ix_path = db_paths.path_vertex_al_ix();
         let al_path = db_paths.path_vertex_al();
 
         GraphDBBuilder {
-            page_path: page,
-            pagelinks_path: pagelinks,
+            page_path,
+            pagelinks_path,
             ix_path,
             al_path,
-            redirects_path: redirects,
+            redirects_path,
             dump_date,
             paths,
-            dump_paths,
             db_paths,
         }
     }
@@ -381,28 +382,20 @@ impl GraphDBBuilder {
     /// load vertexes from page.sql and put them in a sqlite file
     pub async fn build_database(&mut self) {
         let db_status_path = self.db_paths.path_db_status();
-
-        log::debug!("computing current and finished state of data files");
         let mut db_status = DBStatus::load(db_status_path.clone());
-        if let Some(true) = db_status.build_complete {
-            log::info!("build already complete; nothing to do");
-            return;
+
+        if !db_status.dump_date.is_empty() && db_status.dump_date != self.dump_date {
+            log::error!("for build of {dump_date}, db status file indicates dump date is {status_file_date}",
+              dump_date=self.dump_date,
+              status_file_date=db_status.dump_date,
+            )
         }
+        db_status.dump_date = self.dump_date.clone();
 
-        let db_status_complete =
-            DBStatus::compute(self.dump_paths.clone(), self.db_paths.clone());
-        db_status.dump_date = Some(self.dump_date.clone());
-
-        // adjust status if pagelinks hash is mismatched
-        let pagelink_data_changed = match db_status.wp_pagelinks_hash.as_ref() {
-            Some(hash) => hash != db_status_complete.wp_pagelinks_hash.as_ref().unwrap(),
-            None => true,
-        };
-        if pagelink_data_changed {
-            log::info!("wp_pagelinks_hash mismatch; will recompute all edge data");
-            db_status.build_complete = Some(false);
-            db_status.edges_resolved = Some(false);
-            db_status.edges_sorted = Some(false);
+        if db_status.build_complete {
+            self.create_current_symlink();
+            log::info!("skipping build: db status file indicates complete");
+            return;
         }
 
         let db_path = self.db_paths.graph_db();
@@ -416,26 +409,14 @@ impl GraphDBBuilder {
         let pool = SqlitePool::connect_with(opts).await.expect("db connect");
         let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
 
-        let need_vertexes = match &db_status.wp_page_hash {
-            Some(stat_hash) => db_status_complete
-                .wp_page_hash
-                .as_ref()
-                .map(|complete_hash| complete_hash != stat_hash)
-                .unwrap(),
-            None => true,
-        };
-
-        if need_vertexes {
+        if !db_status.vertexes_loaded {
             log::info!("loading page.sql");
             self.load_vertexes_dump(db.clone()).await;
             self.create_vertex_title_ix(&db).await;
-            db_status.wp_page_hash = db_status_complete.wp_page_hash;
+            db_status.vertexes_loaded = true;
             db_status.save();
         } else {
-            log::info!(
-                "skipping page.sql load due to match on hash: {}",
-                hex::encode(db_status.wp_page_hash.as_ref().unwrap())
-            );
+            log::info!("skipping page.sql load: build status indicates vertexes were loaded");
         }
 
         log::debug!("finding max index");
@@ -455,20 +436,14 @@ impl GraphDBBuilder {
             .load_edges_dump(self.pagelinks_path.clone(), db, &mut db_status)
             .await;
 
-        let needs_sort = match db_status.edges_sorted {
-            Some(sorted) => !sorted,
-            None => true,
-        };
-
-        if needs_sort {
+        if !db_status.edges_sorted {
             log::debug!("making edge sort files");
             edge_db.make_sort_files();
             log::debug!("writing sorted outgoing edges");
             edge_db.write_sorted_by(EdgeSort::Outgoing);
             log::debug!("writing sorted incoming edges");
             edge_db.write_sorted_by(EdgeSort::Incoming);
-            db_status.wp_pagelinks_hash = db_status_complete.wp_pagelinks_hash;
-            db_status.edges_sorted = Some(true);
+            db_status.edges_sorted = true;
             db_status.save();
         } else {
             log::debug!("edges already sorted");
@@ -505,15 +480,33 @@ impl GraphDBBuilder {
                 .write_all(&vertex_al_offset.to_le_bytes())
                 .unwrap();
         }
-        db_status.build_complete = Some(true);
+
+        edge_db.destroy();
+
+        db_status.build_complete = true;
         db_status.save();
 
-        // symlink that which was just built from the "current" link
-        let current_data_dir = self.paths.db_paths("current").base;
-        let _ = std::fs::remove_file(&current_data_dir);
-        symlink::symlink_dir(&self.db_paths.base, &current_data_dir).expect("symlink current directory");
+        self.create_current_symlink();
 
         log::info!("database build complete");
+    }
+
+    fn create_current_symlink(&self) {
+        // symlink that which was just built from the "current" link
+        let current_data_dir = self.paths.base.join("current");
+        // sanity check: if it's not a symlink, we have problems
+        if let Ok(md) = std::fs::symlink_metadata(&current_data_dir) {
+            if md.is_symlink() {
+                std::fs::remove_file(&current_data_dir).expect("remove old symlink");
+            } else {
+                log::warn!(
+                    "current data directory: {p} points to non-symlink",
+                    p = current_data_dir.display()
+                );
+            }
+        }
+        symlink::symlink_dir(&self.db_paths.base, &current_data_dir)
+            .expect("symlink current directory");
     }
 
     async fn resolve_edges(
@@ -591,11 +584,9 @@ impl GraphDBBuilder {
     ) -> EdgeProcDB {
         let edge_db = EdgeProcDB::new(self.db_paths.base.join("edge-db"));
 
-        if let Some(resolved) = db_status.edges_resolved {
-            if resolved {
-                log::debug!("edges already resolved; returning");
-                return edge_db;
-            }
+        if db_status.edges_resolved {
+            log::debug!("edges already resolved; returning");
+            return edge_db;
         }
 
         log::info!(
@@ -632,7 +623,7 @@ impl GraphDBBuilder {
         log::debug!("flushing edge database");
         edge_db.flush();
 
-        db_status.edges_resolved = Some(true);
+        db_status.edges_resolved = true;
         db_status.save();
 
         edge_db

@@ -83,7 +83,10 @@ pub struct DBPaths {
 impl DBPaths {
     pub fn new(base: PathBuf, date: &str) -> Self {
         let base = base.join(date);
-        std::fs::create_dir_all(&base).unwrap();
+        if date != "current" {
+          // current is a symlink to a real path
+          std::fs::create_dir_all(&base).unwrap();
+        }
         DBPaths {
             base,
             date: date.to_owned(),
