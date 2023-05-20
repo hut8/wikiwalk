@@ -5,7 +5,7 @@ After=network.target
 [Service]
 ExecStart=/usr/local/bin/wikipedia-speedrun
 ExecStopPost=/usr/local/bin/wikipedia-speedrun-monitor
-EnvironmentFile=/etc/wikipedia-speedrun
+EnvironmentFile=/etc/wikipedia-speedrun.conf
 Type=simple
 User=speedrun
 Group=speedrun

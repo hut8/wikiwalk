@@ -46,6 +46,10 @@ install-lego:
 issue-tls-cert:
   sudo /usr/local/bin/lego --path /var/wikipedia-speedrun/certs --email="LiamBowen@gmail.com" --domains="wikipediaspeedrun.com" --key-type ec256 --http run
 
+# Provision server (create speedrun user)
+provision-server:
+  sudo adduser --home /home/speedrun --shell /bin/bash --gecos 'Wikipedia Speedrun' --disabled-password speedrun
+
 # Deploy web server (must be run on server)
 deploy-web: build-release
   sudo mkdir -p /var/wikipedia-speedrun/ /var/wikipedia-speedrun/webroot/.well-known
@@ -54,6 +58,7 @@ deploy-web: build-release
   sudo rm -f /usr/local/bin/wikipedia-speedrun-watchdog
   sudo rm -f /usr/local/bin/wikipedia-speedrun-monitor
   sudo rm -f /usr/local/bin/wikipedia-speedrun-certs
+  sudo rm -f /etc/wikipedia-speedrun.conf
   sudo cp target/release/server /usr/local/bin/wikipedia-speedrun
   sudo cp wikipedia-speedrun-watchdog /usr/local/bin/wikipedia-speedrun-watchdog
   sudo cp wikipedia-speedrun-monitor /usr/local/bin/wikipedia-speedrun-monitor
@@ -84,5 +89,10 @@ deploy-tool: build-release-tool
   sudo systemctl start wikipedia-speedrun-build.service
   sudo systemctl start wikipedia-speedrun-build.timer
 
+# Deploy configuration file shared by tool and server
+deploy-config:
+  sudo rm -f /etc/wikipedia-speedrun.conf  
+  sudo cp wikipedia-speedrun.conf /etc/wikipedia-speedrun.conf
+
 # Deploy web server and tool
-deploy: deploy-web deploy-tool
+deploy: deploy-config deploy-web deploy-tool

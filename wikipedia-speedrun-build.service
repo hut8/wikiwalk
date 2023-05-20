@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/wikipedia-speedrun-tool --data-path /var/wikipedia-speedrun/data pull
-EnvironmentFile=/etc/wikipedia-speedrun
+EnvironmentFile=/etc/wikipedia-speedrun.conf
 Type=oneshot
 User=speedrun
 Group=speedrun
