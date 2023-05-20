@@ -95,4 +95,4 @@ deploy-config:
   sudo cp wikipedia-speedrun.conf /etc/wikipedia-speedrun.conf
 
 # Deploy web server and tool
-deploy: deploy-config deploy-web deploy-tool
+deploy: deploy-config deploy-tool deploy-web
