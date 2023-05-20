@@ -49,6 +49,7 @@ issue-tls-cert:
 # Provision server (create speedrun user)
 provision-server:
   sudo adduser --home /home/speedrun --shell /bin/bash --gecos 'Wikipedia Speedrun' --disabled-password speedrun
+  sudo apt-get install -y pkg-config
 
 # Deploy web server (must be run on server)
 deploy-web: build-release
