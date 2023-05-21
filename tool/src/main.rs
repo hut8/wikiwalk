@@ -847,7 +847,8 @@ async fn main() {
 
     let home_dir = dirs::home_dir().unwrap();
     let default_data_dir = home_dir.join("data").join("speedrun-data");
-    let data_dir = cli.data_path.unwrap_or(default_data_dir);
+    let env_data_dir: Option<PathBuf> =  std::env::var("DATA_ROOT").ok().map(PathBuf::from);
+    let data_dir = cli.data_path.or(env_data_dir).unwrap_or(default_data_dir);
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
 
