@@ -3,7 +3,7 @@ Description=Wikipedia Speedrun Build
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/wikipedia-speedrun-tool --data-path /var/wikipedia-speedrun/data pull
+ExecStart=/usr/local/bin/wikipedia-speedrun-tool pull
 EnvironmentFile=/etc/wikipedia-speedrun.conf
 Type=oneshot
 User=speedrun
