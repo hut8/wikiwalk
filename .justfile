@@ -53,7 +53,7 @@ provision-server:
 
 # Deploy web server (must be run on server)
 deploy-web: build-release
-  sudo mkdir -p /var/wikipedia-speedrun/ /var/wikipedia-speedrun/webroot/.well-known
+  sudo mkdir -p /var/wikipedia-speedrun/ /var/wikipedia-speedrun/data /var/wikipedia-speedrun/webroot/.well-known
   sudo chown -R speedrun:speedrun /var/wikipedia-speedrun
   sudo rm -f /usr/local/bin/wikipedia-speedrun
   sudo rm -f /usr/local/bin/wikipedia-speedrun-watchdog
@@ -80,6 +80,8 @@ deploy-web: build-release
 
 # Deploy wikipedia-speedrun tool and periodic builds
 deploy-tool: build-release-tool
+  sudo mkdir -p /var/wikipedia-speedrun/ /var/wikipedia-speedrun/data /var/wikipedia-speedrun/webroot/.well-known
+  sudo chown -R speedrun:speedrun /var/wikipedia-speedrun
   sudo rm -f /usr/local/bin/wikipedia-speedrun-tool
   sudo cp target/release/tool /usr/local/bin/wikipedia-speedrun-tool
   sudo cp ./wikipedia-speedrun-build.timer /lib/systemd/system/wikipedia-speedrun-build.timer
