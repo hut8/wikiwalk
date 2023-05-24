@@ -59,7 +59,6 @@ deploy-web: build-release
   sudo rm -f /usr/local/bin/wikipedia-speedrun-watchdog
   sudo rm -f /usr/local/bin/wikipedia-speedrun-monitor
   sudo rm -f /usr/local/bin/wikipedia-speedrun-certs
-  sudo rm -f /etc/wikipedia-speedrun.conf
   sudo cp target/release/server /usr/local/bin/wikipedia-speedrun
   sudo cp wikipedia-speedrun-watchdog /usr/local/bin/wikipedia-speedrun-watchdog
   sudo cp wikipedia-speedrun-monitor /usr/local/bin/wikipedia-speedrun-monitor
