@@ -6,7 +6,7 @@ log_path="/var/wikiwalk/service-log"
 (
     date --iso-8601=seconds
     if [ $SERVICE_RESULT != "success" ]; then
-        crash_pid="$SYSTEMD_EXEC_PID"
+        crash_pid="${SYSTEMD_EXEC_PID:-NO PID}"
         echo "*** ABNORMAL RESULT for $crash_pid ***"
         dump_path="/var/wikiwalk/dumps/$crash_pid"
         mkdir -p "/var/wikiwalk/dumps"
