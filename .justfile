@@ -45,11 +45,12 @@ install-lego:
 # Get production TLS certificate once
 issue-tls-cert: install-lego
   sudo /usr/local/bin/lego --path /var/wikiwalk/certs --email="LiamBowen@gmail.com" --domains="wikiwalk.app" --key-type ec256 --http run
+  sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
 
-# Provision server (create speedrun user)
+# Provision server
 provision-server:
   sudo adduser --home /home/wikiwalk --shell /bin/bash --gecos 'WikiWalk' --disabled-password wikiwalk
-  sudo apt-get install -y pkg-config
+  sudo apt-get install -y pkg-config libssl-dev
 
 # Deploy web server (must be run on server)
 deploy-web: build-release
@@ -93,8 +94,10 @@ deploy-tool: build-release-tool
 
 # Deploy configuration file shared by tool and server
 deploy-config:
-  sudo rm -f /etc/wikiwalk.conf  
+  sudo rm -f /etc/wikiwalk.conf
   sudo cp wikiwalk.conf /etc/wikiwalk.conf
+  sudo cp ./wikiwalk.service /lib/systemd/system/wikiwalk.service
+  sudo systemctl daemon-reload
 
 # Deploy web server and tool
 deploy: deploy-config deploy-tool deploy-web
