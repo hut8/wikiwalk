@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wikipedia-speedrun = { path = "../wikipedia-speedrun" }
+wikiwalk = { path = "../wikiwalk" }
 log = "*"
 dirs = "4.0"
 sea-orm = { version = "^0", features = [

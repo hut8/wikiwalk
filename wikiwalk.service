@@ -1,14 +1,14 @@
 [Unit]
-Description=Wikipedia Speedrun
+Description=WikiWalk
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/wikipedia-speedrun
-ExecStopPost=/usr/local/bin/wikipedia-speedrun-monitor
-EnvironmentFile=/etc/wikipedia-speedrun.conf
+ExecStart=/usr/local/bin/wikiwalk
+ExecStopPost=/usr/local/bin/wikiwalk-monitor
+EnvironmentFile=/etc/wikiwalk.conf
 Type=simple
-User=speedrun
-Group=speedrun
+User=wikiwalk
+Group=wikiwalk
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 Restart=on-failure

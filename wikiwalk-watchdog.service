@@ -1,0 +1,12 @@
+[Unit]
+Description=WikiWalk Watchdog
+After=wikiwalk.target
+
+[Service]
+ExecStart=/usr/local/bin/wikiwalk-watchdog
+Environment=DATA_PATH=/var/wikiwalk/data
+Restart=on-failure
+RestartSec=5m
+
+[Install]
+WantedBy=multi-user.target

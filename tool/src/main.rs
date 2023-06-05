@@ -22,9 +22,9 @@ use std::io::Write;
 use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
 use std::thread;
-use wikipedia_speedrun::paths::{DBPaths, Paths};
-use wikipedia_speedrun::redirect::RedirectMap;
-use wikipedia_speedrun::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
+use wikiwalk::paths::{DBPaths, Paths};
+use wikiwalk::redirect::RedirectMap;
+use wikiwalk::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
 
 use crate::dbstatus::DBStatus;
 
@@ -229,7 +229,7 @@ impl EdgeProcDB {
 
 // AdjacencySet is an AdjacencyList combined with its vertex
 struct AdjacencySet {
-    adjacency_list: wikipedia_speedrun::edge_db::AdjacencyList,
+    adjacency_list: wikiwalk::edge_db::AdjacencyList,
 }
 
 struct AdjacencySetIterator {
@@ -842,11 +842,11 @@ async fn main() {
         .init()
         .unwrap();
 
-    log::info!("Wikipedia Speedrun");
+    log::info!("WikiWalk");
     let cli = Cli::parse();
 
     let home_dir = dirs::home_dir().unwrap();
-    let default_data_dir = home_dir.join("data").join("speedrun-data");
+    let default_data_dir = home_dir.join("data").join("wikiwalk");
     let env_data_dir: Option<PathBuf> =  std::env::var("DATA_ROOT").ok().map(PathBuf::from);
     let data_dir = cli.data_path.or(env_data_dir).unwrap_or(default_data_dir);
     log::debug!("using data directory: {}", data_dir.display());
@@ -866,7 +866,7 @@ async fn main() {
             let source_title = source.replace('_', " ");
             let dest_title = destination.replace('_', " ");
 
-            log::info!("speedrun: [{}] → [{}]", source_title, dest_title);
+            log::info!("wikiwalk: [{}] → [{}]", source_title, dest_title);
 
             let source_vertex = gdb
                 .find_vertex_by_title(source_title)
@@ -877,7 +877,7 @@ async fn main() {
                 .await
                 .expect("destination not found");
 
-            log::info!("speedrun: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
+            log::info!("wikiwalk: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
 
             let paths = gdb.bfs(source_vertex.id, dest_vertex.id).await;
             if paths.is_empty() {

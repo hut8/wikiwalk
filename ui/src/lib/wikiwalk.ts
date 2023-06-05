@@ -43,7 +43,7 @@ export async function runSearch(term: string): Promise<WPPage[]> {
     const response = await fetch(endpoint, {
         headers: {
             "User-Agent":
-                "Wikipedia Speedrun wikipediaspeedrun.com liambowen@gmail.com",
+                "WikiWalk wikiwalk.app liambowen@gmail.com",
         },
     });
     const data = await response.json();
@@ -129,7 +129,7 @@ async function fetchPageDataChunk(pageIds: number[]) {
     const response = await fetch(endpoint, {
         headers: {
             "User-Agent":
-                "Wikipedia Speedrun wikipediaspeedrun.com liambowen@gmail.com",
+                "WikiWalk wikiwalk.app liambowen@gmail.com",
         },
     });
     const data = await response.json();

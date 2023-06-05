@@ -26,7 +26,7 @@
     pageStore,
     type WPPage,
     type PagePaths,
-  } from "./lib/wikipedia-speedrun";
+  } from "./lib/wikiwalk";
   import Activity from "./components/Activity.svelte";
   import { Timer } from "./lib/timer";
 
@@ -92,7 +92,7 @@
 <TopAppBar variant="static">
   <Row>
     <Section>
-      <Title>Wikipedia Speedrun</Title>
+      <Title>WikiWalk</Title>
     </Section>
   </Row>
 </TopAppBar>

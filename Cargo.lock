@@ -2698,7 +2698,7 @@ dependencies = [
  "serde_json",
  "static-files",
  "tokio",
- "wikipedia-speedrun",
+ "wikiwalk",
 ]
 
 [[package]]
@@ -3172,7 +3172,7 @@ dependencies = [
  "stderrlog",
  "symlink",
  "tokio",
- "wikipedia-speedrun",
+ "wikiwalk",
 ]
 
 [[package]]
@@ -3492,7 +3492,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wikipedia-speedrun"
+name = "wikiwalk"
 version = "0.1.0"
 dependencies = [
  "chrono",

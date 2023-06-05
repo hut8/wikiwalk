@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
-CERT_PATH="/var/wikipedia-speedrun/certs"
-WEBROOT_PATH="/var/wikipedia-speedrun/webroot"
+CERT_PATH="/var/wikiwalk/certs"
+WEBROOT_PATH="/var/wikiwalk/webroot"
 echo "fetching certificates"
 if [[ -d "$CERT_PATH" ]]
 then
@@ -10,7 +10,7 @@ then
         --accept-tos \
         --path "$CERT_PATH" \
         --email="LiamBowen@gmail.com" \
-        --domains="wikipediaspeedrun.com" \
+        --domains="wikiwalk.app" \
         --key-type ec256 \
         --http \
         --http.webroot "$WEBROOT_PATH" \
@@ -21,7 +21,7 @@ else
         --accept-tos \
         --path "$CERT_PATH" \
         --email="LiamBowen@gmail.com" \
-        --domains="wikipediaspeedrun.com" \
+        --domains="wikiwalk.app" \
         --key-type ec256 \
         --http \
         run

@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew WikiWalk TLS Certs
+Requires=wikiwalk-certs.service
+
+[Timer]
+Unit=wikiwalk-certs.service
+OnCalendar=weekly
+RandomizedDelaySec=12h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
