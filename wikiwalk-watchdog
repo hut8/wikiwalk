@@ -1,11 +1,11 @@
 #!/usr/bin/zsh
 set -euo pipefail
-DATA_PATH="${DATA_PATH:-$HOME/data/speedrun-data}"
+DATA_PATH="${DATA_PATH:-$HOME/data/wikiwalk}"
 
 send_query() {
     local source="$1"
     local target="$2"
-    local url="https://wikipediaspeedrun.com/paths/$source/$target"
+    local url="https://wikiwalk.app/paths/$source/$target"
     echo "querying $url"
     # --fail-with-body is only in curl > 7.76.0
     curl --fail-with-body -s "$url"

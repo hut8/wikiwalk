@@ -1,0 +1,17 @@
+[Unit]
+Description=WikiWalk Build
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/wikiwalk-tool pull
+EnvironmentFile=/etc/wikiwalk.conf
+Type=oneshot
+User=wikiwalk
+Group=wikiwalk
+ExecStartPost=+/usr/bin/systemctl restart wikiwalk.service
+
+[Install]
+WantedBy=multi-user.target
+
+
+

@@ -8,7 +8,7 @@ pub struct Paths {
 impl Paths {
     pub fn new() -> Self {
         let home_dir = dirs::home_dir().unwrap();
-        let default_data_dir = home_dir.join("data").join("speedrun-data");
+        let default_data_dir = home_dir.join("data").join("wikiwalk");
         let data_dir = match std::env::var("DATA_ROOT").ok() {
             Some(data_dir_str) => PathBuf::from(data_dir_str),
             None => default_data_dir,

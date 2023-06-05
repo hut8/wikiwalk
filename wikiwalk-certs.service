@@ -1,0 +1,12 @@
+[Unit]
+Description=WikiWalk ACME TLS
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/wikiwalk-certs
+Type=oneshot
+ExecStartPost=+/usr/bin/systemctl restart wikiwalk.service
+
+[Install]
+WantedBy=multi-user.target
+

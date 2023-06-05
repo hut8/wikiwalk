@@ -11,7 +11,7 @@ use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, read_one, Item};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
-use wikipedia_speedrun::{schema, GraphDB};
+use wikiwalk::{schema, GraphDB};
 
 use actix_web_static_files::ResourceFiles;
 
@@ -120,7 +120,7 @@ async fn main() -> std::io::Result<()> {
         .apply()
         .expect("initialize logs");
     let home_dir = dirs::home_dir().unwrap();
-    let default_data_dir = home_dir.join("data").join("speedrun-data");
+    let default_data_dir = home_dir.join("data").join("wikiwalk");
     let data_dir = match std::env::var("DATA_ROOT").ok() {
         Some(data_dir_str) => PathBuf::from(data_dir_str),
         None => default_data_dir,

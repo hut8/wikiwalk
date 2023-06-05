@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-wikipedia-speedrun = { path = "../wikipedia-speedrun" }
+wikiwalk = { path = "../wikiwalk" }
 anyhow = "1.0.68"
 chrono = "0.4.23"
 clap = { version = "3.0", features = ["derive"] }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Build WikiWalk database
+Requires=wikiwalk-build.service
+
+[Timer]
+Unit=wikiwalk-build.service
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
