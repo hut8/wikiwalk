@@ -526,7 +526,6 @@ impl GraphDBBuilder {
             let titles = page_links
                 .iter()
                 .map(|l| l.dest_page_title.clone())
-                .into_iter()
                 .unique();
             let vertexes = schema::vertex::Entity::find()
                 .filter(schema::vertex::Column::Title.is_in(titles))
@@ -812,10 +811,25 @@ async fn run_build(data_dir: &Path, dump_date: String) {
     gddb.build_database().await;
 }
 
-async fn run_fetch(data_dir: &Path) -> DumpStatus {
+async fn run_fetch(data_dir: &Path, clean: bool) -> DumpStatus {
     match fetch::find_latest().await {
         Some(status) => {
             let dump_dir = data_dir.join("dumps");
+            if clean {
+                log::info!("cleaning dump directory: {}", dump_dir.display());
+                std::fs::read_dir(&dump_dir)
+                    .expect("read dump directory")
+                    .for_each(|e| {
+                        let entry = e.expect("read entry");
+                        let path = entry.path();
+                        if path.extension().is_some_and(|e| e == "gz") {
+                            log::debug!("skipping non-gz file: {}", path.display());
+                            return;
+                        }
+                        log::debug!("removing: {}", path.display());
+                        std::fs::remove_file(path).expect("remove file");
+                    });
+            }
             fetch::fetch_dump(&dump_dir, &status)
                 .await
                 .expect("fetch dumps");
@@ -847,7 +861,7 @@ async fn main() {
 
     let home_dir = dirs::home_dir().unwrap();
     let default_data_dir = home_dir.join("data").join("wikiwalk");
-    let env_data_dir: Option<PathBuf> =  std::env::var("DATA_ROOT").ok().map(PathBuf::from);
+    let env_data_dir: Option<PathBuf> = std::env::var("DATA_ROOT").ok().map(PathBuf::from);
     let data_dir = cli.data_path.or(env_data_dir).unwrap_or(default_data_dir);
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
@@ -923,10 +937,10 @@ async fn main() {
             }
         }
         Command::Fetch => {
-            run_fetch(&data_dir).await;
+            run_fetch(&data_dir, false).await;
         }
         Command::Pull => {
-            let dump_status = run_fetch(&data_dir).await;
+            let dump_status = run_fetch(&data_dir, true).await;
             log::info!(
                 "fetched data from {dump_date}",
                 dump_date = dump_status.dump_date
