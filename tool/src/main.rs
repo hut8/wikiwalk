@@ -489,6 +489,7 @@ impl GraphDBBuilder {
         db_status.save();
 
         self.create_current_symlink();
+        self.clean_old_databases();
 
         log::info!("database build complete");
     }
