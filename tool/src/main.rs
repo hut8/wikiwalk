@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
 use fetch::DumpStatus;
@@ -16,7 +17,7 @@ use sea_orm::{
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::fs::{canonicalize, read_dir, symlink_metadata, DirEntry, File, OpenOptions};
 use std::hash::Hash;
 use std::io::Write;
 use std::io::{prelude::*, BufWriter};
@@ -380,6 +381,7 @@ impl GraphDBBuilder {
     }
 
     /// load vertexes from page.sql and put them in a sqlite file
+    /// then process edges into memory-mapped flat-file database
     pub async fn build_database(&mut self) {
         let db_status_path = self.db_paths.path_db_status();
         let mut db_status = DBStatus::load(db_status_path.clone());
@@ -491,11 +493,71 @@ impl GraphDBBuilder {
         log::info!("database build complete");
     }
 
+    fn clean_old_databases(&self) {
+        // Identify the very necessary "current" data symlinks's target
+        let current_data_dir = self.paths.base.join("current");
+        let md = symlink_metadata(&current_data_dir).expect("read current data dir metadata");
+        if !md.is_symlink() {
+            log::warn!(
+                "unable to clean old databases: current data directory: {p} points to non-symlink",
+                p = current_data_dir.display()
+            );
+        }
+        let current_data_abs = canonicalize(current_data_dir).expect("canonicalize symlink");
+
+        // Exclude important directory entries in order to avoid deleting the current data or other files
+        let filter_trash =  |p: DirEntry| {
+            // Exclude non-directories
+            if p.file_type()
+                .expect("file type of dirent in base path")
+                .is_dir()
+            {
+                return None;
+            }
+            // Exclude the important symlink (probably redundant)
+            if p.file_name() == "current" {
+                return None;
+            }
+            // We have a directory. Is it a database directory?
+            // Database directories are YYYYMMDD
+            match NaiveDate::parse_from_str(
+                p.file_name().to_str().expect("convert os str to str"),
+                "%Y%m%d",
+            ) {
+                Err(_) => None,
+                Ok(database_date) => {
+                    log::debug!(
+                        "cleaning: evaluating candidate for date: {d}",
+                        d = database_date.format("%Y-%m-%d")
+                    );
+                    let canon_p = canonicalize(p.path()).expect("canonicalize data path");
+                    if canon_p == current_data_abs {
+                        return None;
+                    }
+                    Some(p)
+                }
+            }
+        };
+
+
+        read_dir(&self.paths.base)
+            .expect("read base path")
+            .filter_map(|p| p.ok())
+            .filter_map(filter_trash)
+            .for_each(|trash_path| {
+                log::info!(
+                    "cleaning: removing old database: {p}",
+                    p = trash_path.path().display()
+                );
+                std::fs::remove_dir_all(trash_path.path()).expect("remove old database");
+            });
+    }
+
     fn create_current_symlink(&self) {
         // symlink that which was just built from the "current" link
         let current_data_dir = self.paths.base.join("current");
         // sanity check: if it's not a symlink, we have problems
-        if let Ok(md) = std::fs::symlink_metadata(&current_data_dir) {
+        if let Ok(md) = symlink_metadata(&current_data_dir) {
             if md.is_symlink() {
                 std::fs::remove_file(&current_data_dir).expect("remove old symlink");
             } else {
@@ -817,7 +879,7 @@ async fn run_fetch(data_dir: &Path, clean: bool) -> DumpStatus {
             let dump_dir = data_dir.join("dumps");
             if clean {
                 log::info!("cleaning dump directory: {}", dump_dir.display());
-                std::fs::read_dir(&dump_dir)
+                read_dir(&dump_dir)
                     .expect("read dump directory")
                     .for_each(|e| {
                         let entry = e.expect("read entry");
