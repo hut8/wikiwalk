@@ -396,6 +396,7 @@ impl GraphDBBuilder {
 
         if db_status.build_complete {
             self.create_current_symlink();
+            self.clean_old_databases();
             log::info!("skipping build: db status file indicates complete");
             return;
         }
