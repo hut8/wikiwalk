@@ -886,7 +886,7 @@ async fn run_fetch(data_dir: &Path, clean: bool) -> DumpStatus {
                     .for_each(|e| {
                         let entry = e.expect("read entry");
                         let path = entry.path();
-                        if path.extension().is_some_and(|e| e == "gz") {
+                        if path.extension().is_some_and(|e| e != "gz") {
                             log::debug!("skipping non-gz file: {}", path.display());
                             return;
                         }
