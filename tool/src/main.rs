@@ -22,7 +22,7 @@ use std::hash::Hash;
 use std::io::Write;
 use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
-use std::thread;
+use std::{thread, process};
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::RedirectMap;
 use wikiwalk::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
@@ -382,7 +382,7 @@ impl GraphDBBuilder {
 
     /// load vertexes from page.sql and put them in a sqlite file
     /// then process edges into memory-mapped flat-file database
-    pub async fn build_database(&mut self) {
+    pub async fn build_database(&mut self) -> anyhow::Result<()> {
         let db_status_path = self.db_paths.path_db_status();
         let mut db_status = DBStatus::load(db_status_path.clone());
 
@@ -398,7 +398,7 @@ impl GraphDBBuilder {
             self.create_current_symlink();
             self.clean_old_databases();
             log::info!("skipping build: db status file indicates complete");
-            return;
+            return Ok(());
         }
 
         let db_path = self.db_paths.graph_db();
@@ -493,6 +493,7 @@ impl GraphDBBuilder {
         self.clean_old_databases();
 
         log::info!("database build complete");
+        Ok(())
     }
 
     fn clean_old_databases(&self) {
@@ -508,7 +509,7 @@ impl GraphDBBuilder {
         let current_data_abs = canonicalize(current_data_dir).expect("canonicalize symlink");
 
         // Exclude important directory entries in order to avoid deleting the current data or other files
-        let filter_trash =  |p: DirEntry| {
+        let filter_trash = |p: DirEntry| {
             // Exclude non-directories
             if p.file_type()
                 .expect("file type of dirent in base path")
@@ -540,7 +541,6 @@ impl GraphDBBuilder {
                 }
             }
         };
-
 
         read_dir(&self.paths.base)
             .expect("read base path")
@@ -869,32 +869,16 @@ enum Command {
     Pull,
 }
 
-async fn run_build(data_dir: &Path, dump_date: String) {
+async fn run_build(data_dir: &Path, dump_date: String) -> anyhow::Result<()> {
     log::info!("building database");
     let mut gddb = GraphDBBuilder::new(dump_date, data_dir);
-    gddb.build_database().await;
+    gddb.build_database().await
 }
 
-async fn run_fetch(data_dir: &Path, clean: bool) -> DumpStatus {
+async fn run_fetch(dump_dir: &Path) -> DumpStatus {
     match fetch::find_latest().await {
         Some(status) => {
-            let dump_dir = data_dir.join("dumps");
-            if clean {
-                log::info!("cleaning dump directory: {}", dump_dir.display());
-                read_dir(&dump_dir)
-                    .expect("read dump directory")
-                    .for_each(|e| {
-                        let entry = e.expect("read entry");
-                        let path = entry.path();
-                        if path.extension().is_some_and(|e| e != "gz") {
-                            log::debug!("skipping non-gz file: {}", path.display());
-                            return;
-                        }
-                        log::debug!("removing: {}", path.display());
-                        std::fs::remove_file(path).expect("remove file");
-                    });
-            }
-            fetch::fetch_dump(&dump_dir, &status)
+            fetch::fetch_dump(dump_dir, &status)
                 .await
                 .expect("fetch dumps");
             status
@@ -927,13 +911,14 @@ async fn main() {
     let default_data_dir = home_dir.join("data").join("wikiwalk");
     let env_data_dir: Option<PathBuf> = std::env::var("DATA_ROOT").ok().map(PathBuf::from);
     let data_dir = cli.data_path.or(env_data_dir).unwrap_or(default_data_dir);
+    let dump_dir = data_dir.join("dumps");
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
 
     // directory used for processing import
     match cli.command {
         Command::Build { dump_date } => {
-            run_build(&data_dir, dump_date).await;
+            run_build(&data_dir, dump_date).await.unwrap();
         }
         Command::Run {
             source,
@@ -1001,15 +986,19 @@ async fn main() {
             }
         }
         Command::Fetch => {
-            run_fetch(&data_dir, false).await;
+            run_fetch(&dump_dir).await;
         }
         Command::Pull => {
-            let dump_status = run_fetch(&data_dir, true).await;
+            let dump_status = run_fetch(&dump_dir).await;
             log::info!(
                 "fetched data from {dump_date}",
                 dump_date = dump_status.dump_date
             );
-            run_build(&data_dir, dump_status.dump_date).await;
+            if let Err(err) = run_build(&data_dir, dump_status.dump_date).await {
+                log::error!("build failed: {:#?}", err);
+                process::exit(1);
+            }
+            fetch::clean_dump_dir(&dump_dir);
         }
     }
 }

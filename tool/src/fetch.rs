@@ -6,7 +6,7 @@ use reqwest::{
     Client,
 };
 use serde::{Deserialize, Serialize};
-use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::{Path}};
+use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::Path};
 
 /// Look back this many days for the oldest dump
 pub static OLDEST_DUMP: u64 = 60;
@@ -69,11 +69,7 @@ pub async fn fetch_dump(dump_dir: &Path, status: &DumpStatus) -> Result<(), anyh
     Ok(())
 }
 
-async fn fetch_job(
-    dump_dir: &Path,
-    client: &Client,
-    job: &JobStatus,
-) -> Result<(), anyhow::Error> {
+async fn fetch_job(dump_dir: &Path, client: &Client, job: &JobStatus) -> Result<(), anyhow::Error> {
     std::fs::create_dir_all(dump_dir)?;
     for (file, file_info) in job.files.iter() {
         log::info!("fetching file: {file}");
@@ -84,6 +80,22 @@ async fn fetch_job(
         fetch_file(client, &url, dump_dir, file, file_info).await?;
     }
     Ok(())
+}
+
+pub fn clean_dump_dir(dump_dir: &Path) {
+    log::info!("cleaning dump directory: {}", dump_dir.display());
+    std::fs::read_dir(dump_dir)
+        .expect("read dump directory")
+        .for_each(|e| {
+            let entry = e.expect("read entry");
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e != "gz") {
+                log::debug!("skipping non-gz file: {}", path.display());
+                return;
+            }
+            log::debug!("removing: {}", path.display());
+            std::fs::remove_file(path).expect("remove file");
+        });
 }
 
 pub async fn fetch_file(
