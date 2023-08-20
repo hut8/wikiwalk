@@ -22,7 +22,7 @@ use std::hash::Hash;
 use std::io::Write;
 use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
-use std::{thread, process};
+use std::{process, thread};
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::RedirectMap;
 use wikiwalk::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
@@ -915,7 +915,6 @@ async fn main() {
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
 
-    // directory used for processing import
     match cli.command {
         Command::Build { dump_date } => {
             run_build(&data_dir, dump_date).await.unwrap();
@@ -989,6 +988,29 @@ async fn main() {
             run_fetch(&dump_dir).await;
         }
         Command::Pull => {
+            let latest_dump = {
+                match fetch::find_latest().await {
+                    None => {
+                        log::error!("[pull] found no recent dumps");
+                        process::exit(1);
+                    }
+                    Some(x) => x,
+                }
+            };
+            let current_path = Paths::new().db_paths("current");
+            let db_status = DBStatus::load(current_path.path_db_status());
+
+            let db_dump_date = db_status.dump_date;
+            let latest_dump_date = latest_dump.dump_date;
+
+            if db_status.dump_date == latest_dump.dump_date {
+                log::info!("[pull] database dump date {db_dump_date} is already the latest",);
+                process::exit(0);
+            }
+            log::info!(
+                "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
+            );
+
             let dump_status = run_fetch(&dump_dir).await;
             log::info!(
                 "fetched data from {dump_date}",
