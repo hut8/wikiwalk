@@ -1003,7 +1003,7 @@ async fn main() {
             let db_dump_date = db_status.dump_date;
             let latest_dump_date = latest_dump.dump_date;
 
-            if db_status.dump_date == latest_dump.dump_date {
+            if db_dump_date == latest_dump_date {
                 log::info!("[pull] database dump date {db_dump_date} is already the latest",);
                 process::exit(0);
             }
