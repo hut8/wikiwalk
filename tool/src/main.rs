@@ -521,18 +521,25 @@ impl GraphDBBuilder {
         log::debug!(
             "cleaning: current data directory: {p} points to {t}",
             p = &current_data_dir.display(),
-            t = current_data_abs.display());
+            t = current_data_abs.display()
+        );
         // Exclude important directory entries in order to avoid deleting the current data or other files
         let filter_trash = |p: DirEntry| {
             // Exclude non-directories
-            if p.file_type()
+            if !p
+                .file_type()
                 .expect("file type of dirent in base path")
                 .is_dir()
             {
+                log::debug!(
+                    "cleaning: skipping non-directory: {p}",
+                    p = p.path().display()
+                );
                 return None;
             }
             // Exclude the important symlink (probably redundant)
             if p.file_name() == "current" {
+                log::debug!("cleaning: skipping current symlink");
                 return None;
             }
             // We have a directory. Is it a database directory?
@@ -541,7 +548,13 @@ impl GraphDBBuilder {
                 p.file_name().to_str().expect("convert os str to str"),
                 "%Y%m%d",
             ) {
-                Err(_) => None,
+                Err(_) => {
+                    log::debug!(
+                        "cleaning: skipping directory not matching YYYYMMDD: {p}",
+                        p = p.path().display()
+                    );
+                    None
+                }
                 Ok(database_date) => {
                     log::debug!(
                         "cleaning: evaluating candidate for date: {d}",
