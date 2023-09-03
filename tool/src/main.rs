@@ -499,15 +499,29 @@ impl GraphDBBuilder {
     fn clean_old_databases(&self) {
         // Identify the very necessary "current" data symlinks's target
         let current_data_dir = self.paths.base.join("current");
-        let md = symlink_metadata(&current_data_dir).expect("read current data dir metadata");
+        let md = match symlink_metadata(&current_data_dir) {
+            Ok(md) => md,
+            Err(e) => {
+                log::info!(
+                    "unable to clean old databases: current data directory: {p} points to non-existent target: {e}",
+                    p = &current_data_dir.display(),
+                    e = e
+                );
+                return;
+            }
+        };
+
         if !md.is_symlink() {
             log::warn!(
                 "unable to clean old databases: current data directory: {p} points to non-symlink",
-                p = current_data_dir.display()
+                p = &current_data_dir.display()
             );
         }
-        let current_data_abs = canonicalize(current_data_dir).expect("canonicalize symlink");
-
+        let current_data_abs = canonicalize(&current_data_dir).expect("canonicalize symlink");
+        log::debug!(
+            "cleaning: current data directory: {p} points to {t}",
+            p = &current_data_dir.display(),
+            t = current_data_abs.display());
         // Exclude important directory entries in order to avoid deleting the current data or other files
         let filter_trash = |p: DirEntry| {
             // Exclude non-directories
@@ -870,8 +884,10 @@ enum Command {
 }
 
 async fn run_build(data_dir: &Path, dump_date: String) -> anyhow::Result<()> {
-    log::info!("building database");
     let mut gddb = GraphDBBuilder::new(dump_date, data_dir);
+    log::info!("cleaning old databases");
+    gddb.clean_old_databases();
+    log::info!("building database");
     gddb.build_database().await
 }
 
