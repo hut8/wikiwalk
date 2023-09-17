@@ -8,7 +8,7 @@ send_query() {
     local url="https://wikiwalk.app/paths/$source/$target"
     echo "querying $url"
     # --fail-with-body is only in curl > 7.76.0
-    curl --fail-with-body -s "$url"
+    curl -s "$url"
 }
 
 run_watchdog() {
