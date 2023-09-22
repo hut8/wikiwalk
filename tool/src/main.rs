@@ -896,30 +896,29 @@ enum Command {
     Pull,
 }
 
-async fn run_build(data_dir: &Path, dump_date: String) -> anyhow::Result<()> {
-    let mut gddb = GraphDBBuilder::new(dump_date, data_dir);
+async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
+    let mut gddb = GraphDBBuilder::new(dump_date.into_string(), data_dir);
     log::info!("cleaning old databases");
     gddb.clean_old_databases();
     log::info!("building database");
     gddb.build_database().await
 }
 
-async fn run_fetch(dump_dir: &Path) -> DumpStatus {
-    match fetch::find_latest().await {
-        Some(status) => {
-            fetch::fetch_dump(dump_dir, &status)
-                .await
-                .expect("fetch dumps");
-            status
-        }
-        None => {
-            log::error!(
-                "could not find any dumps in the last {days} days",
-                days = fetch::OLDEST_DUMP
-            );
-            process::exit(1);
-        }
-    }
+async fn run_fetch(dump_dir: &Path, latest_dump: Option<&DumpStatus>) -> anyhow::Result<()> {
+    let latest_dump = match latest_dump {
+        Some(latest_dump) => latest_dump,
+        None =>
+            match fetch::find_latest().await {
+                None => {
+                    log::error!("[pull] found no recent dumps");
+                    process::exit(1);
+                }
+                Some(x) => x,
+            }
+    };
+    fetch::fetch_dump(dump_dir, &latest_dump)
+        .await?;
+    Ok(())
 }
 
 async fn run_compute(data_dir: &PathBuf, source: String, destination: String) {
@@ -1010,7 +1009,7 @@ async fn main() {
 
     match cli.command {
         Command::Build { dump_date } => {
-            run_build(&data_dir, dump_date).await.unwrap();
+            run_build(&data_dir, &dump_date).await.unwrap();
         }
         Command::Run {
             source,
@@ -1022,7 +1021,7 @@ async fn main() {
             run_query(&data_dir, target).await;
         }
         Command::Fetch => {
-            run_fetch(&dump_dir).await;
+            run_fetch(&dump_dir, None).await.expect("fetch failed");
         }
         Command::Pull => {
             let latest_dump = {
@@ -1048,12 +1047,12 @@ async fn main() {
                 "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
             );
 
-            let dump_status = run_fetch(&dump_dir).await;
+            let dump_status = run_fetch(&dump_dir, Some(&latest_dump)).await;
             log::info!(
                 "fetched data from {dump_date}",
                 dump_date = dump_status.dump_date
             );
-            if let Err(err) = run_build(&data_dir, dump_status.dump_date).await {
+            if let Err(err) = run_build(&data_dir, &latest_dump.dump_date).await {
                 log::error!("build failed: {:#?}", err);
                 process::exit(1);
             }
