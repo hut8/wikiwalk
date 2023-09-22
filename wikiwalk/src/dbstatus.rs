@@ -2,6 +2,7 @@ use std::{fs::File, path::PathBuf};
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 pub struct DBStatus {
+    #[serde(rename = "dump_date")]
     pub dump_date_str: String,
     pub vertexes_loaded: bool,
     pub edges_resolved: bool,
