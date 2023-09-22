@@ -12,9 +12,12 @@ use rustls_pemfile::{certs, read_one, Item};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use wikiwalk::{schema, GraphDB};
+
 mod content_negotiation;
 
 use actix_web_static_files::ResourceFiles;
+use wikiwalk::dbstatus::DBStatus;
+use wikiwalk::paths::{DBPaths, Paths};
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
@@ -120,6 +123,7 @@ async fn main() -> std::io::Result<()> {
         .chain(std::io::stdout())
         .apply()
         .expect("initialize logs");
+
     let home_dir = dirs::home_dir().unwrap();
     let default_data_dir = home_dir.join("data").join("wikiwalk");
     let data_dir = match std::env::var("DATA_ROOT").ok() {
@@ -128,6 +132,7 @@ async fn main() -> std::io::Result<()> {
     };
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
+
     let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
     let port = port.parse::<u16>().expect("parse port");
     let bind_addr = std::env::var("ADDRESS").unwrap_or_else(|_| "localhost".to_string());
@@ -135,6 +140,10 @@ async fn main() -> std::io::Result<()> {
     let key_path = std::env::var("TLS_KEY").ok();
     let well_known_path = std::env::var("WELL_KNOWN_ROOT").ok();
     let enable_https = matches!((&cert_path, &key_path), (Some(_), Some(_)));
+
+    let db_paths = Paths::new().db_paths("current");
+    let db_status = DBStatus::load(db_paths.path_db_status());
+    let db_status_data = web::Data::new(db_status);
 
     let gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
     let gdb_data = web::Data::new(gdb);
@@ -148,6 +157,7 @@ async fn main() -> std::io::Result<()> {
                 RedirectHttps::with_hsts(StrictTransportSecurity::default()),
             ))
             .app_data(gdb_data.clone())
+            .app_data(db_status_data)
             .service(paths);
         match &well_known_path {
             Some(well_known_path) => {

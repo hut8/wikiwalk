@@ -385,13 +385,13 @@ impl GraphDBBuilder {
         let db_status_path = self.db_paths.path_db_status();
         let mut db_status = DBStatus::load(db_status_path.clone());
 
-        if !db_status.dump_date.is_empty() && db_status.dump_date != self.dump_date {
+        if !db_status.dump_date_str.is_empty() && db_status.dump_date_str != self.dump_date {
             log::error!("for build of {dump_date}, db status file indicates dump date is {status_file_date}",
               dump_date=self.dump_date,
-              status_file_date=db_status.dump_date,
+              status_file_date=db_status.dump_date_str,
             )
         }
-        db_status.dump_date = self.dump_date.clone();
+        db_status.dump_date_str = self.dump_date.clone();
 
         if db_status.build_complete {
             self.create_current_symlink();
@@ -1035,7 +1035,7 @@ async fn main() {
             let current_path = Paths::new().db_paths("current");
             let db_status = DBStatus::load(current_path.path_db_status());
 
-            let db_dump_date = db_status.dump_date;
+            let db_dump_date = db_status.dump_date_str;
             let latest_dump_date = latest_dump.dump_date;
 
             if db_dump_date == latest_dump_date {
