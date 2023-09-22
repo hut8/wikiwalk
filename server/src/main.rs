@@ -13,8 +13,6 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter
 use serde::{Deserialize, Serialize};
 use wikiwalk::{schema, GraphDB};
 
-mod content_negotiation;
-
 use actix_web_static_files::ResourceFiles;
 use wikiwalk::dbstatus::DBStatus;
 use wikiwalk::paths::{DBPaths, Paths};
