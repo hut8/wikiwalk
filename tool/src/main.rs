@@ -1,10 +1,10 @@
-use std::{process, thread};
 use std::collections::HashMap;
-use std::fs::{canonicalize, DirEntry, File, OpenOptions, read_dir, symlink_metadata};
+use std::fs::{canonicalize, read_dir, symlink_metadata, DirEntry, File, OpenOptions};
 use std::hash::Hash;
-use std::io::{BufWriter, prelude::*};
 use std::io::Write;
+use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
+use std::{process, thread};
 
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
@@ -13,21 +13,21 @@ use itertools::Itertools;
 use memmap2::{Mmap, MmapMut};
 use memory_stats::memory_stats;
 use rayon::slice::ParallelSliceMut;
+use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DatabaseBackend, DbBackend, DbConn, DeriveColumn, EntityTrait,
     EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
-use sea_orm::entity::prelude::*;
-use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
 
 use fetch::DumpStatus;
-use wikiwalk::{Edge, edge_db, GraphDB, schema, Vertex};
 use wikiwalk::dbstatus::DBStatus;
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::RedirectMap;
+use wikiwalk::{edge_db, schema, Edge, GraphDB, Vertex};
 
 mod fetch;
 mod page_source;
@@ -738,15 +738,15 @@ impl GraphDBBuilder {
             DatabaseBackend::Sqlite,
             "PRAGMA synchronous = OFF".to_owned(),
         ))
-            .await
-            .expect("set sync pragma");
+        .await
+        .expect("set sync pragma");
 
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
             "PRAGMA journal_mode = MEMORY".to_owned(),
         ))
-            .await
-            .expect("set journal_mode pragma");
+        .await
+        .expect("set journal_mode pragma");
 
         let txn = db.begin().await.expect("start transaction");
 
@@ -896,33 +896,31 @@ enum Command {
 }
 
 async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
-    let mut gddb = GraphDBBuilder::new(dump_date.into_string(), data_dir);
+    let mut gddb = GraphDBBuilder::new(dump_date.to_owned(), data_dir);
     log::info!("cleaning old databases");
     gddb.clean_old_databases();
     log::info!("building database");
     gddb.build_database().await
 }
 
-async fn run_fetch(dump_dir: &Path, latest_dump: Option<&DumpStatus>) -> anyhow::Result<()> {
+async fn run_fetch(dump_dir: &Path, latest_dump: Option<DumpStatus>) -> anyhow::Result<()> {
     let latest_dump = match latest_dump {
         Some(latest_dump) => latest_dump,
-        None =>
-            match fetch::find_latest().await {
-                None => {
-                    log::error!("[pull] found no recent dumps");
-                    process::exit(1);
-                }
-                Some(x) => x,
+        None => match fetch::find_latest().await {
+            None => {
+                log::error!("[pull] found no recent dumps");
+                process::exit(1);
             }
+            Some(x) => x,
+        },
     };
-    fetch::fetch_dump(dump_dir, &latest_dump)
-        .await?;
+    fetch::fetch_dump(dump_dir, &latest_dump).await?;
     Ok(())
 }
 
-async fn run_compute(data_dir: &PathBuf, source: String, destination: String) {
+async fn run_compute(data_dir: &Path, source: String, destination: String) {
     log::info!("computing path");
-    let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
+    let mut gdb = GraphDB::new("current".into(), data_dir).await.unwrap();
     let source_title = source.replace('_', " ");
     let dest_title = destination.replace('_', " ");
 
@@ -956,10 +954,10 @@ async fn run_compute(data_dir: &PathBuf, source: String, destination: String) {
     }
 }
 
-async fn run_query(data_dir: &PathBuf, target: String) {
+async fn run_query(data_dir: &Path, target: String) {
     let target = target.replace('_', " ");
     log::info!("querying target: {}", target);
-    let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
+    let mut gdb = GraphDB::new("current".into(), data_dir).await.unwrap();
     let vertex = gdb
         .find_vertex_by_title(target)
         .await
@@ -1035,8 +1033,8 @@ async fn main() {
             let current_path = Paths::new().db_paths("current");
             let db_status = DBStatus::load(current_path.path_db_status());
 
-            let db_dump_date = db_status.dump_date_str;
-            let latest_dump_date = latest_dump.dump_date;
+            let db_dump_date = &db_status.dump_date_str;
+            let latest_dump_date = &latest_dump.dump_date;
 
             if db_dump_date == latest_dump_date {
                 log::info!("[pull] database dump date {db_dump_date} is already the latest",);
@@ -1046,12 +1044,11 @@ async fn main() {
                 "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
             );
 
-            let dump_status = run_fetch(&dump_dir, Some(&latest_dump)).await;
+            run_fetch(&dump_dir, Some(latest_dump.clone())).await.expect("fetch dump");
             log::info!(
-                "fetched data from {dump_date}",
-                dump_date = dump_status.dump_date
+                "fetched data from {latest_dump_date}",
             );
-            if let Err(err) = run_build(&data_dir, &latest_dump.dump_date).await {
+            if let Err(err) = run_build(&data_dir, latest_dump_date).await {
                 log::error!("build failed: {:#?}", err);
                 process::exit(1);
             }
