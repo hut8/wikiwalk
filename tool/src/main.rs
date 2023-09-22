@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::{process, thread};
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::RedirectMap;
-use wikiwalk::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
+use wikiwalk::{edge_db, schema, Edge, GraphDB, Vertex};
 
 use crate::dbstatus::DBStatus;
 
@@ -230,7 +230,7 @@ impl EdgeProcDB {
 
 // AdjacencySet is an AdjacencyList combined with its vertex
 struct AdjacencySet {
-    adjacency_list: wikiwalk::edge_db::AdjacencyList,
+    adjacency_list: edge_db::AdjacencyList,
 }
 
 struct AdjacencySetIterator {
@@ -683,7 +683,7 @@ impl GraphDBBuilder {
             "loading redirects from {}",
             self.redirects_path.clone().display()
         );
-        let mut redirects = redirect::RedirectMap::new(self.redirects_path.clone());
+        let mut redirects = RedirectMap::new(self.redirects_path.clone());
         redirects.parse(db.clone()).await;
         log::info!("loaded {} redirects", redirects.len());
 
@@ -739,15 +739,15 @@ impl GraphDBBuilder {
             DatabaseBackend::Sqlite,
             "PRAGMA synchronous = OFF".to_owned(),
         ))
-        .await
-        .expect("set sync pragma");
+            .await
+            .expect("set sync pragma");
 
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
             "PRAGMA journal_mode = MEMORY".to_owned(),
         ))
-        .await
-        .expect("set journal_mode pragma");
+            .await
+            .expect("set journal_mode pragma");
 
         let txn = db.begin().await.expect("start transaction");
 
@@ -917,7 +917,71 @@ async fn run_fetch(dump_dir: &Path) -> DumpStatus {
                 "could not find any dumps in the last {days} days",
                 days = fetch::OLDEST_DUMP
             );
-            std::process::exit(1);
+            process::exit(1);
+        }
+    }
+}
+
+async fn run_compute(data_dir: &PathBuf, source: String, destination: String) {
+    log::info!("computing path");
+    let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
+    let source_title = source.replace('_', " ");
+    let dest_title = destination.replace('_', " ");
+
+    log::info!("wikiwalk: [{}] → [{}]", source_title, dest_title);
+
+    let source_vertex = gdb
+        .find_vertex_by_title(source_title)
+        .await
+        .expect("source not found");
+    let dest_vertex = gdb
+        .find_vertex_by_title(dest_title)
+        .await
+        .expect("destination not found");
+
+    log::info!("wikiwalk: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
+
+    let paths = gdb.bfs(source_vertex.id, dest_vertex.id).await;
+    if paths.is_empty() {
+        println!("\nno path found");
+        return;
+    }
+    for path in paths {
+        let vertex_path = path.into_iter().map(|vid| gdb.find_vertex_by_id(vid));
+        let vertex_path = futures::future::join_all(vertex_path)
+            .await
+            .into_iter()
+            .map(|v| v.expect("vertex not found"))
+            .collect();
+        let formatted_path = format_path(vertex_path);
+        println!("{formatted_path}");
+    }
+}
+
+async fn run_query(data_dir: &PathBuf, target: String) {
+    let target = target.replace('_', " ");
+    log::info!("querying target: {}", target);
+    let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
+    let vertex = gdb
+        .find_vertex_by_title(target)
+        .await
+        .expect("find vertex by title");
+    log::info!("vertex:\n{:#?}", vertex);
+    let al = gdb.edge_db.read_edges(vertex.id);
+    log::info!("incoming edges:");
+    for vid in al.incoming.iter() {
+        let v = gdb.find_vertex_by_id(*vid).await;
+        match v {
+            Some(v) => println!("\t{:09}\t{}", v.id, v.title),
+            None => log::error!("vertex id {} not found!", vid),
+        }
+    }
+    log::info!("outgoing edges:");
+    for vid in al.outgoing.iter() {
+        let v = gdb.find_vertex_by_id(*vid).await;
+        match v {
+            Some(v) => println!("\t{:09}\t{}", v.id, v.title),
+            None => log::error!("vertex id {} not found!", vid),
         }
     }
 }
@@ -952,66 +1016,10 @@ async fn main() {
             source,
             destination,
         } => {
-            log::info!("computing path");
-            let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
-            let source_title = source.replace('_', " ");
-            let dest_title = destination.replace('_', " ");
-
-            log::info!("wikiwalk: [{}] → [{}]", source_title, dest_title);
-
-            let source_vertex = gdb
-                .find_vertex_by_title(source_title)
-                .await
-                .expect("source not found");
-            let dest_vertex = gdb
-                .find_vertex_by_title(dest_title)
-                .await
-                .expect("destination not found");
-
-            log::info!("wikiwalk: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
-
-            let paths = gdb.bfs(source_vertex.id, dest_vertex.id).await;
-            if paths.is_empty() {
-                println!("\nno path found");
-                return;
-            }
-            for path in paths {
-                let vertex_path = path.into_iter().map(|vid| gdb.find_vertex_by_id(vid));
-                let vertex_path = futures::future::join_all(vertex_path)
-                    .await
-                    .into_iter()
-                    .map(|v| v.expect("vertex not found"))
-                    .collect();
-                let formatted_path = format_path(vertex_path);
-                println!("{formatted_path}");
-            }
+            run_compute(&data_dir, source, destination).await;
         }
         Command::Query { target } => {
-            let target = target.replace('_', " ");
-            log::info!("querying target: {}", target);
-            let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
-            let vertex = gdb
-                .find_vertex_by_title(target)
-                .await
-                .expect("find vertex by title");
-            log::info!("vertex:\n{:#?}", vertex);
-            let al = gdb.edge_db.read_edges(vertex.id);
-            log::info!("incoming edges:");
-            for vid in al.incoming.iter() {
-                let v = gdb.find_vertex_by_id(*vid).await;
-                match v {
-                    Some(v) => println!("\t{:09}\t{}", v.id, v.title),
-                    None => log::error!("vertex id {} not found!", vid),
-                }
-            }
-            log::info!("outgoing edges:");
-            for vid in al.outgoing.iter() {
-                let v = gdb.find_vertex_by_id(*vid).await;
-                match v {
-                    Some(v) => println!("\t{:09}\t{}", v.id, v.title),
-                    None => log::error!("vertex id {} not found!", vid),
-                }
-            }
+            run_query(&data_dir, target).await;
         }
         Command::Fetch => {
             run_fetch(&dump_dir).await;
