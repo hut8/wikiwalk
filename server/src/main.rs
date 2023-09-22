@@ -12,6 +12,7 @@ use rustls_pemfile::{certs, read_one, Item};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use wikiwalk::{schema, GraphDB};
+mod content_negotiation;
 
 use actix_web_static_files::ResourceFiles;
 
@@ -66,7 +67,7 @@ async fn paths(
     let elapsed = start_time.elapsed();
     let count = paths.len();
     let lengths = paths.iter().map(|p| p.len());
-    let degrees = lengths.max();
+    let degrees = lengths.max().map(|i| i - 1);
     let search = schema::search::ActiveModel {
         source_page_id: Set(source_id as i32),
         target_page_id: Set(dest_id as i32),
@@ -157,7 +158,7 @@ async fn main() -> std::io::Result<()> {
             }
             None => app,
         }
-        .service(ResourceFiles::new("/", generated))
+            .service(ResourceFiles::new("/", generated))
     });
 
     if let (Some(cert_path), Some(key_path)) = (cert_path, key_path) {
@@ -180,7 +181,7 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn load_rustls_config(cert_path: &str, key_path: &str) -> rustls::ServerConfig {
+fn load_rustls_config(cert_path: &str, key_path: &str) -> ServerConfig {
     // init server config builder with safe defaults
     let config = ServerConfig::builder()
         .with_safe_defaults()
