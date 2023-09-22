@@ -1,35 +1,34 @@
+use std::{process, thread};
+use std::collections::HashMap;
+use std::fs::{canonicalize, DirEntry, File, OpenOptions, read_dir, symlink_metadata};
+use std::hash::Hash;
+use std::io::{BufWriter, prelude::*};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
-use fetch::DumpStatus;
 use itertools::Itertools;
 use memmap2::{Mmap, MmapMut};
 use memory_stats::memory_stats;
 use rayon::slice::ParallelSliceMut;
-use sea_orm::entity::prelude::*;
-use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DatabaseBackend, DbBackend, DbConn, DeriveColumn, EntityTrait,
     EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
-
+use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
-use std::fs::{canonicalize, read_dir, symlink_metadata, DirEntry, File, OpenOptions};
-use std::hash::Hash;
-use std::io::Write;
-use std::io::{prelude::*, BufWriter};
-use std::path::{Path, PathBuf};
-use std::{process, thread};
+
+use fetch::DumpStatus;
+use wikiwalk::{Edge, edge_db, GraphDB, schema, Vertex};
+use wikiwalk::dbstatus::DBStatus;
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::RedirectMap;
-use wikiwalk::{edge_db, schema, Edge, GraphDB, Vertex};
 
-use crate::dbstatus::DBStatus;
-
-mod dbstatus;
 mod fetch;
 mod page_source;
 mod pagelink_source;
