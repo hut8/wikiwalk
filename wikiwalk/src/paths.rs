@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::{path::{PathBuf, Path}, io};
 
 #[derive(Clone)]
 pub struct Paths {
@@ -91,6 +91,10 @@ impl DBPaths {
             base,
             date: date.to_owned(),
         }
+    }
+
+    pub fn ensure_exists(&self) -> io::Result<()> {
+        std::fs::create_dir_all(&self.base)
     }
 
     pub fn path_for(&self, basename: &str) -> PathBuf {

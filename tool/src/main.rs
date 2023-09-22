@@ -400,6 +400,8 @@ impl GraphDBBuilder {
             return Ok(());
         }
 
+        self.db_paths.ensure_exists().expect("db path exists");
+
         let db_path = self.db_paths.graph_db();
         let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
         log::debug!("using database: {}", conn_str);
