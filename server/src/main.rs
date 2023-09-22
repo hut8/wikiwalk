@@ -15,7 +15,7 @@ use wikiwalk::{schema, GraphDB};
 
 use actix_web_static_files::ResourceFiles;
 use wikiwalk::dbstatus::DBStatus;
-use wikiwalk::paths::{DBPaths, Paths};
+use wikiwalk::paths::Paths;
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
@@ -155,7 +155,7 @@ async fn main() -> std::io::Result<()> {
                 RedirectHttps::with_hsts(StrictTransportSecurity::default()),
             ))
             .app_data(gdb_data.clone())
-            .app_data(db_status_data)
+            .app_data(db_status_data.clone())
             .service(paths);
         match &well_known_path {
             Some(well_known_path) => {
@@ -166,7 +166,7 @@ async fn main() -> std::io::Result<()> {
             }
             None => app,
         }
-            .service(ResourceFiles::new("/", generated))
+        .service(ResourceFiles::new("/", generated))
     });
 
     if let (Some(cert_path), Some(key_path)) = (cert_path, key_path) {
