@@ -11,11 +11,12 @@ use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, read_one, Item};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
+use wikiwalk::paths::Paths;
 use wikiwalk::{schema, GraphDB};
 
 use actix_web_static_files::ResourceFiles;
 use wikiwalk::dbstatus::DBStatus;
-use wikiwalk::paths::Paths;
+use chrono::NaiveDate;
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
@@ -24,6 +25,11 @@ struct PathData {
     paths: Vec<Vec<u32>>,
     count: usize,
     degrees: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct DatabaseStatus {
+    date: Option<NaiveDate>
 }
 
 async fn fetch_cache(source_id: u32, dest_id: u32, gdb: &GraphDB) -> Option<Vec<Vec<u32>>> {
@@ -47,6 +53,13 @@ async fn fetch_cache(source_id: u32, dest_id: u32, gdb: &GraphDB) -> Option<Vec<
 struct PathParams {
     source_id: u32,
     dest_id: u32,
+}
+
+#[get("/status")]
+async fn status(db_status: web::Data<DBStatus>) -> actix_web::Result<impl Responder> {
+    Ok(web::Json(DatabaseStatus{
+        date: db_status.dump_date()
+    }))
 }
 
 #[get("/paths/{source_id}/{dest_id}")]
@@ -156,7 +169,8 @@ async fn main() -> std::io::Result<()> {
             ))
             .app_data(gdb_data.clone())
             .app_data(db_status_data.clone())
-            .service(paths);
+            .service(paths)
+            .service(status);
         match &well_known_path {
             Some(well_known_path) => {
                 // optionally add .well-known static files path so that lego can do HTTP acme challenge on port 80
