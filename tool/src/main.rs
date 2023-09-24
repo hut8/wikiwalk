@@ -1,7 +1,14 @@
+use std::collections::HashMap;
+use std::fs::{canonicalize, read_dir, symlink_metadata, DirEntry, File, OpenOptions};
+use std::hash::Hash;
+use std::io::Write;
+use std::io::{prelude::*, BufWriter};
+use std::path::{Path, PathBuf};
+use std::{process, thread};
+
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use crossbeam::channel::Receiver;
-use fetch::DumpStatus;
 use itertools::Itertools;
 use memmap2::{Mmap, MmapMut};
 use memory_stats::memory_stats;
@@ -13,23 +20,15 @@ use sea_orm::{
     EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
-
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
-use std::fs::{canonicalize, read_dir, symlink_metadata, DirEntry, File, OpenOptions};
-use std::hash::Hash;
-use std::io::Write;
-use std::io::{prelude::*, BufWriter};
-use std::path::{Path, PathBuf};
-use std::{process, thread};
+
+use fetch::DumpStatus;
+use wikiwalk::dbstatus::DBStatus;
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::RedirectMap;
-use wikiwalk::{edge_db, redirect, schema, Edge, GraphDB, Vertex};
+use wikiwalk::{edge_db, schema, Edge, GraphDB, Vertex};
 
-use crate::dbstatus::DBStatus;
-
-mod dbstatus;
 mod fetch;
 mod page_source;
 mod pagelink_source;
@@ -230,7 +229,7 @@ impl EdgeProcDB {
 
 // AdjacencySet is an AdjacencyList combined with its vertex
 struct AdjacencySet {
-    adjacency_list: wikiwalk::edge_db::AdjacencyList,
+    adjacency_list: edge_db::AdjacencyList,
 }
 
 struct AdjacencySetIterator {
@@ -386,13 +385,13 @@ impl GraphDBBuilder {
         let db_status_path = self.db_paths.path_db_status();
         let mut db_status = DBStatus::load(db_status_path.clone());
 
-        if !db_status.dump_date.is_empty() && db_status.dump_date != self.dump_date {
+        if !db_status.dump_date_str.is_empty() && db_status.dump_date_str != self.dump_date {
             log::error!("for build of {dump_date}, db status file indicates dump date is {status_file_date}",
               dump_date=self.dump_date,
-              status_file_date=db_status.dump_date,
+              status_file_date=db_status.dump_date_str,
             )
         }
-        db_status.dump_date = self.dump_date.clone();
+        db_status.dump_date_str = self.dump_date.clone();
 
         if db_status.build_complete {
             self.create_current_symlink();
@@ -400,6 +399,8 @@ impl GraphDBBuilder {
             log::info!("skipping build: db status file indicates complete");
             return Ok(());
         }
+
+        self.db_paths.ensure_exists().expect("db path exists");
 
         let db_path = self.db_paths.graph_db();
         let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
@@ -683,7 +684,7 @@ impl GraphDBBuilder {
             "loading redirects from {}",
             self.redirects_path.clone().display()
         );
-        let mut redirects = redirect::RedirectMap::new(self.redirects_path.clone());
+        let mut redirects = RedirectMap::new(self.redirects_path.clone());
         redirects.parse(db.clone()).await;
         log::info!("loaded {} redirects", redirects.len());
 
@@ -896,28 +897,89 @@ enum Command {
     Pull,
 }
 
-async fn run_build(data_dir: &Path, dump_date: String) -> anyhow::Result<()> {
-    let mut gddb = GraphDBBuilder::new(dump_date, data_dir);
+async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
+    let mut gddb = GraphDBBuilder::new(dump_date.to_owned(), data_dir);
     log::info!("cleaning old databases");
     gddb.clean_old_databases();
     log::info!("building database");
     gddb.build_database().await
 }
 
-async fn run_fetch(dump_dir: &Path) -> DumpStatus {
-    match fetch::find_latest().await {
-        Some(status) => {
-            fetch::fetch_dump(dump_dir, &status)
-                .await
-                .expect("fetch dumps");
-            status
+async fn run_fetch(dump_dir: &Path, latest_dump: Option<DumpStatus>) -> anyhow::Result<()> {
+    let latest_dump = match latest_dump {
+        Some(latest_dump) => latest_dump,
+        None => match fetch::find_latest().await {
+            None => {
+                log::error!("[pull] found no recent dumps");
+                process::exit(1);
+            }
+            Some(x) => x,
+        },
+    };
+    fetch::fetch_dump(dump_dir, &latest_dump).await?;
+    Ok(())
+}
+
+async fn run_compute(data_dir: &Path, source: String, destination: String) {
+    log::info!("computing path");
+    let mut gdb = GraphDB::new("current".into(), data_dir).await.unwrap();
+    let source_title = source.replace('_', " ");
+    let dest_title = destination.replace('_', " ");
+
+    log::info!("wikiwalk: [{}] → [{}]", source_title, dest_title);
+
+    let source_vertex = gdb
+        .find_vertex_by_title(source_title)
+        .await
+        .expect("source not found");
+    let dest_vertex = gdb
+        .find_vertex_by_title(dest_title)
+        .await
+        .expect("destination not found");
+
+    log::info!("wikiwalk: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
+
+    let paths = gdb.bfs(source_vertex.id, dest_vertex.id).await;
+    if paths.is_empty() {
+        println!("\nno path found");
+        return;
+    }
+    for path in paths {
+        let vertex_path = path.into_iter().map(|vid| gdb.find_vertex_by_id(vid));
+        let vertex_path = futures::future::join_all(vertex_path)
+            .await
+            .into_iter()
+            .map(|v| v.expect("vertex not found"))
+            .collect();
+        let formatted_path = format_path(vertex_path);
+        println!("{formatted_path}");
+    }
+}
+
+async fn run_query(data_dir: &Path, target: String) {
+    let target = target.replace('_', " ");
+    log::info!("querying target: {}", target);
+    let mut gdb = GraphDB::new("current".into(), data_dir).await.unwrap();
+    let vertex = gdb
+        .find_vertex_by_title(target)
+        .await
+        .expect("find vertex by title");
+    log::info!("vertex:\n{:#?}", vertex);
+    let al = gdb.edge_db.read_edges(vertex.id);
+    log::info!("incoming edges:");
+    for vid in al.incoming.iter() {
+        let v = gdb.find_vertex_by_id(*vid).await;
+        match v {
+            Some(v) => println!("\t{:09}\t{}", v.id, v.title),
+            None => log::error!("vertex id {} not found!", vid),
         }
-        None => {
-            log::error!(
-                "could not find any dumps in the last {days} days",
-                days = fetch::OLDEST_DUMP
-            );
-            std::process::exit(1);
+    }
+    log::info!("outgoing edges:");
+    for vid in al.outgoing.iter() {
+        let v = gdb.find_vertex_by_id(*vid).await;
+        match v {
+            Some(v) => println!("\t{:09}\t{}", v.id, v.title),
+            None => log::error!("vertex id {} not found!", vid),
         }
     }
 }
@@ -946,75 +1008,19 @@ async fn main() {
 
     match cli.command {
         Command::Build { dump_date } => {
-            run_build(&data_dir, dump_date).await.unwrap();
+            run_build(&data_dir, &dump_date).await.unwrap();
         }
         Command::Run {
             source,
             destination,
         } => {
-            log::info!("computing path");
-            let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
-            let source_title = source.replace('_', " ");
-            let dest_title = destination.replace('_', " ");
-
-            log::info!("wikiwalk: [{}] → [{}]", source_title, dest_title);
-
-            let source_vertex = gdb
-                .find_vertex_by_title(source_title)
-                .await
-                .expect("source not found");
-            let dest_vertex = gdb
-                .find_vertex_by_title(dest_title)
-                .await
-                .expect("destination not found");
-
-            log::info!("wikiwalk: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
-
-            let paths = gdb.bfs(source_vertex.id, dest_vertex.id).await;
-            if paths.is_empty() {
-                println!("\nno path found");
-                return;
-            }
-            for path in paths {
-                let vertex_path = path.into_iter().map(|vid| gdb.find_vertex_by_id(vid));
-                let vertex_path = futures::future::join_all(vertex_path)
-                    .await
-                    .into_iter()
-                    .map(|v| v.expect("vertex not found"))
-                    .collect();
-                let formatted_path = format_path(vertex_path);
-                println!("{formatted_path}");
-            }
+            run_compute(&data_dir, source, destination).await;
         }
         Command::Query { target } => {
-            let target = target.replace('_', " ");
-            log::info!("querying target: {}", target);
-            let mut gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
-            let vertex = gdb
-                .find_vertex_by_title(target)
-                .await
-                .expect("find vertex by title");
-            log::info!("vertex:\n{:#?}", vertex);
-            let al = gdb.edge_db.read_edges(vertex.id);
-            log::info!("incoming edges:");
-            for vid in al.incoming.iter() {
-                let v = gdb.find_vertex_by_id(*vid).await;
-                match v {
-                    Some(v) => println!("\t{:09}\t{}", v.id, v.title),
-                    None => log::error!("vertex id {} not found!", vid),
-                }
-            }
-            log::info!("outgoing edges:");
-            for vid in al.outgoing.iter() {
-                let v = gdb.find_vertex_by_id(*vid).await;
-                match v {
-                    Some(v) => println!("\t{:09}\t{}", v.id, v.title),
-                    None => log::error!("vertex id {} not found!", vid),
-                }
-            }
+            run_query(&data_dir, target).await;
         }
         Command::Fetch => {
-            run_fetch(&dump_dir).await;
+            run_fetch(&dump_dir, None).await.expect("fetch failed");
         }
         Command::Pull => {
             let latest_dump = {
@@ -1029,8 +1035,8 @@ async fn main() {
             let current_path = Paths::new().db_paths("current");
             let db_status = DBStatus::load(current_path.path_db_status());
 
-            let db_dump_date = db_status.dump_date;
-            let latest_dump_date = latest_dump.dump_date;
+            let db_dump_date = &db_status.dump_date_str;
+            let latest_dump_date = &latest_dump.dump_date;
 
             if db_dump_date == latest_dump_date {
                 log::info!("[pull] database dump date {db_dump_date} is already the latest",);
@@ -1040,12 +1046,11 @@ async fn main() {
                 "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
             );
 
-            let dump_status = run_fetch(&dump_dir).await;
+            run_fetch(&dump_dir, Some(latest_dump.clone())).await.expect("fetch dump");
             log::info!(
-                "fetched data from {dump_date}",
-                dump_date = dump_status.dump_date
+                "fetched data from {latest_dump_date}",
             );
-            if let Err(err) = run_build(&data_dir, dump_status.dump_date).await {
+            if let Err(err) = run_build(&data_dir, latest_dump_date).await {
                 log::error!("build failed: {:#?}", err);
                 process::exit(1);
             }

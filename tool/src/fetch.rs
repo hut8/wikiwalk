@@ -13,7 +13,7 @@ pub static OLDEST_DUMP: u64 = 60;
 
 pub async fn find_latest() -> Option<DumpStatus> {
     let today = Utc::now().date_naive();
-    let client = reqwest::Client::default();
+    let client = Client::default();
     for past_days in 0..OLDEST_DUMP {
         let date = today
             .checked_sub_days(chrono::Days::new(past_days))
@@ -36,7 +36,7 @@ pub async fn find_latest() -> Option<DumpStatus> {
 }
 
 pub async fn fetch_dump_status(
-    client: &reqwest::Client,
+    client: &Client,
     date: NaiveDate,
 ) -> Result<DumpStatus, anyhow::Error> {
     let date_fmt = date.format("%Y%m%d").to_string();
@@ -55,7 +55,7 @@ pub async fn fetch_dump_status(
 
 pub async fn fetch_dump(dump_dir: &Path, status: &DumpStatus) -> Result<(), anyhow::Error> {
     log::info!("fetching dump for {status:?}");
-    let client = reqwest::Client::default();
+    let client = Client::default();
     for job in [
         &status.jobs.redirect_table,
         &status.jobs.page_table,
