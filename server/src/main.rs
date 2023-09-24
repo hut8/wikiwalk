@@ -2,7 +2,7 @@ use std::fs::File;
 use std::time::Instant;
 use std::{io::BufReader, path::PathBuf};
 
-use actix_web::{get, web, App, HttpServer, Responder};
+use actix_web::{get, guard, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 
 use fern::colors::{Color, ColoredLevelConfig};
@@ -15,8 +15,10 @@ use wikiwalk::paths::Paths;
 use wikiwalk::{schema, GraphDB};
 
 use actix_web_static_files::ResourceFiles;
-use wikiwalk::dbstatus::DBStatus;
 use chrono::NaiveDate;
+use wikiwalk::dbstatus::DBStatus;
+
+mod content_negotiation;
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
@@ -29,7 +31,7 @@ struct PathData {
 
 #[derive(Serialize)]
 struct DatabaseStatus {
-    date: Option<NaiveDate>
+    date: Option<NaiveDate>,
 }
 
 async fn fetch_cache(source_id: u32, dest_id: u32, gdb: &GraphDB) -> Option<Vec<Vec<u32>>> {
@@ -57,12 +59,18 @@ struct PathParams {
 
 #[get("/status")]
 async fn status(db_status: web::Data<DBStatus>) -> actix_web::Result<impl Responder> {
-    Ok(web::Json(DatabaseStatus{
-        date: db_status.dump_date()
+    Ok(web::Json(DatabaseStatus {
+        date: db_status.dump_date(),
     }))
 }
 
-#[get("/paths/{source_id}/{dest_id}")]
+// SPA Route
+async fn serve_ui() -> actix_web::Result<impl Responder> {
+    Ok(HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(""))
+}
+
 async fn paths(
     path: web::Path<PathParams>,
     gdb: web::Data<GraphDB>,
@@ -161,6 +169,7 @@ async fn main() -> std::io::Result<()> {
 
     let mut server = HttpServer::new(move || {
         let generated = generate();
+        generated.get("index.html");
         let app = App::new()
             .wrap(Logger::default())
             .wrap(actix_web::middleware::Condition::new(
@@ -169,7 +178,13 @@ async fn main() -> std::io::Result<()> {
             ))
             .app_data(gdb_data.clone())
             .app_data(db_status_data.clone())
-            .service(paths)
+            .route(
+                "/paths/{source_id}/{dest_id}",
+                web::route()
+                    .guard(guard::Get())
+                    .guard(content_negotiation::accept_json_guard)
+                    .to(paths),
+            )
             .service(status);
         match &well_known_path {
             Some(well_known_path) => {
