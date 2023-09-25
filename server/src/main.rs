@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::time::Instant;
 use std::{io::BufReader, path::PathBuf};
@@ -11,6 +12,7 @@ use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, read_one, Item};
 use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
+use static_files::Resource;
 use wikiwalk::paths::Paths;
 use wikiwalk::{schema, GraphDB};
 
@@ -65,18 +67,39 @@ async fn status(db_status: web::Data<DBStatus>) -> actix_web::Result<impl Respon
 }
 
 // SPA Route
-async fn serve_ui() -> actix_web::Result<impl Responder> {
-    Ok(HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(""))
+async fn serve_ui_paths(
+    path: web::Path<PathParams>,
+    gdb: web::Data<GraphDB>,
+    statics: web::Data<HashMap<&str, Resource>>,
+) -> actix_web::Result<impl Responder> {
+    let source_id = path.source_id;
+    let dest_id = path.dest_id;
+    // find vertexes to avoid soft 404
+    let source_vertex = schema::vertex::Entity::find_by_id(source_id)
+        .one(&gdb.graph_db)
+        .await
+        .expect("query source vertex");
+    let dest_vertex = schema::vertex::Entity::find_by_id(dest_id)
+        .one(&gdb.graph_db)
+        .await
+        .expect("query destination vertex");
+    if source_vertex.is_none() || dest_vertex.is_none() {
+        // TODO: Make a real 404 page
+        return Ok(HttpResponse::NotFound().body("404 Source or destination page not found"));
+    }
+    let content = statics
+        .get("index.html")
+        .expect("index.html resource");
+    Ok(HttpResponse::Ok().body(content.data))
 }
 
-async fn paths(
+async fn serve_paths(
     path: web::Path<PathParams>,
     gdb: web::Data<GraphDB>,
 ) -> actix_web::Result<impl Responder> {
     let source_id = path.source_id;
     let dest_id = path.dest_id;
+    log::info!("finding paths from {source_id} to {dest_id}");
     let timestamp = chrono::Utc::now();
     let start_time = Instant::now();
     let paths = match fetch_cache(source_id, dest_id, &gdb).await {
@@ -169,7 +192,7 @@ async fn main() -> std::io::Result<()> {
 
     let mut server = HttpServer::new(move || {
         let generated = generate();
-        generated.get("index.html");
+        let generated_data = web::Data::new(generate());
         let app = App::new()
             .wrap(Logger::default())
             .wrap(actix_web::middleware::Condition::new(
@@ -178,12 +201,20 @@ async fn main() -> std::io::Result<()> {
             ))
             .app_data(gdb_data.clone())
             .app_data(db_status_data.clone())
+            .app_data(generated_data.clone())
             .route(
                 "/paths/{source_id}/{dest_id}",
                 web::route()
                     .guard(guard::Get())
                     .guard(content_negotiation::accept_json_guard)
-                    .to(paths),
+                    .to(serve_paths),
+            )
+            .route(
+                "/paths/{source_id}/{dest_id}",
+                web::route()
+                    .guard(guard::Get())
+                    .guard(content_negotiation::accept_html_guard)
+                    .to(serve_ui_paths),
             )
             .service(status);
         match &well_known_path {
