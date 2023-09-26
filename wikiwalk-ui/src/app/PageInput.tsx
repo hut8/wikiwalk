@@ -12,25 +12,15 @@ export const PageInput = () => {
   const [inputValue, setInputValue] = React.useState('');
   const [options, setOptions] = React.useState<WPPage[]>([]);
 
-
-  const fetch = React.useMemo(
-    () =>
-      debounce(async (input: string) => {
-        const pages = await runSearch(input);
-        // setOptions(pages);
-        return pages;
-      }, 500),
-    [],
-  );
-
   React.useEffect(() => {
     let active = true;
     async function searchPages() {
       if (inputValue === '') {
-        setOptions(value ? [value] : []);
+        // setOptions([value ? [value] : []]);
+        setOptions([]);
         return undefined;
       }
-      const pageResults = await fetch(inputValue);
+      const pageResults = await runSearch(inputValue);
       if (!active) {
         return undefined;
       }
@@ -40,7 +30,7 @@ export const PageInput = () => {
     return () => {
       active = false;
     }
-  }, [value, inputValue, fetch]);
+  }, [inputValue]);
 
     return (
         <Autocomplete sx={{
@@ -49,8 +39,6 @@ export const PageInput = () => {
         getOptionLabel={(option: WPPage) => option.title}
         filterOptions={(x) => x}
         options={options}
-        autoComplete
-        filterSelectedOptions
         value={value}
         noOptionsText={"No pages found"}
         onChange={(event, newValue) => {
