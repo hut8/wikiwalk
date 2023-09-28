@@ -34,7 +34,8 @@ export const PageInput = () => {
 
     return (
         <Autocomplete sx={{
-          width: 300
+          minWidth: 300,
+          flexGrow: 1,
         }}
         getOptionLabel={(option: WPPage) => option.title}
         filterOptions={(x) => x}

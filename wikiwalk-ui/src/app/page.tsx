@@ -40,7 +40,7 @@ export default function Home() {
           <Box sx={{ my: 4, display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
             <PageInput />
             <PageInput />
-            <Button variant="contained">
+            <Button variant="contained" sx={{flexShrink: 1}}>
               Go
             </Button>
           </Box>
