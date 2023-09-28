@@ -1,6 +1,3 @@
-"use client";
-
-import * as React from 'react';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Toolbar from '@mui/material/Toolbar';
@@ -9,9 +6,6 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 
 import {
-  useQuery,
-  useMutation,
-  useQueryClient,
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
@@ -20,8 +14,7 @@ import { PageInput } from './PageInput';
 
 const queryClient = new QueryClient()
 
-
-export default function Home() {
+export default function App() {
 
   return (
     <>

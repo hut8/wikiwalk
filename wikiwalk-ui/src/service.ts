@@ -133,9 +133,9 @@ async function fetchPathPageData(data: PathData): Promise<PagePaths> {
     const pageIds = Array.from(pageIdSet.values());
     let pageData = {} as Record<string, WPPage>;
     console.log("running page info query for ids:", pageIds);
-    let batches = batchArray(pageIds, CHUNK_SIZE);
-    for (let batch of Array.from(batches)) {
-        let pageDataChunk = await fetchPageDataChunk(batch);
+    const batches = batchArray(pageIds, CHUNK_SIZE);
+    for (const batch of Array.from(batches)) {
+        const pageDataChunk = await fetchPageDataChunk(batch);
         console.log("page data chunk:", pageDataChunk);
         pageData = Object.assign(pageData, pageDataChunk);
     }
