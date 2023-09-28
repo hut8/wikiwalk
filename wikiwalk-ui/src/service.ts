@@ -1,3 +1,27 @@
+export type Page = {
+  title: string;
+  id: number;
+  iconUrl?: string;
+  link: string;
+  description?: string;
+};
+
+// Run through Wikipedia API to get more data
+export type PagePaths = {
+  paths: Page[][];
+  degrees?: number,
+  count: number,
+  duration: number, // milliseconds
+};
+
+// Data returned our service at /paths/:sourceId/:targetId
+export type PathData = {
+  paths: number[][],
+  degrees?: number,
+  count: number,
+  duration: number, // milliseconds
+}
+
 export interface WPThumbnail {
     source: string;
     width: number;
@@ -19,7 +43,7 @@ export interface WPPage {
     pageprops: Record<string, string>;
 }
 
-export async function runSearch(term: string): Promise<WPPage[]> {
+export async function runSearch(term: string): Promise<Page[]> {
     const wikiParams = new URLSearchParams();
     wikiParams.set("action", "query");
     wikiParams.set("format", "json");
@@ -49,32 +73,14 @@ export async function runSearch(term: string): Promise<WPPage[]> {
         console.error("wikipedia api error:", data.error);
         return [];
     }
-    const pages = Object.values(data.query.pages) as WPPage[];
-    pages.sort((x: any, y: any) => x.index - y.index);
-    console.log(pages);
+    const results = Object.values(data.query.pages) as WPPage[];
+    results.sort((x, y) => x.index - y.index);
+    console.log(results);
+    const pages = results.map((page) => transformPage(page));
     return pages;
 }
 
-export type Page = {
-    title: string;
-    id: number;
-    iconUrl?: string;
-    link: string;
-    description?: string;
-};
 
-// Run through Wikipedia API to get more data
-export type PagePaths = {
-    paths: Page[][];
-    degrees?: number,
-    count: number,
-};
-
-export type PathData = {
-    paths: number[][],
-    degrees?: number,
-    count: number,
-}
 export async function findPaths(
     sourceId: number,
     targetId: number
@@ -95,6 +101,12 @@ function* batchArray<T>(arr: T[], n: number): Generator<T[], void> {
   for (let i = 0; i < arr.length; i += n) {
     yield arr.slice(i, i + n);
   }
+}
+
+export async function fetchPageData(pageId: number): Promise<Page> {
+    const pageData = await fetchPageDataChunk([pageId]);
+    const page = transformPage(pageData[pageId]);
+    return page;
 }
 
 async function fetchPageDataChunk(pageIds: number[]) {
@@ -127,6 +139,24 @@ async function fetchPageDataChunk(pageIds: number[]) {
     return data.query.pages;
 }
 
+function transformPage(page: WPPage): Page {
+    const p: Page = {
+        id: page.pageid,
+        title: page.title,
+        link: page.fullurl,
+    };
+    if (page.pageprops && page.pageprops["wikibase-shortdesc"]) {
+        p.description = page.pageprops["wikibase-shortdesc"];
+    }
+    if (page.terms?.description) {
+        p.description = page.terms.description[0];
+    }
+    if (page.thumbnail?.source) {
+        p.iconUrl = page.thumbnail.source;
+    }
+    return p;
+}
+
 async function fetchPathPageData(data: PathData): Promise<PagePaths> {
     const pageIdPaths: number[][] = data.paths;
     const pageIdSet = new Set(pageIdPaths.flatMap((x) => x));
@@ -145,25 +175,11 @@ async function fetchPathPageData(data: PathData): Promise<PagePaths> {
         paths: [],
         degrees: data.degrees,
         count: data.count,
+        duration: data.duration,
     };
 
     for (const pageIdPath of pageIdPaths) {
-        const pages: Page[] = [];
-        for (const pageId of pageIdPath) {
-            const wpPage = pageData[pageId];
-            const p: Page = {
-                id: wpPage.pageid,
-                title: wpPage.title,
-                link: wpPage.fullurl,
-            };
-            if (wpPage.pageprops && wpPage.pageprops["wikibase-shortdesc"]) {
-                p.description = wpPage.pageprops["wikibase-shortdesc"];
-            }
-            if (wpPage.thumbnail && wpPage.thumbnail.source) {
-                p.iconUrl = wpPage.thumbnail.source;
-            }
-            pages.push(p);
-        }
+        const pages = pageIdPath.map((pageId) => transformPage(pageData[pageId]));
         pagePaths.paths.push(pages);
     }
 

@@ -1,14 +1,20 @@
 import { Box, Typography } from "@mui/material";
-import { WPPage } from "./service";
+import { Page } from "./service";
 
-export const PageSummary = ({ page }: { page: WPPage }) => {
+export const PageSummary = ({ page }: { page: Page }) => {
+  console.log(page)
   return (
     <Box sx={{ display: "flex" }}>
       <Box sx={{ mr: 2, width: "30%" }}>
-        {page.thumbnail && <img src={page.thumbnail.source} alt="" width="64" />}
+        {page.iconUrl && <img src={page.iconUrl} alt="" width="64" />}
       </Box>
       <Box>
-        <Typography variant="h4">{page.title}</Typography>
+        <Box>
+          <Typography variant="h4">{page.title}</Typography>
+        </Box>
+        <Box>
+          <Typography variant="caption">{page.description}</Typography>
+        </Box>
       </Box>
     </Box>
   )

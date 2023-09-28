@@ -7,15 +7,18 @@ import {
   createBrowserRouter,
   RouterProvider,
 } from "react-router-dom";
+import { loadPaths } from './loaders.ts';
 
 const router = createBrowserRouter([
   {
     path: "/",
     element: <App />,
+    loader: loadPaths
   },
   {
-    path: "/:sourceId/:targetId",
+    path: "/paths/:sourceId/:targetId",
     element: <App />,
+    loader: loadPaths
   },
 ]);
 
