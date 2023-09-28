@@ -29,6 +29,7 @@ struct PathData {
     paths: Vec<Vec<u32>>,
     count: usize,
     degrees: Option<usize>,
+    duration: u128,
 }
 
 #[derive(Serialize)]
@@ -117,7 +118,7 @@ async fn serve_paths(
         source_page_id: Set(source_id as i32),
         target_page_id: Set(dest_id as i32),
         timestamp: Set(timestamp.to_string()),
-        duration: Set(elapsed.as_secs_f64()),
+        duration: Set(elapsed.as_millis() as u64),
         ..Default::default()
     };
     search
@@ -129,6 +130,7 @@ async fn serve_paths(
         paths,
         count,
         degrees,
+        duration: elapsed.as_millis(),
     }))
 }
 
