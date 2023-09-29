@@ -1,5 +1,6 @@
 [workspace]
 members = ["wikiwalk", "server", "tool", "migration"]
+resolver = "2"
 
 [profile.release]
 debug = true
