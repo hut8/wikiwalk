@@ -5,6 +5,7 @@ use std::{io::BufReader, path::PathBuf};
 
 use actix_web::{get, guard, web, App, HttpResponse, HttpServer, Responder};
 use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
+use actix_cors::Cors;
 
 use fern::colors::{Color, ColoredLevelConfig};
 
@@ -195,8 +196,14 @@ async fn main() -> std::io::Result<()> {
     let mut server = HttpServer::new(move || {
         let generated = generate();
         let generated_data = web::Data::new(generate());
+        let cors = Cors::default()
+            .allow_any_origin()
+            .allowed_methods(vec!["GET"])
+            .allow_any_header()
+            .max_age(3600);
         let app = App::new()
             .wrap(Logger::default())
+            .wrap(cors)
             .wrap(actix_web::middleware::Condition::new(
                 enable_https,
                 RedirectHttps::with_hsts(StrictTransportSecurity::default()),
