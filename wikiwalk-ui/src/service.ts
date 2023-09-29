@@ -80,12 +80,13 @@ export async function runSearch(term: string): Promise<Page[]> {
     return pages;
 }
 
+const serviceEndpointBase = new URL("https://wikiwalk.app/");
 
 export async function findPaths(
     sourceId: number,
     targetId: number
 ): Promise<PagePaths> {
-    const endpoint = `/paths/${sourceId}/${targetId}`;
+    const endpoint = new URL(`/paths/${sourceId}/${targetId}`, serviceEndpointBase);
     const response = await fetch(endpoint);
     if (!response.ok) {
         throw new Error("bad response code from server");
