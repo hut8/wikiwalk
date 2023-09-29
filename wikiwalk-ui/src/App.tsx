@@ -4,6 +4,7 @@ import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
+import MultipleStopIcon from '@mui/icons-material/MultipleStop';
 
 import {
   QueryClient,
@@ -12,18 +13,26 @@ import {
 
 import { PageInput } from './PageInput';
 import { PageSummary } from './PageSummary';
-import { useState } from 'react';
-import { Page, PagePaths } from './service';
+import { Suspense, useEffect, useState } from 'react';
+import { Page } from './service';
 import { Await, useLoaderData, useNavigate } from 'react-router-dom';
 import { PathsDisplay } from './PathsDisplay';
+import { PathLoaderData } from './loaders';
 
 const queryClient = new QueryClient()
 
 export default function App() {
   const [sourcePage, setSourcePage] = useState<Page | null>(null);
   const [targetPage, setTargetPage] = useState<Page | null>(null);
-  const pathData = useLoaderData() as Promise<PagePaths | null>;
+  const { pagePaths, source, target } = useLoaderData() as PathLoaderData;
   const navigate = useNavigate();
+
+  useEffect(() => {
+    (async () => {
+      source && setSourcePage(await source);
+      target && setTargetPage(await target);
+    })();
+  }, [source, target]);
 
   const triggerSearch = () => {
     if (!(sourcePage && targetPage)) {
@@ -62,7 +71,7 @@ export default function App() {
 
             <Box sx={{ width: "10%", display: "flex", alignItems: "center" }}>
               {sourcePage && targetPage && (
-                <Typography variant="h2">►</Typography>
+                <MultipleStopIcon sx={{ fontSize: 48 }} />
               )}
             </Box>
 
@@ -71,10 +80,16 @@ export default function App() {
             </Box>
           </Box>
 
-          <Await resolve={pathData} children={(paths) => {
-            if (!paths) return null;
-            return <PathsDisplay paths={paths} />
-          }} />
+          <Suspense fallback={<div>Loading...</div>}>
+            <Await
+              resolve={pagePaths}
+              children={(paths) => {
+                if (!paths) return null;
+                return <PathsDisplay paths={paths} />
+              }}
+              errorElement={<div>Something went wrong</div>}
+            />
+          </Suspense>
 
         </Container>
       </QueryClientProvider>

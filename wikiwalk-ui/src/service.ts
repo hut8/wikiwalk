@@ -93,6 +93,7 @@ export async function findPaths(
     }
     const data = await response.json() as PathData;
     const pagePaths = await fetchPathPageData(data);
+    console.log("page paths", pagePaths);
     return pagePaths;
 }
 
