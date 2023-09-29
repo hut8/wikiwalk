@@ -5,7 +5,7 @@ export const PageSummary = ({ page }: { page: Page }) => {
   console.log(page)
   return (
     <Box sx={{ display: "flex" }}>
-      <Box sx={{ mr: 2, width: "30%" }}>
+      <Box sx={{ mr: 2, width: "64px" }}>
         {page.iconUrl && <img src={page.iconUrl} alt="" width="64" />}
       </Box>
       <Box>

@@ -46,10 +46,10 @@ export default function App() {
             <Button color="inherit">Stats</Button>
           </Toolbar>
         </AppBar>
-        <Container maxWidth="lg">
-          <Box sx={{ my: 4, display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
-            <PageInput page={sourcePage} setPage={setSourcePage} />
-            <PageInput page={targetPage} setPage={setTargetPage} />
+        <Container maxWidth={false}>
+          <Box sx={{ my: 4, display: 'flex', flexDirection: 'row', justifyContent: 'space-between', gap: 16 }}>
+            <PageInput label='Source page' page={sourcePage} setPage={setSourcePage} />
+            <PageInput label='Target page' page={targetPage} setPage={setTargetPage} />
             <Button variant="contained" sx={{ flexShrink: 1 }} onClick={triggerSearch}>
               Go
             </Button>

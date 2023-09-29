@@ -6,7 +6,13 @@ import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { Page, runSearch } from './service';
 
-export const PageInput = ({ page, setPage }: { page: Page|null; setPage: (p: Page) => void }) => {
+type PageInputParams = {
+  page: Page | null;
+  setPage: (p: Page) => void;
+  label: string;
+};
+
+export const PageInput = ({ page, setPage, label }: PageInputParams) => {
   const [inputValue, setInputValue] = React.useState('');
   const [options, setOptions] = React.useState<Page[]>([]);
 
@@ -14,7 +20,6 @@ export const PageInput = ({ page, setPage }: { page: Page|null; setPage: (p: Pag
     let active = true;
     async function searchPages() {
       if (inputValue === '') {
-        // setOptions([value ? [value] : []]);
         setOptions([]);
         return undefined;
       }
@@ -40,6 +45,7 @@ export const PageInput = ({ page, setPage }: { page: Page|null; setPage: (p: Pag
       options={options}
       value={page}
       noOptionsText={"No pages found"}
+      isOptionEqualToValue={(option, value) => option.id === value.id}
       onChange={(_event, newValue) => {
         setOptions(newValue ? [newValue, ...options] : options);
         setPage(newValue as Page);
@@ -51,10 +57,10 @@ export const PageInput = ({ page, setPage }: { page: Page|null; setPage: (p: Pag
         return (
           <Box component="li" sx={{ '& > img': { mr: 2, flexShrink: 0 }, }} {...props}>
             <Grid container alignItems="center" spacing={2}>
-              <Grid item>
+              <Grid item width={"40px"}>
                 {option?.iconUrl && <img src={option.iconUrl} alt="" width="32" />}
               </Grid>
-              <Grid item xs>
+              <Grid item>
                 <Typography variant="body2" color="text.primary">
                   {option.title}
                 </Typography>
@@ -63,7 +69,7 @@ export const PageInput = ({ page, setPage }: { page: Page|null; setPage: (p: Pag
           </Box>
         )
       }}
-      renderInput={(params) => (<TextField {...params} label={"Page"} fullWidth />)}
+      renderInput={(params) => (<TextField {...params} label={label} fullWidth />)}
     />
   )
 }

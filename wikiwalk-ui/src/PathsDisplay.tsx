@@ -1,18 +1,20 @@
 import { Box } from "@mui/material";
+import Grid from '@mui/material/Unstable_Grid2'; // Grid version 2
+
 import { Page, PagePaths } from "./service";
 
 function PathDisplay({ path }: { path: Page[] }) {
   return (
-    <Box sx={{ display: "flex", flexDirection: "row" }}>
+    <Grid container spacing={2}>
       {path.map(page => (
-        <Box>
+        <Grid xs key={page.id}>
           <Box sx={{ mr: 2, width: "30%" }}>
             {page.iconUrl && <img src={page.iconUrl} alt="" width="64" />}
           </Box>
           <Box>{page.title}</Box>
-        </Box>
+        </Grid>
       ))}
-    </Box>
+    </Grid>
   )
 }
 
@@ -22,12 +24,14 @@ export function PathsDisplay({ paths }: { paths: PagePaths }) {
   }
   return (
     <>
-      <Box sx={{ display: "flex", flexDirection: "row" }}>
+      <Grid container justifyContent={"center"}>
+        <Grid xs justifyContent={"center"}>
         Found {paths.count} paths of degree {paths.degrees} in {paths.duration} milliseconds
-      </Box>
+        </Grid>
+      </Grid>
       <Box sx={{ display: "flex", flexDirection: "column" }}>
         {paths.paths.map(path => (
-          <PathDisplay path={path} />
+          <PathDisplay key={path.map(p => p.id).join("-")} path={path} />
         ))}
       </Box>
     </>
