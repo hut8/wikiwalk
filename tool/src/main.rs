@@ -976,6 +976,22 @@ async fn run_query(data_dir: &Path, target: String) {
     }
 }
 
+async fn run_sitemap() {
+  let current_db_paths = Paths::new().db_paths("current");
+  let db_path = current_db_paths.graph_db();
+  let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
+  log::debug!("building sitemap using database: {}", conn_str);
+  let opts = SqliteConnectOptions::new()
+      .synchronous(SqliteSynchronous::Off)
+      .journal_mode(SqliteJournalMode::Memory)
+      .filename(&db_path)
+      .create_if_missing(true);
+  let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+  let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
+  let sitemaps_path = current_db_paths.sitemaps_path();
+  sitemap::make_sitemap(&db, &sitemaps_path).await;
+}
+
 #[tokio::main]
 async fn main() {
     stderrlog::new()
@@ -1046,22 +1062,13 @@ async fn main() {
                 log::error!("build failed: {:#?}", err);
                 process::exit(1);
             }
+            log::info!("built database from {latest_dump_date}. cleaning dump directory.");
             fetch::clean_dump_dir(&dump_dir);
+            log::info!("building sitemap");
+            run_sitemap().await;
         }
         Command::Sitemap => {
-            let current_db_paths = Paths::new().db_paths("current");
-            let db_path = current_db_paths.graph_db();
-            let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
-            log::debug!("building sitemap using database: {}", conn_str);
-            let opts = SqliteConnectOptions::new()
-                .synchronous(SqliteSynchronous::Off)
-                .journal_mode(SqliteJournalMode::Memory)
-                .filename(&db_path)
-                .create_if_missing(true);
-            let pool = SqlitePool::connect_with(opts).await.expect("db connect");
-            let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
-            let sitemaps_path = current_db_paths.sitemaps_path();
-            sitemap::make_sitemap(&db, &sitemaps_path).await;
+            run_sitemap().await;
         }
     }
 }
