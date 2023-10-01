@@ -1,7 +1,7 @@
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Itertools;
-use sea_orm::{EntityTrait, QueryOrder, QuerySelect};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use std::io::prelude::*;
 use xml::{writer::XmlEvent, EventWriter};
 
@@ -9,32 +9,58 @@ use wikiwalk::schema::prelude::Vertex;
 
 const BASE_URL: &str = "https://wikiwalk.app";
 
+// 7,000,000 pages in pairs = 49,000,000,000,000
+// 50,000 pairs per chunk = 980,000,000 chunks (sitemap files - sitemap-0.xml.gz, sitemap-1.xml.gz, etc.)
+// 50,000 sitemap files per sitemap index = 980,000,000 / 50,000 = 19,600 sitemap index files (sitemap.xml.gz, sitemap-1.xml.gz, etc.)
+// maximum number of sitemaps per sitemap index = 50,000
+// this is do-able, but pushing it. Instead, we'll get the top 1,000 articles that we can link to
+
+// 1,000 pages in pairs = less than 1,000,000 pairs
+// 50,000 pairs per chunk = 20 chunks
+// 50,000 sitemap files per sitemap index = 20 / 50,000 = 1 sitemap index file
+
 pub async fn make_sitemap(db: &sea_orm::DatabaseConnection, sitemaps_path: &std::path::Path) {
     std::fs::create_dir_all(sitemaps_path).expect("create sitemaps directory");
-    let vertexes: Vec<u32> = Vertex::find()
+    log::info!("sitemap: finding top pages");
+    let top_page_ids = crate::api::top_page_ids().await;
+    log::info!("sitemap: found {} valid top pages", top_page_ids.len());
+    let page_ids: Vec<u32> = Vertex::find()
         .select_only()
+        .filter(wikiwalk::schema::vertex::Column::Id.is_in(top_page_ids.clone()))
         .column(wikiwalk::schema::vertex::Column::Id)
         .order_by(wikiwalk::schema::vertex::Column::Id, sea_orm::Order::Asc)
         .into_tuple()
         .all(db)
         .await
         .expect("query vertexes");
-    let sources = vertexes.clone();
-    let targets = vertexes.clone();
+    let missing_page_ids: Vec<u32> = top_page_ids
+        .clone()
+        .into_iter()
+        .filter(|page_id| !page_ids.contains(page_id))
+        .collect();
+    log::info!(
+        "sitemap: found {} valid top pages in db (missing {:?})",
+        page_ids.len(),
+        missing_page_ids
+    );
+    let sources = page_ids.clone();
+    let targets = page_ids.clone();
     let pairs = sources
         .into_iter()
         .cartesian_product(targets.into_iter())
-        .filter(|(source, target)| *source != *target);
+        .filter(|(source, target)| *source != *target)
+        .map(|(source, target)| path_url(source, target));
+    let site_urls = std::iter::once(BASE_URL.to_string()).chain(pairs);
 
     log::info!("sitemap: generated pairs iterator");
-    let chunk_iterator = pairs.chunks(50_000);
+    let chunk_iterator = site_urls.chunks(50_000);
     let pair_chunks = chunk_iterator.into_iter();
     let chunk_count = pair_chunks
         .enumerate()
         .map(|(i, chunk)| {
-            let pairs = chunk.collect::<Vec<(u32, u32)>>();
+            let urls  = chunk.collect::<Vec<String>>();
             std::fs::create_dir_all(sitemaps_path).expect("create sitemap directory");
-            write_chunk(i, sitemaps_path, &pairs).expect("write sitemap chunk");
+            write_chunk(i, sitemaps_path, &urls).expect("write sitemap chunk");
         })
         .count();
     log::info!("sitemap: wrote {} chunks", chunk_count);
@@ -70,6 +96,9 @@ fn write_sitemap_index(count: usize, directory: &std::path::Path) {
         writer
             .write(XmlEvent::end_element())
             .expect("write end loc element");
+        writer
+            .write(XmlEvent::end_element())
+            .expect("write end sitemap element");
     }
 
     writer
@@ -77,9 +106,8 @@ fn write_sitemap_index(count: usize, directory: &std::path::Path) {
         .expect("write end root");
 
     let buf = encoder.finish().expect("encode gzip");
-    let path = directory.join("sitemap.xml.gz");
-    let mut sink = std::fs::File::create(&path).expect("create sitemap.xml");
-
+    let path = directory.join("sitemap-index.xml.gz");
+    let mut sink = std::fs::File::create(&path).expect("create sitemap-index.xml.gz");
     sink.write_all(&buf).expect("write sitemap.xml.gz");
     log::info!("sitemap: wrote index to {}", path.display());
 }
@@ -87,9 +115,8 @@ fn write_sitemap_index(count: usize, directory: &std::path::Path) {
 fn write_chunk(
     chunk_number: usize,
     directory: &std::path::Path,
-    pairs: &[(u32, u32)],
+    urls: &[String],
 ) -> Result<(), xml::writer::Error> {
-    // TODO: Ensure that each chunk is at most 50MB uncompressed
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
 
     let mut writer = EventWriter::new_with_config(
@@ -103,8 +130,8 @@ fn write_chunk(
         xml::writer::XmlEvent::start_element("urlset")
             .attr("xmlns", "http://www.sitemaps.org/schemas/sitemap/0.9"),
     )?;
-    for (source, target) in pairs {
-        write_url(&mut writer, *source, *target)?;
+    for u in urls {
+        write_url(&mut writer, u, None)?;
     }
     writer.write(xml::writer::XmlEvent::end_element())?;
 
@@ -124,23 +151,26 @@ fn write_chunk(
 
 fn write_url<W: std::io::Write>(
     writer: &mut EventWriter<W>,
-    source: u32,
-    target: u32,
+    path: &str,
+    priority: Option<f32>,
 ) -> Result<(), xml::writer::Error> {
+    let url = format!("{}/{}", BASE_URL, path);
+
     writer.write(xml::writer::XmlEvent::start_element("url"))?;
 
     writer.write(XmlEvent::start_element("loc"))?;
-    writer.write(XmlEvent::characters(&path_url(source, target)))?;
+    writer.write(XmlEvent::characters(&url))?;
     writer.write(XmlEvent::end_element())?;
-    // url = url.append(xml::writer::XmlEvent::start_element("lastmod").append(xml::writer::XmlEvent::characters(&page.last_modified().to_rfc3339())));
 
     writer.write(XmlEvent::start_element("changefreq"))?;
     writer.write(XmlEvent::characters("monthly"))?;
     writer.write(XmlEvent::end_element())?;
 
-    // writer.write(XmlEvent::start_element("priority"))?;
-    // writer.write(XmlEvent::characters("0.5"))?;
-    // writer.write(XmlEvent::end_element())?;
+    if let Some(priority) = priority {
+        writer.write(XmlEvent::start_element("priority"))?;
+        writer.write(XmlEvent::characters(&format!("{}", priority)))?;
+        writer.write(XmlEvent::end_element())?;
+    }
 
     writer.write(XmlEvent::end_element())?;
     Ok(())

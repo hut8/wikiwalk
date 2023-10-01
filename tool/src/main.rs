@@ -33,6 +33,7 @@ mod fetch;
 mod page_source;
 mod pagelink_source;
 mod sitemap;
+mod api;
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -474,12 +475,6 @@ impl GraphDBBuilder {
         let mut al_writer = BufWriter::new(al_file);
 
         for adjacency_set in edge_iter {
-            // log::debug!(
-            //     "adjacencies for: {}\toutgoing: [{}] incoming: [{}]",
-            //     adjacency_set.vertex_id,
-            //     adjacency_set.adjacency_list.outgoing.iter().join(" "),
-            //     adjacency_set.adjacency_list.incoming.iter().join(" "),
-            // );
             let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set, &mut al_writer);
             ix_writer
                 .write_all(&vertex_al_offset.to_le_bytes())
