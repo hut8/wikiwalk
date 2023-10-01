@@ -25,8 +25,26 @@ impl EdgeDB {
 
     pub fn check_db(&mut self) {
         println!("checking index file");
+        self.check_sizes();
         self.check_ix();
         println!("done");
+    }
+
+    pub fn check_sizes(&mut self) {
+      let al_size = self.vertex_al.len();
+      let al_ix_size = self.vertex_al_ix.len();
+      if al_size == 0 {
+          panic!("check_sizes: vertex_al size is 0");
+      }
+      if al_ix_size == 0 {
+          panic!("check_sizes: vertex_al_ix size is 0");
+      }
+      if al_size % 4 != 0 {
+          panic!("check_sizes: vertex_al size is not a multiple of 4");
+      }
+      if al_ix_size % 8 != 0 {
+          panic!("check_sizes: vertex_al_ix size is not a multiple of 8");
+      }
     }
 
     fn check_ix(&mut self) {
