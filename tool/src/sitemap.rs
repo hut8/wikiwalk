@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use sea_orm::{EntityTrait, QuerySelect};
 use xml::{writer::XmlEvent, EventWriter};
 
@@ -5,33 +6,28 @@ use wikiwalk::schema::prelude::Vertex;
 
 pub async fn make_sitemap(db: &sea_orm::DatabaseConnection, sitemaps_path: &std::path::Path) {
     std::fs::create_dir_all(sitemaps_path).expect("create sitemaps directory");
-    let vertexes = Vertex::find()
+    let vertexes: Vec<u32> = Vertex::find()
         .select_only()
         .column(wikiwalk::schema::vertex::Column::Id)
         .into_tuple()
         .all(db)
         .await
         .expect("query vertexes");
-    let pairs = generate_pairs(vertexes);
-    log::info!("sitemap: generated {} pairs", pairs.len());
-    let pair_chunks = pairs.chunks(50_000);
-    pair_chunks.enumerate().for_each(|(i, chunk)| {
-        let directory = std::path::Path::new("sitemap");
-        std::fs::create_dir_all(directory).expect("create sitemap directory");
-        write_chunk(i, directory, chunk).expect("write sitemap chunk");
-    });
-}
+    let sources = vertexes.clone();
+    let targets = vertexes.clone();
+    let pairs = sources
+        .into_iter()
+        .cartesian_product(targets.into_iter())
+        .filter(|(source, target)| *source != *target);
 
-fn generate_pairs(vertices: Vec<u32>) -> Vec<(u32, u32)> {
-    let mut pairs = Vec::new();
-    for source in &vertices {
-        for target in &vertices {
-            if *source != *target {
-                pairs.push((*source, *target));
-            }
-        }
-    }
-    pairs
+    log::info!("sitemap: generated pairs iterator");
+    let chunk_iterator = pairs.chunks(50_000);
+    let pair_chunks = chunk_iterator.into_iter();
+    pair_chunks.enumerate().for_each(|(i, chunk)| {
+        let pairs = chunk.collect::<Vec<(u32,u32)>>();
+        std::fs::create_dir_all(sitemaps_path).expect("create sitemap directory");
+        write_chunk(i, sitemaps_path, &pairs).expect("write sitemap chunk");
+    });
 }
 
 fn write_chunk(
@@ -40,11 +36,11 @@ fn write_chunk(
     pairs: &[(u32, u32)],
 ) -> Result<(), xml::writer::Error> {
     let path = directory.join(format!("sitemap-{}.xml", chunk_number));
-    let sink = std::fs::File::create(path).expect("create sitemap.xml");
+    let sink = std::fs::File::create(&path).expect("create sitemap.xml");
     let mut writer = EventWriter::new_with_config(
         sink,
         xml::writer::EmitterConfig {
-            perform_indent: true,
+            perform_indent: false,
             ..Default::default()
         },
     );
@@ -55,6 +51,8 @@ fn write_chunk(
     for (source, target) in pairs {
         write_url(&mut writer, *source, *target)?;
     }
+    writer.write(xml::writer::XmlEvent::end_element())?;
+    log::info!("sitemap: wrote chunk {} to {}", chunk_number, path.display());
     Ok(())
 }
 
