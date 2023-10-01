@@ -364,8 +364,8 @@ impl GraphDBBuilder {
         let pagelinks_path = dump_paths.pagelinks();
 
         let db_paths = paths.db_paths(&dump_date);
-        let ix_path = db_paths.path_vertex_al_ix();
-        let al_path = db_paths.path_vertex_al();
+        let ix_path = db_paths.vertex_al_ix_path();
+        let al_path = db_paths.vertex_al_path();
 
         GraphDBBuilder {
             page_path,
@@ -382,7 +382,7 @@ impl GraphDBBuilder {
     /// load vertexes from page.sql and put them in a sqlite file
     /// then process edges into memory-mapped flat-file database
     pub async fn build_database(&mut self) -> anyhow::Result<()> {
-        let db_status_path = self.db_paths.path_db_status();
+        let db_status_path = self.db_paths.db_status_path();
         let mut db_status = DBStatus::load(db_status_path.clone());
 
         if !db_status.dump_date_str.is_empty() && db_status.dump_date_str != self.dump_date {
@@ -1033,7 +1033,7 @@ async fn main() {
                 }
             };
             let current_path = Paths::new().db_paths("current");
-            let db_status = DBStatus::load(current_path.path_db_status());
+            let db_status = DBStatus::load(current_path.db_status_path());
 
             let db_dump_date = &db_status.dump_date_str;
             let latest_dump_date = &latest_dump.dump_date;
@@ -1046,10 +1046,10 @@ async fn main() {
                 "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
             );
 
-            run_fetch(&dump_dir, Some(latest_dump.clone())).await.expect("fetch dump");
-            log::info!(
-                "fetched data from {latest_dump_date}",
-            );
+            run_fetch(&dump_dir, Some(latest_dump.clone()))
+                .await
+                .expect("fetch dump");
+            log::info!("fetched data from {latest_dump_date}",);
             if let Err(err) = run_build(&data_dir, latest_dump_date).await {
                 log::error!("build failed: {:#?}", err);
                 process::exit(1);

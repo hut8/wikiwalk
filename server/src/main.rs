@@ -187,7 +187,7 @@ async fn main() -> std::io::Result<()> {
     let enable_https = matches!((&cert_path, &key_path), (Some(_), Some(_)));
 
     let db_paths = Paths::new().db_paths("current");
-    let db_status = DBStatus::load(db_paths.path_db_status());
+    let db_status = DBStatus::load(db_paths.db_status_path());
     let db_status_data = web::Data::new(db_status);
 
     let gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
