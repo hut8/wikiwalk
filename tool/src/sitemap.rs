@@ -138,9 +138,9 @@ fn write_url<W: std::io::Write>(
     writer.write(XmlEvent::characters("monthly"))?;
     writer.write(XmlEvent::end_element())?;
 
-    writer.write(XmlEvent::start_element("priority"))?;
-    writer.write(XmlEvent::characters("0.5"))?;
-    writer.write(XmlEvent::end_element())?;
+    // writer.write(XmlEvent::start_element("priority"))?;
+    // writer.write(XmlEvent::characters("0.5"))?;
+    // writer.write(XmlEvent::end_element())?;
 
     writer.write(XmlEvent::end_element())?;
     Ok(())
