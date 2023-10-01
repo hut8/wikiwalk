@@ -32,6 +32,7 @@ use wikiwalk::{edge_db, schema, Edge, GraphDB, Vertex};
 mod fetch;
 mod page_source;
 mod pagelink_source;
+mod sitemap;
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -820,12 +821,6 @@ impl GraphDBBuilder {
 
         // Position at which we are writing the thing.
         let al_position = al_writer.stream_position().unwrap();
-        // log::debug!(
-        //     "writing vertex {} list with {} edges {}",
-        //     vertex_id,
-        //     edge_ids.len(),
-        //     al_position
-        // );
         al_writer
             .write_all(&(0xCAFECAFE_u32).to_le_bytes())
             .unwrap();
@@ -895,6 +890,8 @@ enum Command {
     Fetch,
     /// Fetch latest dump and import it
     Pull,
+    /// Build Sitemap
+    Sitemap,
 }
 
 async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
@@ -1055,6 +1052,21 @@ async fn main() {
                 process::exit(1);
             }
             fetch::clean_dump_dir(&dump_dir);
+        }
+        Command::Sitemap => {
+            let current_db_paths = Paths::new().db_paths("current");
+            let db_path = current_db_paths.graph_db();
+            let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
+            log::debug!("building sitemap using database: {}", conn_str);
+            let opts = SqliteConnectOptions::new()
+                .synchronous(SqliteSynchronous::Off)
+                .journal_mode(SqliteJournalMode::Memory)
+                .filename(&db_path)
+                .create_if_missing(true);
+            let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+            let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
+            let sitemaps_path = current_db_paths.sitemaps_path();
+            sitemap::make_sitemap(&db, &sitemaps_path).await;
         }
     }
 }
