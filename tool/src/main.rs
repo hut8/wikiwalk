@@ -32,6 +32,8 @@ use wikiwalk::{edge_db, schema, Edge, GraphDB, Vertex};
 mod fetch;
 mod page_source;
 mod pagelink_source;
+mod sitemap;
+mod api;
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -364,8 +366,8 @@ impl GraphDBBuilder {
         let pagelinks_path = dump_paths.pagelinks();
 
         let db_paths = paths.db_paths(&dump_date);
-        let ix_path = db_paths.path_vertex_al_ix();
-        let al_path = db_paths.path_vertex_al();
+        let ix_path = db_paths.vertex_al_ix_path();
+        let al_path = db_paths.vertex_al_path();
 
         GraphDBBuilder {
             page_path,
@@ -382,7 +384,7 @@ impl GraphDBBuilder {
     /// load vertexes from page.sql and put them in a sqlite file
     /// then process edges into memory-mapped flat-file database
     pub async fn build_database(&mut self) -> anyhow::Result<()> {
-        let db_status_path = self.db_paths.path_db_status();
+        let db_status_path = self.db_paths.db_status_path();
         let mut db_status = DBStatus::load(db_status_path.clone());
 
         if !db_status.dump_date_str.is_empty() && db_status.dump_date_str != self.dump_date {
@@ -473,12 +475,6 @@ impl GraphDBBuilder {
         let mut al_writer = BufWriter::new(al_file);
 
         for adjacency_set in edge_iter {
-            // log::debug!(
-            //     "adjacencies for: {}\toutgoing: [{}] incoming: [{}]",
-            //     adjacency_set.vertex_id,
-            //     adjacency_set.adjacency_list.outgoing.iter().join(" "),
-            //     adjacency_set.adjacency_list.incoming.iter().join(" "),
-            // );
             let vertex_al_offset: u64 = self.write_adjacency_set(&adjacency_set, &mut al_writer);
             ix_writer
                 .write_all(&vertex_al_offset.to_le_bytes())
@@ -820,12 +816,6 @@ impl GraphDBBuilder {
 
         // Position at which we are writing the thing.
         let al_position = al_writer.stream_position().unwrap();
-        // log::debug!(
-        //     "writing vertex {} list with {} edges {}",
-        //     vertex_id,
-        //     edge_ids.len(),
-        //     al_position
-        // );
         al_writer
             .write_all(&(0xCAFECAFE_u32).to_le_bytes())
             .unwrap();
@@ -895,6 +885,8 @@ enum Command {
     Fetch,
     /// Fetch latest dump and import it
     Pull,
+    /// Build Sitemap
+    Sitemap,
 }
 
 async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
@@ -984,6 +976,22 @@ async fn run_query(data_dir: &Path, target: String) {
     }
 }
 
+async fn run_sitemap() {
+  let current_db_paths = Paths::new().db_paths("current");
+  let db_path = current_db_paths.graph_db();
+  let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
+  log::debug!("building sitemap using database: {}", conn_str);
+  let opts = SqliteConnectOptions::new()
+      .synchronous(SqliteSynchronous::Off)
+      .journal_mode(SqliteJournalMode::Memory)
+      .filename(&db_path)
+      .create_if_missing(true);
+  let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+  let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
+  let sitemaps_path = current_db_paths.sitemaps_path();
+  sitemap::make_sitemap(&db, &sitemaps_path).await;
+}
+
 #[tokio::main]
 async fn main() {
     stderrlog::new()
@@ -1033,7 +1041,7 @@ async fn main() {
                 }
             };
             let current_path = Paths::new().db_paths("current");
-            let db_status = DBStatus::load(current_path.path_db_status());
+            let db_status = DBStatus::load(current_path.db_status_path());
 
             let db_dump_date = &db_status.dump_date_str;
             let latest_dump_date = &latest_dump.dump_date;
@@ -1046,15 +1054,21 @@ async fn main() {
                 "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
             );
 
-            run_fetch(&dump_dir, Some(latest_dump.clone())).await.expect("fetch dump");
-            log::info!(
-                "fetched data from {latest_dump_date}",
-            );
+            run_fetch(&dump_dir, Some(latest_dump.clone()))
+                .await
+                .expect("fetch dump");
+            log::info!("fetched data from {latest_dump_date}",);
             if let Err(err) = run_build(&data_dir, latest_dump_date).await {
                 log::error!("build failed: {:#?}", err);
                 process::exit(1);
             }
+            log::info!("built database from {latest_dump_date}. cleaning dump directory.");
             fetch::clean_dump_dir(&dump_dir);
+            log::info!("building sitemap");
+            run_sitemap().await;
+        }
+        Command::Sitemap => {
+            run_sitemap().await;
         }
     }
 }

@@ -21,7 +21,7 @@ impl Paths {
         Paths { base: base.to_path_buf() }
     }
 
-    pub fn path_master(&self) -> PathBuf {
+    pub fn path_master_database(&self) -> PathBuf {
         self.base.join("master.db")
     }
 
@@ -101,19 +101,23 @@ impl DBPaths {
         self.base.join(basename)
     }
 
-    pub fn path_db_status(&self) -> PathBuf {
+    pub fn db_status_path(&self) -> PathBuf {
         self.path_for("status.json")
     }
 
-    pub fn path_vertex_al(&self) -> PathBuf {
+    pub fn vertex_al_path(&self) -> PathBuf {
         self.path_for("vertex-al")
     }
 
-    pub fn path_vertex_al_ix(&self) -> PathBuf {
+    pub fn vertex_al_ix_path(&self) -> PathBuf {
         self.path_for("vertex-al-ix")
     }
 
     pub fn graph_db(&self) -> PathBuf {
         self.path_for("graph.db")
+    }
+
+    pub fn sitemaps_path(&self) -> PathBuf {
+        self.path_for("sitemaps")
     }
 }

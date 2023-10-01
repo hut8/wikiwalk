@@ -3,7 +3,8 @@ use std::fs::File;
 use std::time::Instant;
 use std::{io::BufReader, path::PathBuf};
 
-use actix_web::{get, guard, web, App, HttpResponse, HttpServer, Responder};
+use actix_files as fs;
+use actix_web::{get, guard, web, App, HttpResponse, HttpServer, Responder, Error};
 use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 use actix_cors::Cors;
 
@@ -66,6 +67,17 @@ async fn status(db_status: web::Data<DBStatus>) -> actix_web::Result<impl Respon
     Ok(web::Json(DatabaseStatus {
         date: db_status.dump_date(),
     }))
+}
+
+#[get("/sitemaps/{filename}")]
+async fn sitemap(
+    params: web::Path<String>,
+) -> Result<fs::NamedFile,Error> {
+    let filename = params.into_inner();
+    let sitemaps_path = Paths::new().db_paths("current").sitemaps_path();
+    let sitemap_path = sitemaps_path.join(filename);
+    let file = fs::NamedFile::open(sitemap_path)?;
+    Ok(file.use_last_modified(true))
 }
 
 // SPA Route
@@ -187,7 +199,7 @@ async fn main() -> std::io::Result<()> {
     let enable_https = matches!((&cert_path, &key_path), (Some(_), Some(_)));
 
     let db_paths = Paths::new().db_paths("current");
-    let db_status = DBStatus::load(db_paths.path_db_status());
+    let db_status = DBStatus::load(db_paths.db_status_path());
     let db_status_data = web::Data::new(db_status);
 
     let gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
@@ -225,7 +237,8 @@ async fn main() -> std::io::Result<()> {
                     .guard(content_negotiation::accept_html_guard)
                     .to(serve_ui_paths),
             )
-            .service(status);
+            .service(status)
+            .service(sitemap);
         match &well_known_path {
             Some(well_known_path) => {
                 // optionally add .well-known static files path so that lego can do HTTP acme challenge on port 80
