@@ -438,17 +438,17 @@ impl GraphDBBuilder {
 
         log::debug!("building edge map");
 
-        let mut edge_db = self
+        let mut edge_proc_db = self
             .load_edges_dump(self.pagelinks_path.clone(), db, &mut db_status)
             .await;
 
         if !db_status.edges_sorted {
             log::debug!("making edge sort files");
-            edge_db.make_sort_files();
+            edge_proc_db.make_sort_files();
             log::debug!("writing sorted outgoing edges");
-            edge_db.write_sorted_by(EdgeSort::Outgoing);
+            edge_proc_db.write_sorted_by(EdgeSort::Outgoing);
             log::debug!("writing sorted incoming edges");
-            edge_db.write_sorted_by(EdgeSort::Incoming);
+            edge_proc_db.write_sorted_by(EdgeSort::Incoming);
             db_status.edges_sorted = true;
             db_status.save();
         } else {
@@ -462,7 +462,7 @@ impl GraphDBBuilder {
             max_page_id,
         );
 
-        let edge_iter = edge_db.iter(max_page_id);
+        let edge_iter = edge_proc_db.iter(max_page_id);
         let ix_file = match File::create(&self.ix_path) {
             Err(why) => panic!("couldn't create {:?}: {}", &self.ix_path, why),
             Ok(file) => file,
@@ -481,7 +481,7 @@ impl GraphDBBuilder {
                 .unwrap();
         }
 
-        edge_db.destroy();
+        edge_proc_db.destroy();
 
         db_status.build_complete = true;
         db_status.save();
