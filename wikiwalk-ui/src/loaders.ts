@@ -15,9 +15,13 @@ export const loadPaths = ({
   params,
 }: {
   params: PathParams;
-}): PathLoaderData | null => {
+}): PathLoaderData => {
   if (!params.sourceId || !params.targetId) {
-    return null;
+    return {
+      source: Promise.resolve(null),
+      target: Promise.resolve(null),
+      pagePaths: Promise.resolve(null),
+    };
   }
   const sourceId = parseInt(params.sourceId);
   const targetId = parseInt(params.targetId);
