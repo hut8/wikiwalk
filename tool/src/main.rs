@@ -908,7 +908,7 @@ async fn run_fetch(dump_dir: &Path, latest_dump: Option<DumpStatus>) -> anyhow::
             Some(x) => x,
         },
     };
-    fetch::fetch_dump(dump_dir, &latest_dump).await?;
+    fetch::fetch_dump(dump_dir, latest_dump).await?;
     Ok(())
 }
 

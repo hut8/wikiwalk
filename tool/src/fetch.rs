@@ -1,6 +1,6 @@
 use chrono::{NaiveDate, Utc};
 use futures::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
+// use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client,
@@ -53,23 +53,48 @@ pub async fn fetch_dump_status(
     Ok(dump_status)
 }
 
-pub async fn fetch_dump(dump_dir: &Path, status: &DumpStatus) -> Result<(), anyhow::Error> {
+use futures::stream::futures_unordered::FuturesUnordered;
+
+pub async fn fetch_dump(dump_dir: &Path, status: DumpStatus) -> Result<(), anyhow::Error> {
     log::info!("fetching dump for {status:?}");
     let client = Client::default();
-    for job in [
-        &status.jobs.redirect_table,
-        &status.jobs.page_table,
-        &status.jobs.pageprops_table,
-        &status.jobs.pagelinks_table,
-    ]
-    .iter()
-    {
-        fetch_job(dump_dir, &client, job).await?;
+    let jobs = [
+        status.jobs.redirect_table,
+        status.jobs.page_table,
+        status.jobs.pageprops_table,
+        status.jobs.pagelinks_table,
+    ];
+
+    let job_results = jobs
+        .into_iter()
+        .map(|j| fetch_job(dump_dir, &client, j))
+        .collect::<FuturesUnordered<_>>()
+        .collect::<Vec<_>>()
+        .await;
+
+    for job_status in job_results.iter() {
+        match job_status {
+            Ok(job_status) => {
+                log::info!("job complete: {job_status:?}");
+            }
+            Err(err) => {
+                log::error!("job error: {err:?}");
+            }
+        }
     }
+
+    if job_results.iter().any(|f| f.is_err()) {
+        return Err(anyhow::Error::msg("one or more jobs failed"));
+    }
+
     Ok(())
 }
 
-async fn fetch_job(dump_dir: &Path, client: &Client, job: &JobStatus) -> Result<(), anyhow::Error> {
+async fn fetch_job(
+    dump_dir: &Path,
+    client: &Client,
+    job: JobStatus,
+) -> Result<JobStatus, anyhow::Error> {
     std::fs::create_dir_all(dump_dir)?;
     for (file, file_info) in job.files.iter() {
         log::info!("fetching file: {file}");
@@ -79,7 +104,7 @@ async fn fetch_job(dump_dir: &Path, client: &Client, job: &JobStatus) -> Result<
         );
         fetch_file(client, &url, dump_dir, file, file_info).await?;
     }
-    Ok(())
+    Ok(job)
 }
 
 pub fn clean_dump_dir(dump_dir: &Path) {
@@ -109,21 +134,22 @@ pub async fn fetch_file(
     let total_size = file_info.size as u64;
 
     // Indicatif setup
-    let pb = ProgressBar::new(total_size);
-    let style = ProgressStyle::default_bar()
-        .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})").expect("set progress bar style");
-    pb.set_style(style);
-    pb.set_message(basename.clone());
+    // FIXME: Replace with multiple progress bars
+    // let pb = ProgressBar::new(total_size);
+    // let style = ProgressStyle::default_bar()
+    //     .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})").expect("set progress bar style");
+    // pb.set_style(style);
+    // pb.set_message(basename.clone());
 
     // Partial resume support
     let offset = match std::fs::metadata(&sink_path) {
         Ok(metadata) => {
             if metadata.len() == total_size {
-                pb.finish_with_message(format!(
-                    "{} already downloaded to {}",
-                    url,
-                    sink_path.clone().display()
-                ));
+                // pb.finish_with_message(format!(
+                //     "{} already downloaded to {}",
+                //     url,
+                //     sink_path.clone().display()
+                // ));
                 log::info!(
                     "{sink_path} is already complete",
                     sink_path = sink_path.display()
@@ -165,14 +191,15 @@ pub async fn fetch_file(
         file.write_all(&chunk)?;
         let new = min(downloaded + (chunk.len() as u64), total_size);
         downloaded = new;
-        pb.set_position(new);
+        // pb.set_position(new);
     }
 
-    pb.finish_with_message(format!(
-        "fetched {} to {}",
-        url,
-        sink_path.clone().display()
-    ));
+    // pb.finish_with_message(format!(
+    //     "fetched {} to {}",
+    //     url,
+    //     sink_path.clone().display()
+    // ));
+    log::info!("fetched {} to {}", url, sink_path.clone().display());
     Ok(())
 }
 
