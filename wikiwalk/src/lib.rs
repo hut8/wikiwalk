@@ -1,4 +1,10 @@
-use std::{fs::File, hash::Hash, hash::Hasher, path::{PathBuf, Path}, time::Instant};
+use std::{
+    fs::File,
+    hash::Hash,
+    hash::Hasher,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use memmap2::MmapOptions;
 use sea_orm::{
@@ -11,13 +17,15 @@ use sqlx::{
     SqlitePool,
 };
 
+use crate::paths::Paths;
+
 pub mod bfs;
+pub mod dbstatus;
 pub mod dump;
 pub mod edge_db;
+pub mod paths;
 pub mod redirect;
 pub mod schema;
-pub mod paths;
-pub mod dbstatus;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Vertex {
@@ -71,11 +79,9 @@ pub struct GraphDB {
 }
 
 impl GraphDB {
-    pub async fn new(
-        dump_date: String,
-        root_data_dir: &Path,
-    ) -> Result<GraphDB, std::io::Error> {
-        let master_db_path = root_data_dir.join("master.db");
+    pub async fn new(dump_date: String, root_data_dir: &Path) -> Result<GraphDB, std::io::Error> {
+        let paths = Paths::with_base(root_data_dir);
+        let master_db_path = paths.path_master_database();
         let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());
         log::debug!("master db path: {}", master_db_path.to_string_lossy());
         Self::create_master_db(&master_db_path).await;
@@ -83,17 +89,17 @@ impl GraphDB {
             .await
             .expect("master db connect");
 
-        let data_dir = root_data_dir.join(dump_date);
+        let db_paths = paths.db_paths(&dump_date);
 
-        let graph_db_path = data_dir.join("graph.db");
+        let graph_db_path = db_paths.graph_db();
         let graph_db_conn_str = format!("sqlite:///{}?mode=rwc", graph_db_path.to_string_lossy());
         log::debug!("graph db path: {}", graph_db_path.to_string_lossy());
         let graph_db: DbConn = Database::connect(graph_db_conn_str)
             .await
             .expect("graph db connect");
 
-        let path_ix = data_dir.join("vertex-al-ix");
-        let path_al = data_dir.join("vertex-al");
+        let path_ix = db_paths.vertex_al_ix_path();
+        let path_al = db_paths.vertex_al_path();
         let file_ix = File::open(path_ix)?;
         let file_al = File::open(path_al)?;
         let mmap_ix = unsafe { MmapOptions::new().map(&file_ix)? };
