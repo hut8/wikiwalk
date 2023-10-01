@@ -116,4 +116,8 @@ impl DBPaths {
     pub fn graph_db(&self) -> PathBuf {
         self.path_for("graph.db")
     }
+
+    pub fn sitemaps_path(&self) -> PathBuf {
+        self.path_for("sitemaps")
+    }
 }
