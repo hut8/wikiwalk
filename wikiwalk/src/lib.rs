@@ -77,6 +77,7 @@ impl GraphDB {
     ) -> Result<GraphDB, std::io::Error> {
         let master_db_path = root_data_dir.join("master.db");
         let master_conn_str = format!("sqlite:///{}?mode=rwc", master_db_path.to_string_lossy());
+        log::debug!("master db path: {}", master_db_path.to_string_lossy());
         Self::create_master_db(&master_db_path).await;
         let master_db: DbConn = Database::connect(master_conn_str)
             .await
@@ -85,7 +86,8 @@ impl GraphDB {
         let data_dir = root_data_dir.join(dump_date);
 
         let graph_db_path = data_dir.join("graph.db");
-        let graph_db_conn_str = format!("sqlite:///{}?mode=rw", graph_db_path.to_string_lossy());
+        let graph_db_conn_str = format!("sqlite:///{}?mode=rwc", graph_db_path.to_string_lossy());
+        log::debug!("graph db path: {}", graph_db_path.to_string_lossy());
         let graph_db: DbConn = Database::connect(graph_db_conn_str)
             .await
             .expect("graph db connect");
