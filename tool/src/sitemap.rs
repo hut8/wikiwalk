@@ -8,12 +8,10 @@ pub async fn make_sitemap(db: &sea_orm::DatabaseConnection, sitemaps_path: &std:
     let vertexes = Vertex::find()
         .select_only()
         .column(wikiwalk::schema::vertex::Column::Id)
+        .into_tuple()
         .all(db)
         .await
-        .expect("query vertexes")
-        .iter()
-        .map(|v| v.id)
-        .collect::<Vec<_>>();
+        .expect("query vertexes");
     let pairs = generate_pairs(vertexes);
     log::info!("sitemap: generated {} pairs", pairs.len());
     let pair_chunks = pairs.chunks(50_000);
