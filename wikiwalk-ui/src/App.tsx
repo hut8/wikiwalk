@@ -1,25 +1,22 @@
-import AppBar from '@mui/material/AppBar';
-import Box from '@mui/material/Box';
-import Toolbar from '@mui/material/Toolbar';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Container from '@mui/material/Container';
-import MultipleStopIcon from '@mui/icons-material/MultipleStop';
+import AppBar from "@mui/material/AppBar";
+import Box from "@mui/material/Box";
+import Toolbar from "@mui/material/Toolbar";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import Container from "@mui/material/Container";
+import MultipleStopIcon from "@mui/icons-material/MultipleStop";
 
-import {
-  QueryClient,
-  QueryClientProvider,
-} from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { PageInput } from './PageInput';
-import { PageSummary } from './PageSummary';
-import { Suspense, useEffect, useState } from 'react';
-import { Page } from './service';
-import { Await, useLoaderData, useNavigate } from 'react-router-dom';
-import { PathsDisplay } from './PathsDisplay';
-import { PathLoaderData } from './loaders';
+import { PageInput } from "./PageInput";
+import { PageSummary } from "./PageSummary";
+import { Suspense, useEffect, useState } from "react";
+import { Page } from "./service";
+import { Await, useLoaderData, useNavigate } from "react-router-dom";
+import { PathsDisplay } from "./PathsDisplay";
+import { PathLoaderData } from "./loaders";
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient();
 
 export default function App() {
   const [sourcePage, setSourcePage] = useState<Page | null>(null);
@@ -27,10 +24,21 @@ export default function App() {
   const { pagePaths, source, target } = useLoaderData() as PathLoaderData;
   const navigate = useNavigate();
 
+  const setTitle = (sourcePage: Page, targetPage: Page) => {
+    document.title = (() => {
+      if (sourcePage && targetPage) {
+        return `WikiWalk - ${sourcePage.title} ➔ ${targetPage.title}`;
+      }
+      return "WikiWalk.app";
+    })();
+  };
+
   useEffect(() => {
     (async () => {
-      source && setSourcePage(await source);
-      target && setTargetPage(await target);
+      const [s, t] = await Promise.all([source, target]);
+      s && setSourcePage(s);
+      t && setTargetPage(t);
+      (s && t) && setTitle(s, t);
     })();
   }, [source, target]);
 
@@ -42,7 +50,7 @@ export default function App() {
     const targetId = targetPage.id;
     const url = `/paths/${sourceId}/${targetId}`;
     navigate(url);
-  }
+  };
 
   return (
     <>
@@ -56,10 +64,30 @@ export default function App() {
           </Toolbar>
         </AppBar>
         <Container maxWidth={false}>
-          <Box sx={{ my: 4, display: 'flex', flexDirection: 'row', justifyContent: 'space-between', gap: 16 }}>
-            <PageInput label='Source page' page={sourcePage} setPage={setSourcePage} />
-            <PageInput label='Target page' page={targetPage} setPage={setTargetPage} />
-            <Button variant="contained" sx={{ flexShrink: 1 }} onClick={triggerSearch}>
+          <Box
+            sx={{
+              my: 4,
+              display: "flex",
+              flexDirection: "row",
+              justifyContent: "space-between",
+              gap: 16,
+            }}
+          >
+            <PageInput
+              label="Source page"
+              page={sourcePage}
+              setPage={setSourcePage}
+            />
+            <PageInput
+              label="Target page"
+              page={targetPage}
+              setPage={setTargetPage}
+            />
+            <Button
+              variant="contained"
+              sx={{ flexShrink: 1 }}
+              onClick={triggerSearch}
+            >
               Go
             </Button>
           </Box>
@@ -85,14 +113,13 @@ export default function App() {
               resolve={pagePaths}
               children={(paths) => {
                 if (!paths) return null;
-                return <PathsDisplay paths={paths} />
+                return <PathsDisplay paths={paths} />;
               }}
               errorElement={<div>Something went wrong</div>}
             />
           </Suspense>
-
         </Container>
       </QueryClientProvider>
     </>
-  )
+  );
 }
