@@ -1,7 +1,7 @@
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Itertools;
-use sea_orm::{EntityTrait, QuerySelect};
+use sea_orm::{EntityTrait, QueryOrder, QuerySelect};
 use std::io::prelude::*;
 use xml::{writer::XmlEvent, EventWriter};
 
@@ -14,6 +14,7 @@ pub async fn make_sitemap(db: &sea_orm::DatabaseConnection, sitemaps_path: &std:
     let vertexes: Vec<u32> = Vertex::find()
         .select_only()
         .column(wikiwalk::schema::vertex::Column::Id)
+        .order_by(wikiwalk::schema::vertex::Column::Id, sea_orm::Order::Asc)
         .into_tuple()
         .all(db)
         .await
@@ -88,7 +89,7 @@ fn write_chunk(
     directory: &std::path::Path,
     pairs: &[(u32, u32)],
 ) -> Result<(), xml::writer::Error> {
-  // TODO: Ensure that each chunk is at most 50MB uncompressed
+    // TODO: Ensure that each chunk is at most 50MB uncompressed
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
 
     let mut writer = EventWriter::new_with_config(
