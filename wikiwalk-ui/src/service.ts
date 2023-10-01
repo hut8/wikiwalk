@@ -87,7 +87,11 @@ export async function findPaths(
     targetId: number
 ): Promise<PagePaths> {
     const endpoint = new URL(`/paths/${sourceId}/${targetId}`, serviceEndpointBase);
-    const response = await fetch(endpoint);
+    const response = await fetch(endpoint, {
+      headers: {
+        "Accept": "application/json",
+      },
+    });
     if (!response.ok) {
         throw new Error("bad response code from server");
     }
