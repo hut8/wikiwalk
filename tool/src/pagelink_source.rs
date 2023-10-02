@@ -9,6 +9,7 @@ use std::{
 };
 
 use crossbeam::channel::Sender;
+use itertools::Itertools;
 use rayon::prelude::*;
 
 use crate::WPPageLink;
@@ -38,6 +39,7 @@ impl WPPageLinkSource {
         pagelinks_line_iter.par_bridge().for_each(|chunk| {
             let line = chunk.expect("read line");
             if !line.starts_with("INSERT ") {
+                log::debug!("skipping pagelinks line which does not start with INSERT: {}", line);
                 return;
             }
             let lines = vec![line];
@@ -76,7 +78,8 @@ impl WPPageLinkSource {
                     None
                 }
             },
-        );
+        ).collect_vec();
+        log::debug!("sending {} links from chunk of size: {}", links.len(), chunk.len());
         for link in links {
             count.fetch_add(1, Ordering::Relaxed);
             sender.send(link).expect("send wppagelink");
