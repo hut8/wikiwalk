@@ -53,8 +53,6 @@ pub async fn fetch_dump_status(
     Ok(dump_status)
 }
 
-use futures::stream::futures_unordered::FuturesUnordered;
-
 pub async fn fetch_dump(dump_dir: &Path, status: DumpStatus) -> Result<(), anyhow::Error> {
     log::info!("fetching dump for {status:?}");
     let client = Client::default();
@@ -65,12 +63,9 @@ pub async fn fetch_dump(dump_dir: &Path, status: DumpStatus) -> Result<(), anyho
         status.jobs.pagelinks_table,
     ];
 
-    let job_results = jobs
-        .into_iter()
-        .map(|j| fetch_job(dump_dir, &client, j))
-        .collect::<FuturesUnordered<_>>()
-        .collect::<Vec<_>>()
-        .await;
+    let job_futures = jobs.into_iter().map(|j| fetch_job(dump_dir, &client, j));
+    let stream = futures::stream::iter(job_futures).buffer_unordered(3);
+    let job_results = stream.collect::<Vec<_>>().await;
 
     for job_status in job_results.iter() {
         match job_status {
