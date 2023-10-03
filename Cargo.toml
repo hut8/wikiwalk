@@ -4,3 +4,6 @@ resolver = "2"
 
 [profile.release]
 debug = true
+
+[patch.crates-io]
+parse-mediawiki-sql = { git = "https://github.com/hut8/parse-mediawiki-sql", branch="hut8/fix-pagelinks-definition" }

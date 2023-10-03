@@ -86,6 +86,7 @@ fn parse_edges_dump_chunk(chunk: &[u8]) -> Vec<WPPageLink> {
                  from_namespace,
                  namespace,
                  title,
+                 target: _
              }| {
                 if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
                     Some(WPPageLink {

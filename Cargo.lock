@@ -2262,6 +2262,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "parse-mediawiki-sql"
+version = "0.10.0"
+source = "git+https://github.com/hut8/parse-mediawiki-sql?branch=hut8/fix-pagelinks-definition#441b2a8ae0bdf5af44def87352ea79b455f91572"
+dependencies = [
+ "bstr",
+ "chrono",
+ "either",
+ "joinery",
+ "memmap2 0.5.10",
+ "mwtitle",
+ "nom",
+ "ordered-float",
+ "thiserror",
+ "unicase",
+]
+
+[[package]]
 name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3662,7 +3679,7 @@ dependencies = [
  "memmap2 0.8.0",
  "memory-stats",
  "num_cpus",
- "parse-mediawiki-sql",
+ "parse-mediawiki-sql 0.10.0",
  "rayon",
  "reqwest",
  "sea-orm 0.11.3",
@@ -3998,7 +4015,7 @@ dependencies = [
  "log",
  "memmap2 0.8.0",
  "num_cpus",
- "parse-mediawiki-sql",
+ "parse-mediawiki-sql 0.9.0",
  "sea-orm 0.11.3",
  "serde",
  "serde_json",
@@ -4232,7 +4249,3 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "parse-mediawiki-sql"
-version = "0.10.0"
