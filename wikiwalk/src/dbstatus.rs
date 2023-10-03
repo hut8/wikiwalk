@@ -8,6 +8,8 @@ pub struct DBStatus {
     pub edges_resolved: bool,
     pub edges_sorted: bool,
     pub build_complete: bool,
+    pub edge_count: u32,
+    pub vertex_count: u32,
     #[serde(skip)]
     pub status_path: Option<PathBuf>,
 }

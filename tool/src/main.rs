@@ -417,7 +417,7 @@ impl GraphDBBuilder {
 
         if !db_status.vertexes_loaded {
             log::info!("loading page.sql");
-            self.load_vertexes_dump(db.clone()).await;
+            db_status.vertex_count = self.load_vertexes_dump(db.clone()).await;
             self.create_vertex_title_ix(&db).await;
             db_status.vertexes_loaded = true;
             db_status.save();
@@ -704,8 +704,9 @@ impl GraphDBBuilder {
         );
 
         log::debug!("joining pagelink count thread");
-        let pagelink_count = pagelink_thread.join().unwrap();
-        log::debug!("pagelink count = {}", pagelink_count);
+        let edge_count = pagelink_thread.join().unwrap();
+        log::debug!("pagelink count = {}", edge_count);
+        db_status.edge_count = edge_count;
 
         log::debug!("flushing edge database");
         edge_db.flush();
@@ -717,7 +718,7 @@ impl GraphDBBuilder {
     }
 
     // load vertexes from the pages.sql dump
-    async fn load_vertexes_dump(&mut self, db: DbConn) {
+    async fn load_vertexes_dump(&mut self, db: DbConn) -> u32 {
         let stmt = Table::drop()
             .table(schema::vertex::Entity.table_ref())
             .to_owned();
@@ -768,6 +769,7 @@ impl GraphDBBuilder {
         log::debug!("commited vertex sqlite inserts");
         let page_count = page_thread.join().expect("join page thread");
         log::debug!("page count: {}", page_count);
+        page_count
     }
 
     pub async fn create_vertex_title_ix(&self, db: &DbConn) {
