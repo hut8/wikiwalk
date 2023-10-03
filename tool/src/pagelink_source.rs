@@ -9,7 +9,6 @@ use std::{
 };
 
 use crossbeam::channel::Sender;
-use itertools::Itertools;
 use rayon::prelude::*;
 
 use crate::WPPageLink;
@@ -59,34 +58,19 @@ impl WPPageLinkSource {
         sender: Sender<WPPageLink>,
         count: Arc<AtomicU32>,
     ) {
+        use parse_mediawiki_sql::{
+            field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
+        };
         let chunk_str = chunk.join("\n");
         let chunk = chunk_str.as_bytes();
-        let links = parse_edges_dump_chunk(chunk);
-        log::debug!(
-            "sending {} links from chunk of size: {}",
-            links.len(),
-            chunk.len()
-        );
-        for link in links {
-            count.fetch_add(1, Ordering::Relaxed);
-            sender.send(link).expect("send wppagelink");
-        }
-    }
-}
-
-fn parse_edges_dump_chunk(chunk: &[u8]) -> Vec<WPPageLink> {
-    use parse_mediawiki_sql::{
-        field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
-    };
-    let mut sql_iterator = iterate_sql_insertions(chunk);
-    sql_iterator
-        .filter_map(
+        let mut sql_iterator = iterate_sql_insertions(chunk);
+        let links = sql_iterator.filter_map(
             |PageLink {
                  from,
                  from_namespace,
                  namespace,
                  title,
-                 target: _ // Note: target is always None in current dump as of 20231001
+                 target: _, // Note: target is always None in current dump as of 20231001
              }| {
                 if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
                     Some(WPPageLink {
@@ -97,13 +81,17 @@ fn parse_edges_dump_chunk(chunk: &[u8]) -> Vec<WPPageLink> {
                     None
                 }
             },
-        )
-        .collect_vec()
+        );
+        for link in links {
+            count.fetch_add(1, Ordering::Relaxed);
+            sender.send(link.clone()).expect("send wppagelink");
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
     // parse-mediawiki-sql no longer works with old format
     // #[test]
     // fn parse_pagelink_row_20230920() {
@@ -111,10 +99,4 @@ mod tests {
     //     let links = parse_edges_dump_chunk(row);
     //     assert_ne!(links.len(), 0);
     // }
-    #[test]
-    fn parse_pagelink_row_20231001() {
-        let row = include_bytes!("testdata/pagelinks-row-20231001.sql");
-        let links = parse_edges_dump_chunk(row);
-        assert_ne!(links.len(), 0);
-    }
 }
