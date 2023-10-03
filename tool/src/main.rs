@@ -151,13 +151,13 @@ impl EdgeProcDB {
 
     #[cfg(unix)]
     fn configure_mmap(mmap: &Mmap) {
-        mmap.advise(memmap2::Advice::Sequential)
+        mmap.advise(memmap2::Advice::sequential())
             .expect("set madvice sequential");
     }
 
     #[cfg(unix)]
     fn configure_mmap_mut(mmap: &MmapMut) {
-        mmap.advise(memmap2::Advice::Sequential)
+        mmap.advise(memmap2::Advice::sequential())
             .expect("set madvice sequential");
     }
 
