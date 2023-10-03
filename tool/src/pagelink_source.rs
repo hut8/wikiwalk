@@ -39,7 +39,10 @@ impl WPPageLinkSource {
         pagelinks_line_iter.par_bridge().for_each(|chunk| {
             let line = chunk.expect("read line");
             if !line.starts_with("INSERT ") {
-                log::debug!("skipping pagelinks line which does not start with INSERT: {}", line);
+                log::debug!(
+                    "skipping pagelinks line which does not start with INSERT: {}",
+                    line
+                );
                 return;
             }
             let lines = vec![line];
@@ -62,27 +65,67 @@ impl WPPageLinkSource {
         let chunk_str = chunk.join("\n");
         let chunk = chunk_str.as_bytes();
         let mut sql_iterator = iterate_sql_insertions(chunk);
-        let links = sql_iterator.filter_map(
-            |PageLink {
-                 from,
-                 from_namespace,
-                 namespace,
-                 title,
-             }| {
-                if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
-                    Some(WPPageLink {
-                        source_page_id: from.0,
-                        dest_page_title: title.0.replace('_', " "),
-                    })
-                } else {
-                    None
-                }
-            },
-        ).collect_vec();
-        log::debug!("sending {} links from chunk of size: {}", links.len(), chunk.len());
+        let links = sql_iterator
+            .filter_map(
+                |PageLink {
+                     from,
+                     from_namespace,
+                     namespace,
+                     title,
+                 }| {
+                    if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
+                        Some(WPPageLink {
+                            source_page_id: from.0,
+                            dest_page_title: title.0.replace('_', " "),
+                        })
+                    } else {
+                        None
+                    }
+                },
+            )
+            .collect_vec();
+        log::debug!(
+            "sending {} links from chunk of size: {}",
+            links.len(),
+            chunk.len()
+        );
         for link in links {
             count.fetch_add(1, Ordering::Relaxed);
             sender.send(link).expect("send wppagelink");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use itertools::Itertools;
+
+    #[test]
+    fn parse_pagelink_row() {
+        use parse_mediawiki_sql::schemas::PageLink;
+        let row = "INSERT INTO `pagelinks` VALUES (1,0,0,'Main_Page'),(2,0,0,'Wikipedia')";
+        let row = row.as_bytes();
+        let mut sql_iterator = parse_mediawiki_sql::iterate_sql_insertions(row);
+        let links = sql_iterator
+            .filter_map(
+                |PageLink {
+                     from,
+                     from_namespace,
+                     namespace,
+                     title,
+                 }| {
+                    if from_namespace == parse_mediawiki_sql::field_types::PageNamespace(0)
+                        && namespace == parse_mediawiki_sql::field_types::PageNamespace(0)
+                    {
+                        Some((from.0, title.0))
+                    } else {
+                        None
+                    }
+                },
+            )
+            .collect_vec();
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0], (1, "Main_Page".to_string()));
+        assert_eq!(links[1], (2, "Wikipedia".to_string()));
     }
 }
