@@ -86,7 +86,7 @@ fn parse_edges_dump_chunk(chunk: &[u8]) -> Vec<WPPageLink> {
                  from_namespace,
                  namespace,
                  title,
-                 target: _
+                 target: _ // Note: target is always None in current dump as of 20231001
              }| {
                 if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
                     Some(WPPageLink {
@@ -104,12 +104,13 @@ fn parse_edges_dump_chunk(chunk: &[u8]) -> Vec<WPPageLink> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn parse_pagelink_row_20230920() {
-        let row = include_bytes!("testdata/pagelinks-row-20230920.sql");
-        let links = parse_edges_dump_chunk(row);
-        assert_ne!(links.len(), 0);
-    }
+    // parse-mediawiki-sql no longer works with old format
+    // #[test]
+    // fn parse_pagelink_row_20230920() {
+    //     let row = include_bytes!("testdata/pagelinks-row-20230920.sql");
+    //     let links = parse_edges_dump_chunk(row);
+    //     assert_ne!(links.len(), 0);
+    // }
     #[test]
     fn parse_pagelink_row_20231001() {
         let row = include_bytes!("testdata/pagelinks-row-20231001.sql");
