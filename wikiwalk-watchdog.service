@@ -7,6 +7,8 @@ ExecStart=/usr/local/bin/wikiwalk-watchdog
 Environment=DATA_PATH=/var/wikiwalk/data
 Restart=on-failure
 RestartSec=5m
+User=wikiwalk
+Group=wikiwalk
 
 [Install]
 WantedBy=multi-user.target
