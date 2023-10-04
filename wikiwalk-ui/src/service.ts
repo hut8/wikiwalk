@@ -1,3 +1,5 @@
+import { loadPages, storePage } from "./storage";
+
 export type Page = {
   title: string;
   id: number;
@@ -172,10 +174,14 @@ function transformPage(page: WPPage): Page {
 async function fetchPathPageData(data: PathData): Promise<PagePaths> {
     const pageIdPaths: number[][] = data.paths;
     const pageIdSet = new Set(pageIdPaths.flatMap((x) => x));
-    const pageIds = Array.from(pageIdSet.values());
+
+    const pageLoadResult = loadPages(pageIdSet);
+    console.log("page load result:", pageLoadResult);
+
+    const fetchPageIds = pageLoadResult.missing;
     let pageData = {} as Record<string, WPPage>;
-    console.log("running page info query for ids:", pageIds);
-    const batches = batchArray(pageIds, CHUNK_SIZE);
+    console.log("running page info query for ids:", fetchPageIds);
+    const batches = batchArray(fetchPageIds, CHUNK_SIZE);
     for (const batch of Array.from(batches)) {
         const pageDataChunk = await fetchPageDataChunk(batch);
         console.log("page data chunk:", pageDataChunk);
@@ -191,7 +197,14 @@ async function fetchPathPageData(data: PathData): Promise<PagePaths> {
     };
 
     for (const pageIdPath of pageIdPaths) {
-        const pages = pageIdPath.map((pageId) => transformPage(pageData[pageId]));
+        const pages = pageIdPath.map((pageId) => {
+          if (pageId in pageLoadResult.pageMap) {
+            return pageLoadResult.pageMap[pageId];
+          }
+          const p = transformPage(pageData[pageId]);
+          storePage(p);
+          return p;
+        });
         pagePaths.paths.push(pages);
     }
 
