@@ -11,7 +11,7 @@ import { Page, PagePaths } from "./service";
 
 function PagePathDisplay({ page }: { page: Page }) {
   return (
-    <ListItem alignItems="flex-start" key={page.id}>
+    <ListItem alignItems="flex-start">
       <ListItemAvatar>
         {page.iconUrl && <Avatar src={page.iconUrl} sx={{ borderRadius: 0 }} />}
       </ListItemAvatar>
