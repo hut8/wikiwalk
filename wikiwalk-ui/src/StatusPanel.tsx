@@ -1,27 +1,39 @@
-import { Box, Link, Typography } from "@mui/material";
+import { Box, Link, Paper, Typography } from "@mui/material";
 import { DBStatus } from "./service";
 import { Warning } from "@mui/icons-material";
 
-export function StatusPanel({dbStatus} : {dbStatus: DBStatus}) {
+export function StatusPanel({ dbStatus }: { dbStatus: DBStatus }) {
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-      <Typography variant="h4">WikiWalk</Typography>
+    <Paper elevation={8} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh', flexDirection: 'column' }}>
+      <Box>
+        <Typography variant="h4">WikiWalk</Typography>
+      </Box>
+      <Box>
+        <Typography variant="h6">Find the shortest paths between two Wikipedia pages</Typography>
+      </Box>
 
-      {dbStatus.dumpDate && (
+      {dbStatus.date && (
         <>
-          <Typography variant="h6">Searching {dbStatus.edgeCount} connections between {dbStatus.vertexCount} pages</Typography>
-          <Typography variant="caption">
-            Data current as of: {dbStatus.dumpDate} (updated from <Link href="https://dumps.wikimedia.org/backup-index.html">Wikipedia dumps</Link>)
-          </Typography>
+          <Box>
+            <Typography variant="h6">Searching {dbStatus.edgeCount.toLocaleString()} connections between {dbStatus.vertexCount.toLocaleString()} pages</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption">
+              Data current as of: {dbStatus.date} (updated from <Link href="https://dumps.wikimedia.org/backup-index.html">Wikipedia dumps</Link>)
+            </Typography>
+          </Box>
         </>)
       }
 
-      {!dbStatus.dumpDate && (
+      {!dbStatus.date && (
         <>
-          <Warning sx={{ fontSize: 48 }} /> Dump from <Link href="https://dumps.wikimedia.org/backup-index.html">Wikipedia dumps</Link> not found
+          <Box>
+            <Warning sx={{ fontSize: 48 }} />
+            <p>Dump from {' '}<Link href="https://dumps.wikimedia.org/backup-index.html">Wikipedia dumps</Link>{' '}not found</p>
+          </Box>
         </>
       )}
 
-    </Box>
+    </Paper>
   )
 }

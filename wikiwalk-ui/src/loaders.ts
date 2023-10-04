@@ -1,4 +1,4 @@
-import { Page, PagePaths, fetchPageData, findPaths } from "./service";
+import { DBStatus, Page, PagePaths, fetchDatabaseStatus, fetchPageData, findPaths } from "./service";
 
 type PathParams = {
   sourceId?: string;
@@ -9,6 +9,7 @@ export type PathLoaderData = {
   source: Promise<Page|null>;
   target: Promise<Page|null>;
   pagePaths: Promise<PagePaths|null>;
+  dbStatus: Promise<DBStatus>;
 };
 
 export const loadPaths = ({
@@ -16,11 +17,13 @@ export const loadPaths = ({
 }: {
   params: PathParams;
 }): PathLoaderData => {
+  const dbStatus = fetchDatabaseStatus();
   if (!params.sourceId || !params.targetId) {
     return {
       source: Promise.resolve(null),
       target: Promise.resolve(null),
       pagePaths: Promise.resolve(null),
+      dbStatus,
     };
   }
   const sourceId = parseInt(params.sourceId);
@@ -29,9 +32,11 @@ export const loadPaths = ({
   const pagePaths = findPaths(sourceId, targetId);
   const source = fetchPageData(sourceId);
   const target = fetchPageData(targetId);
+
   return {
     source,
     target,
     pagePaths,
+    dbStatus,
   };
 };

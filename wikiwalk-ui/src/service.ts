@@ -43,6 +43,12 @@ export interface WPPage {
     pageprops: Record<string, string>;
 }
 
+export type DBStatus = {
+  vertexCount: number;
+  edgeCount: number;
+  date: string;
+}
+
 export async function runSearch(term: string): Promise<Page[]> {
     const wikiParams = new URLSearchParams();
     wikiParams.set("action", "query");
@@ -190,4 +196,18 @@ async function fetchPathPageData(data: PathData): Promise<PagePaths> {
     }
 
     return pagePaths;
+}
+
+export async function fetchDatabaseStatus(): Promise<DBStatus> {
+    const endpoint = new URL("/status", serviceEndpointBase);
+    const response = await fetch(endpoint, {
+      headers: {
+        "Accept": "application/json",
+      },
+    });
+    if (!response.ok) {
+        throw new Error("bad response code from server");
+    }
+    const data = await response.json() as DBStatus;
+    return data;
 }

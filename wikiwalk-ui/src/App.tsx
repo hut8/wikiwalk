@@ -15,13 +15,15 @@ import { Page } from "./service";
 import { Await, useLoaderData, useNavigate } from "react-router-dom";
 import { PathsDisplay } from "./PathsDisplay";
 import { PathLoaderData } from "./loaders";
+import { Activity } from "./Activity";
+import { StatusPanel } from "./StatusPanel";
 
 const queryClient = new QueryClient();
 
 export default function App() {
   const [sourcePage, setSourcePage] = useState<Page | null>(null);
   const [targetPage, setTargetPage] = useState<Page | null>(null);
-  const { pagePaths, source, target } = useLoaderData() as PathLoaderData;
+  const { pagePaths, source, target, dbStatus } = useLoaderData() as PathLoaderData;
   const navigate = useNavigate();
 
   const setTitle = (sourcePage: Page, targetPage: Page) => {
@@ -60,7 +62,6 @@ export default function App() {
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
               WikiWalk.app
             </Typography>
-            <Button color="inherit">Stats</Button>
           </Toolbar>
         </AppBar>
         <Container maxWidth={false}>
@@ -108,7 +109,11 @@ export default function App() {
             </Box>
           </Box>
 
-          <Suspense fallback={<div>Loading...</div>}>
+          {!(sourcePage || targetPage) &&
+            <Await resolve={dbStatus} children={(status) => <StatusPanel dbStatus={status} />} />
+          }
+
+          <Suspense fallback={<Activity />}>
             <Await
               resolve={pagePaths}
               children={(paths) => {
