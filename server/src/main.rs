@@ -35,8 +35,11 @@ struct PathData {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DatabaseStatus {
     date: Option<NaiveDate>,
+    vertex_count: u32,
+    edge_count: u32,
 }
 
 async fn fetch_cache(source_id: u32, dest_id: u32, gdb: &GraphDB) -> Option<Vec<Vec<u32>>> {
@@ -66,6 +69,8 @@ struct PathParams {
 async fn status(db_status: web::Data<DBStatus>) -> actix_web::Result<impl Responder> {
     Ok(web::Json(DatabaseStatus {
         date: db_status.dump_date(),
+        edge_count: db_status.edge_count,
+        vertex_count: db_status.vertex_count,
     }))
 }
 
