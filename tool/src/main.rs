@@ -29,11 +29,11 @@ use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::RedirectMap;
 use wikiwalk::{edge_db, schema, Edge, GraphDB, Vertex};
 
+mod api;
 mod fetch;
 mod page_source;
 mod pagelink_source;
 mod sitemap;
-mod api;
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -883,6 +883,12 @@ enum Command {
         /// Article to query
         target: String,
     },
+    /// Find latest dump
+    FindLatest {
+        /// Only display URLs
+        #[clap(long)]
+        urls: bool,
+    },
     /// Fetch latest dumps
     Fetch,
     /// Fetch latest dump and import it
@@ -979,19 +985,43 @@ async fn run_query(data_dir: &Path, target: String) {
 }
 
 async fn run_sitemap() {
-  let current_db_paths = Paths::new().db_paths("current");
-  let db_path = current_db_paths.graph_db();
-  let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
-  log::debug!("building sitemap using database: {}", conn_str);
-  let opts = SqliteConnectOptions::new()
-      .synchronous(SqliteSynchronous::Off)
-      .journal_mode(SqliteJournalMode::Memory)
-      .filename(&db_path)
-      .create_if_missing(true);
-  let pool = SqlitePool::connect_with(opts).await.expect("db connect");
-  let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
-  let sitemaps_path = current_db_paths.sitemaps_path();
-  sitemap::make_sitemap(&db, &sitemaps_path).await;
+    let current_db_paths = Paths::new().db_paths("current");
+    let db_path = current_db_paths.graph_db();
+    let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
+    log::debug!("building sitemap using database: {}", conn_str);
+    let opts = SqliteConnectOptions::new()
+        .synchronous(SqliteSynchronous::Off)
+        .journal_mode(SqliteJournalMode::Memory)
+        .filename(&db_path)
+        .create_if_missing(true);
+    let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+    let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
+    let sitemaps_path = current_db_paths.sitemaps_path();
+    sitemap::make_sitemap(&db, &sitemaps_path).await;
+}
+
+async fn run_find_latest(urls: bool) {
+    let latest_dump = fetch::find_latest().await;
+    match latest_dump {
+        None => {
+            log::error!("found no recent dumps");
+            process::exit(1);
+        }
+        Some(status) => {
+            if urls {
+                status.jobs.all().into_iter().for_each(|job| {
+                    job.files.iter().for_each(|(_file, info)| {
+                        println!("{}", fetch::absolute_dump_url(&info.url));
+                    });
+                });
+                return;
+            }
+            println!(
+                "{}",
+                serde_json::to_value(status).expect("serialize dump status")
+            );
+        }
+    }
 }
 
 #[tokio::main]
@@ -1031,6 +1061,9 @@ async fn main() {
         }
         Command::Fetch => {
             run_fetch(&dump_dir, None).await.expect("fetch failed");
+        }
+        Command::FindLatest { urls } => {
+            run_find_latest(urls).await;
         }
         Command::Pull => {
             let latest_dump = {

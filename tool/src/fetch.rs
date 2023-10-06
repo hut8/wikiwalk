@@ -85,6 +85,10 @@ pub async fn fetch_dump(dump_dir: &Path, status: DumpStatus) -> Result<(), anyho
     Ok(())
 }
 
+pub fn absolute_dump_url(rel_url: &str) -> String {
+    format!("https://dumps.wikimedia.org{rel_url}")
+}
+
 async fn fetch_job(
     dump_dir: &Path,
     client: &Client,
@@ -93,11 +97,14 @@ async fn fetch_job(
     std::fs::create_dir_all(dump_dir)?;
     for (file, file_info) in job.files.iter() {
         log::info!("fetching file: {file}");
-        let url = format!(
-            "https://dumps.wikimedia.org{rel_url}",
-            rel_url = file_info.url
-        );
-        fetch_file(client, &url, dump_dir, file, file_info).await?;
+        fetch_file(
+            client,
+            &absolute_dump_url(&file_info.url),
+            dump_dir,
+            file,
+            file_info,
+        )
+        .await?;
     }
     Ok(job)
 }
@@ -206,7 +213,7 @@ pub async fn fetch_file(
 pub struct DumpStatus {
     pub jobs: Jobs,
     pub version: String,
-    #[serde(skip)]
+    #[serde(skip_deserializing)]
     pub dump_date: String,
 }
 
@@ -224,14 +231,16 @@ pub struct Jobs {
 
 impl Jobs {
     pub fn done(&self) -> bool {
-        [
+        self.all().iter().all(|job| job.done())
+    }
+
+    pub fn all(&self) -> Vec<&JobStatus> {
+        vec![
             &self.redirect_table,
             &self.page_table,
             &self.pageprops_table,
             &self.pagelinks_table,
         ]
-        .iter()
-        .all(|job| job.done())
     }
 }
 
