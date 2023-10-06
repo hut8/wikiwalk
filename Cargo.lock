@@ -3147,6 +3147,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sentry-actix"
+version = "0.31.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "856a0131ca91c402aba7ce3b4f199b4fabc0b2d2b7fe0e8fdeac2a131ae75126"
+dependencies = [
+ "actix-web",
+ "futures-util",
+ "sentry-core",
+]
+
+[[package]]
 name = "sentry-backtrace"
 version = "0.31.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3319,6 +3330,7 @@ dependencies = [
  "rustls-pemfile",
  "sea-orm 0.11.3",
  "sentry",
+ "sentry-actix",
  "serde",
  "serde_json",
  "static-files",
