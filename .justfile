@@ -25,9 +25,11 @@ fix:
     cargo clippy --workspace --all-targets --fix
 
 # Build for release
-build-release:
-  rm -f target/release/server target/release/tool
-  cargo build --release --bin server
+build-release: build-release-server build-release-tool
+
+build-release-server:
+    rm -f target/release/server
+    cargo build --release --bin server
 
 build-release-tool:
     rm -f target/release/tool
@@ -53,7 +55,7 @@ provision-server:
   sudo apt-get install -y pkg-config libssl-dev
 
 # Deploy web server (must be run on server)
-deploy-web: build-release
+deploy-web: build-release-server
   sudo mkdir -p /var/wikiwalk/ /var/wikiwalk/data /var/wikiwalk/webroot/.well-known
   sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
   sudo rm -f /usr/local/bin/wikiwalk
