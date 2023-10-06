@@ -1,0 +1,22 @@
+#!/bin/bash
+# * Download the latest Wikipedia dump files
+# * Push into GCS
+hash rclone 2>/dev/null || {
+  echo >&2 "I require rclone but it's not installed.  Aborting."
+  exit 1
+}
+
+tool="target/debug/tool"
+
+dump_source_host="https://dumps.wikimedia.org/"
+
+while read -r line
+do
+  name="$(basename "$line")"
+  rclone copy \
+    --multi-thread-streams 3 \
+    --size-only \
+    --http-url "$dump_source_host" \
+    --log-level INFO \
+    ":http:$line" "gcs:wikiwalk/$name"
+done < <("$tool" find-latest --urls --relative)
