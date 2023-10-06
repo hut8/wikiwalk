@@ -1,0 +1,5 @@
+wikiwalk-ui/node_modules
+wikiwalk-ui/dist
+.idea
+.vscode
+target

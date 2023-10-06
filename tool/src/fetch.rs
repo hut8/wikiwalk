@@ -182,7 +182,10 @@ pub async fn fetch_file(
     let mut stream = res.bytes_stream();
 
     while let Some(chunk_state) = stream.next().await {
-        let chunk = chunk_state?;
+        let chunk = chunk_state.map_err(|err| {
+            log::error!("chunk error for url {url} at byte {downloaded} of {total_size}: {err}");
+            err
+        })?;
         file.write_all(&chunk)?;
         let new = min(downloaded + (chunk.len() as u64), total_size);
         downloaded = new;

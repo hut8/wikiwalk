@@ -1,5 +1,7 @@
 use memmap2::Mmap;
 
+use crate::errors::WikiwalkError;
+
 pub struct EdgeDB {
     vertex_al: Mmap,
     vertex_al_ix: Mmap,
@@ -23,31 +25,41 @@ impl EdgeDB {
         AdjacencyList::read(&self.vertex_al[offset..])
     }
 
-    pub fn check_db(&mut self) {
+    pub fn check_db(&mut self) -> Result<(), WikiwalkError> {
         println!("checking index file");
-        self.check_sizes();
-        self.check_ix();
+        self.check_sizes()?;
+        self.check_ix()?;
         println!("done");
+        Ok(())
     }
 
-    pub fn check_sizes(&mut self) {
-      let al_size = self.vertex_al.len();
-      let al_ix_size = self.vertex_al_ix.len();
-      if al_size == 0 {
-          panic!("check_sizes: vertex_al size is 0");
-      }
-      if al_ix_size == 0 {
-          panic!("check_sizes: vertex_al_ix size is 0");
-      }
-      if al_size % 4 != 0 {
-          panic!("check_sizes: vertex_al size is not a multiple of 4");
-      }
-      if al_ix_size % 8 != 0 {
-          panic!("check_sizes: vertex_al_ix size is not a multiple of 8");
-      }
+    pub fn check_sizes(&self) -> Result<(), WikiwalkError> {
+        let al_size = self.vertex_al.len();
+        let al_ix_size = self.vertex_al_ix.len();
+        if al_size == 0 {
+            return Err(WikiwalkError::DatabaseError(
+                "check_sizes: vertex_al size is 0".to_owned(),
+            ));
+        }
+        if al_ix_size == 0 {
+            return Err(WikiwalkError::DatabaseError(
+                "check_sizes: vertex_al_ix size is 0".to_owned(),
+            ));
+        }
+        if al_size % 4 != 0 {
+            return Err(WikiwalkError::DatabaseError(
+                "check_sizes: vertex_al size is not a multiple of 4".to_owned(),
+            ));
+        }
+        if al_ix_size % 8 != 0 {
+            return Err(WikiwalkError::DatabaseError(
+                "check_sizes: vertex_al_ix size is not a multiple of 8".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
-    fn check_ix(&mut self) {
+    fn check_ix(&mut self) -> Result<(), WikiwalkError> {
         // read index file and ensure that all 64-bit entries
         // point to within range
         let max_sz: u64 = (self.vertex_al.len() - 4) as u64;
@@ -60,10 +72,11 @@ impl EdgeDB {
                 let msg = format!(
                   "check_ix: at index file: {position}, got pointer to {value} in AL file (maximum: {max_sz})"
               );
-                panic!("{}", msg);
+                return Err(WikiwalkError::DatabaseError(msg));
             }
             position += 8;
         }
+        Ok(())
     }
 }
 
