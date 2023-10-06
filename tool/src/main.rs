@@ -888,6 +888,9 @@ enum Command {
         /// Only display URLs
         #[clap(long)]
         urls: bool,
+        /// Use URLs relative to the host root
+        #[clap(long)]
+        relative: bool,
     },
     /// Fetch latest dumps
     Fetch,
@@ -1000,7 +1003,7 @@ async fn run_sitemap() {
     sitemap::make_sitemap(&db, &sitemaps_path).await;
 }
 
-async fn run_find_latest(urls: bool) {
+async fn run_find_latest(urls: bool, relative: bool) {
     let latest_dump = fetch::find_latest().await;
     match latest_dump {
         None => {
@@ -1011,7 +1014,12 @@ async fn run_find_latest(urls: bool) {
             if urls {
                 status.jobs.all().into_iter().for_each(|job| {
                     job.files.iter().for_each(|(_file, info)| {
-                        println!("{}", fetch::absolute_dump_url(&info.url));
+                        let u = if relative {
+                            info.url.clone()
+                        } else {
+                            fetch::absolute_dump_url(&info.url)
+                        };
+                        println!("{}", u);
                     });
                 });
                 return;
@@ -1062,8 +1070,8 @@ async fn main() {
         Command::Fetch => {
             run_fetch(&dump_dir, None).await.expect("fetch failed");
         }
-        Command::FindLatest { urls } => {
-            run_find_latest(urls).await;
+        Command::FindLatest { urls, relative } => {
+            run_find_latest(urls, relative).await;
         }
         Command::Pull => {
             let latest_dump = {
