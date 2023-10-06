@@ -6,7 +6,7 @@ hash rclone 2>/dev/null || {
   exit 1
 }
 
-tool="${TOOL_PATH:-target/debug/tool}"
+tool="${TOOL_PATH:-wikiwalk-tool}"
 dump_source_host="https://dumps.wikimedia.org/"
 
 env
