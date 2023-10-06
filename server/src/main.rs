@@ -3,10 +3,10 @@ use std::fs::File;
 use std::time::Instant;
 use std::{io::BufReader, path::PathBuf};
 
-use actix_files as fs;
-use actix_web::{get, guard, web, App, HttpResponse, HttpServer, Responder, Error};
-use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 use actix_cors::Cors;
+use actix_files as fs;
+use actix_web::{get, guard, web, App, Error, HttpResponse, HttpServer, Responder};
+use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 
 use fern::colors::{Color, ColoredLevelConfig};
 
@@ -75,9 +75,7 @@ async fn status(db_status: web::Data<DBStatus>) -> actix_web::Result<impl Respon
 }
 
 #[get("/sitemaps/{filename}")]
-async fn sitemap(
-    params: web::Path<String>,
-) -> Result<fs::NamedFile,Error> {
+async fn sitemap(params: web::Path<String>) -> Result<fs::NamedFile, Error> {
     let filename = params.into_inner();
     let sitemaps_path = Paths::new().db_paths("current").sitemaps_path();
     let sitemap_path = sitemaps_path.join(filename);
@@ -106,9 +104,7 @@ async fn serve_ui_paths(
         // TODO: Make a real 404 page
         return Ok(HttpResponse::NotFound().body("404 Source or destination page not found"));
     }
-    let content = statics
-        .get("index.html")
-        .expect("index.html resource");
+    let content = statics.get("index.html").expect("index.html resource");
     Ok(HttpResponse::Ok().body(content.data))
 }
 
@@ -208,6 +204,11 @@ async fn main() -> std::io::Result<()> {
     let db_status_data = web::Data::new(db_status);
 
     let gdb = GraphDB::new("current".into(), &data_dir).await.unwrap();
+    // Sanity check database quickly
+    if let Err(err) = gdb.edge_db.check_sizes() {
+        log::error!("database sanity check failed: {:?}", err);
+        std::process::exit(1);
+    }
     let gdb_data = web::Data::new(gdb);
 
     let mut server = HttpServer::new(move || {
