@@ -5,6 +5,7 @@ use std::{io::BufReader, path::PathBuf};
 
 use actix_cors::Cors;
 use actix_files as fs;
+use actix_web::middleware::Logger;
 use actix_web::{get, guard, web, App, Error, HttpResponse, HttpServer, Responder};
 use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 
@@ -148,9 +149,35 @@ async fn serve_paths(
     }))
 }
 
+#[derive(Debug)]
+enum Environment {
+    Development,
+    Production,
+}
+
+impl Environment {
+    fn current() -> Environment {
+        match std::env::var("WIKIWALK_ENV").as_deref() {
+            Ok("production") => Environment::Production,
+            _ => Environment::Development,
+        }
+    }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    use actix_web::middleware::Logger;
+    let sentry_dsn = match Environment::current() {
+      Environment::Development => "",
+      Environment::Production => "https://2377de2b8f109351d1d4d349e0f152e0@o4506004333199360.ingest.sentry.io/4506004334510080",
+    };
+    let _guard = sentry::init((
+        sentry_dsn,
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
+    ));
+
     let colors_line = ColoredLevelConfig::new()
         .error(Color::Red)
         .warn(Color::Yellow)
@@ -221,6 +248,7 @@ async fn main() -> std::io::Result<()> {
             .allow_any_header()
             .max_age(3600);
         let app = App::new()
+            .wrap(sentry_actix::Sentry::new())
             .wrap(Logger::default())
             .wrap(cors)
             .wrap(actix_web::middleware::Condition::new(
