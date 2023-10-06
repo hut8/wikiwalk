@@ -1,0 +1,10 @@
+steps:
+  # Docker Build
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/supervillains/github.com/hut8/wikiwalk:$COMMIT_SHA', '.']
+  # Docker Push
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/supervillains/github.com/hut8/wikiwalk:$COMMIT_SHA']
+timeout: 10800s
+options:
+  machineType: 'N1_HIGHCPU_8'
