@@ -194,6 +194,7 @@ async fn main() -> std::io::Result<()> {
     let port = std::env::var("PORT").unwrap_or_else(|_| "8000".to_string());
     let port = port.parse::<u16>().expect("parse port");
     let bind_addr = std::env::var("ADDRESS").unwrap_or_else(|_| "localhost".to_string());
+    log::info!("binding to {}:{}", bind_addr, port);
     let cert_path = std::env::var("TLS_CERT").ok();
     let key_path = std::env::var("TLS_KEY").ok();
     let well_known_path = std::env::var("WELL_KNOWN_ROOT").ok();
