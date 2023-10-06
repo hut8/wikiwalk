@@ -7,9 +7,9 @@ steps:
     args: ['push', 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA']
   # Put data in GCS buckets
   - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
-    cmd: ['./wiki-dump-rc']
+    entrypoint: ./wiki-dump-rc
   - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
-    cmd: ['bash', '-c', 'wikiwalk-tool find-latest --date > /workspace/dump-date']
+    entrypoint: bash -c "wikiwalk-tool find-latest --date > /workspace/dump-date"
   # Docker build (data)
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-data:$COMMIT_SHA', '-f', 'Dockerfile.data', '.']
