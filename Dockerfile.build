@@ -1,0 +1,22 @@
+# Base for planner and builder
+FROM rust:1.72.1-slim-bullseye AS chef
+WORKDIR /app
+ENV RUST_BACKTRACE=full
+ENV DATA_ROOT=/data
+ENV CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=true
+RUN apt-get update && apt-get install -y libssl-dev pkg-config libsqlite3-dev nodejs npm jq rclone && rm -rf /var/lib/apt/lists/*
+RUN cargo install cargo-chef --locked
+
+# Plan the build with chef
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Build the tool
+FROM chef
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY . .
+RUN cargo build --release --bin tool
+RUN cp target/release/tool /usr/local/bin/wikiwalk-tool
+# can't build the server yet because it needs the frontend

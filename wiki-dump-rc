@@ -7,8 +7,17 @@ hash rclone 2>/dev/null || {
 }
 
 tool="target/debug/tool"
-
 dump_source_host="https://dumps.wikimedia.org/"
+
+# Rclone config
+export RCLONE_GCS_LOCATION="us-central1"
+export RCLONE_GCS_STORAGE_CLASS="STANDARD"
+export RCLONE_GCS_CHUNK_SIZE="32M"
+export RCLONE_GCS_BUCKET_POLICY_ONLY="true"
+export RCLONE_GCS_OBJECT_ACL="private"
+export RCLONE_GCS_ENV_AUTH="true"
+
+env
 
 while read -r line
 do
@@ -18,5 +27,5 @@ do
     --size-only \
     --http-url "$dump_source_host" \
     --log-level INFO \
-    ":http:$line" "gcs:wikiwalk/$name"
+    ":http:$line" ":gcs:wikiwalk/$name"
 done < <("$tool" find-latest --urls --relative)

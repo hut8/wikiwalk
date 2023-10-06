@@ -1,0 +1,3 @@
+# Build the data to bake into the image
+FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:latest AS data-builder
+RUN /tool pull
