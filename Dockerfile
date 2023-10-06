@@ -38,7 +38,8 @@ RUN /tool pull
 # Final image
 FROM builder
 ENV DATA_ROOT=/data
-ENV PORT 8080
+ENV PORT=8080
+ENV WIKIWALK_ENV=production
 COPY --from=data-builder /data /data
 COPY --from=builder /app/target/release/server /server
 CMD [ "/server" ]
