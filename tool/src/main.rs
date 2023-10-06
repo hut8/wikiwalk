@@ -885,7 +885,10 @@ enum Command {
     },
     /// Find latest dump
     FindLatest {
-        /// Only display URLs
+        #[clap(long)]
+        /// Display date
+        date: bool,
+        /// Display URLs
         #[clap(long)]
         urls: bool,
         /// Use URLs relative to the host root
@@ -1003,7 +1006,7 @@ async fn run_sitemap() {
     sitemap::make_sitemap(&db, &sitemaps_path).await;
 }
 
-async fn run_find_latest(urls: bool, relative: bool) {
+async fn run_find_latest(urls: bool, relative: bool, date: bool) {
     let latest_dump = fetch::find_latest().await;
     match latest_dump {
         None => {
@@ -1011,6 +1014,10 @@ async fn run_find_latest(urls: bool, relative: bool) {
             process::exit(1);
         }
         Some(status) => {
+            if date {
+                println!("{}", status.dump_date);
+                return;
+            }
             if urls {
                 status.jobs.all().into_iter().for_each(|job| {
                     job.files.iter().for_each(|(_file, info)| {
@@ -1030,6 +1037,44 @@ async fn run_find_latest(urls: bool, relative: bool) {
             );
         }
     }
+}
+
+async fn run_pull(dump_dir: &Path, data_dir: &Path) {
+    let latest_dump = {
+        match fetch::find_latest().await {
+            None => {
+                log::error!("[pull] found no recent dumps");
+                process::exit(1);
+            }
+            Some(x) => x,
+        }
+    };
+    let current_path = Paths::new().db_paths("current");
+    let db_status = DBStatus::load(current_path.db_status_path());
+
+    let db_dump_date = &db_status.dump_date_str;
+    let latest_dump_date = &latest_dump.dump_date;
+
+    if db_dump_date == latest_dump_date {
+        log::info!("[pull] database dump date {db_dump_date} is already the latest",);
+        process::exit(0);
+    }
+    log::info!(
+      "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
+    );
+
+    run_fetch(dump_dir, Some(latest_dump.clone()))
+        .await
+        .expect("fetch dump");
+    log::info!("fetched data from {latest_dump_date}",);
+    if let Err(err) = run_build(data_dir, latest_dump_date).await {
+        log::error!("build failed: {:#?}", err);
+        process::exit(1);
+    }
+    log::info!("built database from {latest_dump_date}. cleaning dump directory.");
+    fetch::clean_dump_dir(dump_dir);
+    log::info!("building sitemap");
+    run_sitemap().await;
 }
 
 #[tokio::main]
@@ -1070,45 +1115,11 @@ async fn main() {
         Command::Fetch => {
             run_fetch(&dump_dir, None).await.expect("fetch failed");
         }
-        Command::FindLatest { urls, relative } => {
-            run_find_latest(urls, relative).await;
+        Command::FindLatest { urls, relative, date } => {
+            run_find_latest(urls, relative, date).await;
         }
         Command::Pull => {
-            let latest_dump = {
-                match fetch::find_latest().await {
-                    None => {
-                        log::error!("[pull] found no recent dumps");
-                        process::exit(1);
-                    }
-                    Some(x) => x,
-                }
-            };
-            let current_path = Paths::new().db_paths("current");
-            let db_status = DBStatus::load(current_path.db_status_path());
-
-            let db_dump_date = &db_status.dump_date_str;
-            let latest_dump_date = &latest_dump.dump_date;
-
-            if db_dump_date == latest_dump_date {
-                log::info!("[pull] database dump date {db_dump_date} is already the latest",);
-                process::exit(0);
-            }
-            log::info!(
-                "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
-            );
-
-            run_fetch(&dump_dir, Some(latest_dump.clone()))
-                .await
-                .expect("fetch dump");
-            log::info!("fetched data from {latest_dump_date}",);
-            if let Err(err) = run_build(&data_dir, latest_dump_date).await {
-                log::error!("build failed: {:#?}", err);
-                process::exit(1);
-            }
-            log::info!("built database from {latest_dump_date}. cleaning dump directory.");
-            fetch::clean_dump_dir(&dump_dir);
-            log::info!("building sitemap");
-            run_sitemap().await;
+            run_pull(&dump_dir, &data_dir).await;
         }
         Command::Sitemap => {
             run_sitemap().await;

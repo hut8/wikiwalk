@@ -6,16 +6,8 @@ hash rclone 2>/dev/null || {
   exit 1
 }
 
-tool="target/debug/tool"
+tool="${TOOL_PATH:-target/debug/tool}"
 dump_source_host="https://dumps.wikimedia.org/"
-
-# Rclone config
-export RCLONE_GCS_LOCATION="us-central1"
-export RCLONE_GCS_STORAGE_CLASS="STANDARD"
-export RCLONE_GCS_CHUNK_SIZE="32M"
-export RCLONE_GCS_BUCKET_POLICY_ONLY="true"
-export RCLONE_GCS_OBJECT_ACL="private"
-export RCLONE_GCS_ENV_AUTH="true"
 
 env
 
