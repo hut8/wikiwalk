@@ -32,14 +32,12 @@ RUN cargo build --release --bin server
 # Build the data to bake into the image
 FROM builder AS data-builder
 ENV DATA_ROOT=/data
-ENV RUST_BACKTRACE=1
 COPY --from=builder /app/target/release/tool /tool
 RUN /tool pull
 
 # Final image
 FROM builder
 ENV DATA_ROOT=/data
-ENV RUST_BACKTRACE=1
 ENV PORT 8080
 COPY --from=data-builder /data /data
 COPY --from=builder /app/target/release/server /server
