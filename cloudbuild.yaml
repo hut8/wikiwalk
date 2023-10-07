@@ -1,10 +1,24 @@
 steps:
   # Docker Build (tooling)
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA', '-f', 'Dockerfile.build', '.']
+    args:
+    - 'build'
+    - '-t'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
+    - '-t'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:latest'
+    - '-f'
+    - 'Dockerfile.build'
+    - '.'
   # Docker Push (tooling)
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA']
+    args:
+    - 'push'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+    - 'push'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:latest'
   # Put data in GCS buckets
   - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
     entrypoint: ./wiki-dump-rc
