@@ -10,6 +10,7 @@ FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build AS bu
 WORKDIR /app
 ENV DATA_ROOT=/data
 ENV WIKIWALK_ENV=production
+ENV WIKIWALK_SKIP_FRONTEND_BUILD=true
 COPY --from=frontend-build /web/dist /app/wikiwalk-ui/dist
 RUN cargo build --release --bin server
 RUN cp target/release/server /server
@@ -19,7 +20,6 @@ WORKDIR /app
 ENV DATA_ROOT=/data
 ENV WIKIWALK_ENV=production
 ENV RUST_BACKTRACE=full
-ENV WIKIWALK_SKIP_FRONTEND_BUILD=true
 COPY --from=us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-data /data /data
 COPY --from=builder /app/target/release/server server
 CMD [ "/server" ]
