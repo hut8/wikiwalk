@@ -6,7 +6,7 @@ RUN npm install
 COPY wikiwalk-ui .
 RUN npm run build
 
-FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:latest AS builder
+FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build AS builder
 WORKDIR /app
 ENV DATA_ROOT=/data
 ENV WIKIWALK_ENV=production

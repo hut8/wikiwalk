@@ -1,5 +1,5 @@
 # Build the data to bake into the image
-FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:latest AS data-builder
+FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build AS data-builder
 RUN find /data
 RUN rclone cp --include="*$(cat /workspace/dump-date)*.sql.gz" :gcs:wikiwalk /data/dumps/
 RUN /tool build --dump-date $(cat /workspace/dump-date)
