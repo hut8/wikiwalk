@@ -53,7 +53,7 @@ export function PathsDisplay({ paths }: { paths: PagePaths }) {
           </Paper>
         </Grid>
       </Grid>
-      <Grid container direction={"row"} gap={4} justifyContent={"center"} alignItems={"stretch"} wrap="wrap">
+      <Grid container direction={"row"} gap={4} justifyContent={"space-between"} alignItems={"stretch"} wrap="wrap">
         {paths.paths.map(path => (
           <PathDisplay key={path.map(p => p.id).join("-")} path={path} />
         ))}
