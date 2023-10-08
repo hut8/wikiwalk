@@ -4,6 +4,8 @@ WORKDIR /app
 ENV RUST_BACKTRACE=full
 ENV DATA_ROOT=/data
 ENV CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=true
+ENV WIKIWALK_ENV=production
+ENV WIKIWALK_SKIP_FRONTEND_BUILD=true
 ENV RCLONE_GCS_LOCATION="us-central1"
 ENV RCLONE_GCS_STORAGE_CLASS="STANDARD"
 ENV RCLONE_GCS_CHUNK_SIZE="32M"
@@ -19,11 +21,21 @@ FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-# Build the tool
+# Build the frontend
+FROM node:20-bookworm-slim AS frontend-build
+WORKDIR /web
+COPY wikiwalk-ui/package.json wikiwalk-ui/package-lock.json ./
+RUN npm install
+COPY wikiwalk-ui .
+RUN npm run build
+
+# Build the executables
 FROM chef
-COPY --from=planner /app/recipe.json recipe.json
+COPY --from=planner recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
+COPY --from=frontend-build /web/dist wikiwalk-ui/dist
+RUN cargo build --release --bin server
 RUN cargo build --release --bin tool
-RUN cp target/release/tool /usr/local/bin/wikiwalk-tool
-# can't build the server yet because it needs the frontend
+RUN cp target/release/tool /tool
+RUN cp target/release/server /server
