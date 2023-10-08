@@ -38,3 +38,5 @@ stderrlog = "*"
 tokio = { version = "1", features = ["full"] }
 xml-rs = "0.8.19"
 url = "2.4.1"
+google-cloud-storage = "0.13.1"
+tokio-util = "0.7.9"
