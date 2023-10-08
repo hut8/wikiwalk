@@ -179,10 +179,10 @@ dependencies = [
  "rustls 0.21.7",
  "rustls-webpki",
  "tokio",
- "tokio-rustls",
+ "tokio-rustls 0.23.4",
  "tokio-util",
  "tracing",
- "webpki-roots",
+ "webpki-roots 0.22.6",
 ]
 
 [[package]]
@@ -404,6 +404,9 @@ name = "anyhow"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
+dependencies = [
+ "backtrace",
+]
 
 [[package]]
 name = "arc-swap"
@@ -1779,6 +1782,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-rustls"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d78e1e73ec14cf7375674f74d7dde185c8206fd9dea6fb6295e8a98098aaa97"
+dependencies = [
+ "futures-util",
+ "http",
+ "hyper",
+ "rustls 0.21.7",
+ "tokio",
+ "tokio-rustls 0.24.1",
+]
+
+[[package]]
 name = "hyper-tls"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2868,6 +2885,7 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
+ "hyper-rustls",
  "hyper-tls",
  "ipnet",
  "js-sys",
@@ -2878,12 +2896,15 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
+ "rustls 0.21.7",
+ "rustls-pemfile",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "system-configuration",
  "tokio",
  "tokio-native-tls",
+ "tokio-rustls 0.24.1",
  "tokio-util",
  "tower-service",
  "url",
@@ -2891,6 +2912,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+ "webpki-roots 0.25.2",
  "winreg",
 ]
 
@@ -3367,16 +3389,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0097a48cd1999d983909f07cb03b15241c5af29e5e679379efac1c06296abecc"
 dependencies = [
  "httpdate",
- "native-tls",
  "reqwest",
+ "rustls 0.21.7",
+ "sentry-anyhow",
  "sentry-backtrace",
  "sentry-contexts",
  "sentry-core",
  "sentry-debug-images",
  "sentry-panic",
  "sentry-tracing",
- "tokio",
  "ureq",
+ "webpki-roots 0.25.2",
 ]
 
 [[package]]
@@ -3387,6 +3410,17 @@ checksum = "856a0131ca91c402aba7ce3b4f199b4fabc0b2d2b7fe0e8fdeac2a131ae75126"
 dependencies = [
  "actix-web",
  "futures-util",
+ "sentry-core",
+]
+
+[[package]]
+name = "sentry-anyhow"
+version = "0.31.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4fd76cd5c14676228996a31aa214adb049920b103bbc5b5a4114d05323995c5"
+dependencies = [
+ "anyhow",
+ "sentry-backtrace",
  "sentry-core",
 ]
 
@@ -3771,7 +3805,7 @@ dependencies = [
  "tokio-stream",
  "url",
  "uuid",
- "webpki-roots",
+ "webpki-roots 0.22.6",
 ]
 
 [[package]]
@@ -3802,7 +3836,7 @@ checksum = "804d3f245f894e61b1e6263c84b23ca675d96753b5abfd5cc8597d86806e8024"
 dependencies = [
  "once_cell",
  "tokio",
- "tokio-rustls",
+ "tokio-rustls 0.23.4",
 ]
 
 [[package]]
@@ -4060,6 +4094,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-rustls"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
+dependencies = [
+ "rustls 0.21.7",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-stream"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4281,9 +4325,11 @@ checksum = "f5ccd538d4a604753ebc2f17cd9946e89b77bf87f6a8e2309667c6f2e87855e3"
 dependencies = [
  "base64 0.21.4",
  "log",
- "native-tls",
  "once_cell",
+ "rustls 0.21.7",
+ "rustls-webpki",
  "url",
+ "webpki-roots 0.25.2",
 ]
 
 [[package]]
@@ -4465,6 +4511,12 @@ checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
 dependencies = [
  "webpki",
 ]
+
+[[package]]
+name = "webpki-roots"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14247bb57be4f377dfb94c72830b8ce8fc6beac03cf4bf7b9732eadd414123fc"
 
 [[package]]
 name = "wikiwalk"
