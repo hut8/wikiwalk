@@ -22,7 +22,7 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # Build the frontend
-FROM node:20-bookworm-slim AS frontend-build
+FROM node:20-bullseye-slim AS frontend-build
 WORKDIR /web
 COPY wikiwalk-ui/package.json wikiwalk-ui/package-lock.json ./
 RUN npm install
