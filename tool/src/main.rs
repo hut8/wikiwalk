@@ -33,6 +33,7 @@ mod api;
 mod fetch;
 mod page_source;
 mod pagelink_source;
+mod push;
 mod sitemap;
 
 /// Intermediate type of only fields necessary to create an Edge
@@ -870,6 +871,8 @@ enum Command {
         /// Dump date to import
         #[clap(long)]
         dump_date: String,
+        /// Push files to Google Cloud after build
+        push: bool,
     },
     /// Find the shortest path
     Run {
@@ -898,7 +901,10 @@ enum Command {
     /// Fetch latest dumps
     Fetch,
     /// Fetch latest dump and import it
-    Pull,
+    Pull {
+        #[clap(long)]
+        push: bool,
+    },
     /// Build Sitemap
     Sitemap,
 }
@@ -1039,7 +1045,7 @@ async fn run_find_latest(urls: bool, relative: bool, date: bool) {
     }
 }
 
-async fn run_pull(dump_dir: &Path, data_dir: &Path) {
+async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool) {
     let latest_dump = {
         match fetch::find_latest().await {
             None => {
@@ -1075,6 +1081,14 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path) {
     fetch::clean_dump_dir(dump_dir);
     log::info!("building sitemap");
     run_sitemap().await;
+
+    if push {
+        log::info!("pushing built files");
+        if let Err(err) = push::push_built_files(current_path).await {
+            log::error!("push failed: {:#?}", err);
+            process::exit(1);
+        }
+    }
 }
 
 #[tokio::main]
@@ -1100,8 +1114,15 @@ async fn main() {
     std::fs::create_dir_all(&data_dir).unwrap();
 
     match cli.command {
-        Command::Build { dump_date } => {
+        Command::Build { dump_date, push } => {
             run_build(&data_dir, &dump_date).await.unwrap();
+            if push {
+                log::info!("pushing built files");
+                if let Err(err) = push::push_built_files(Paths::new().db_paths("current")).await {
+                    log::error!("push failed: {:#?}", err);
+                    process::exit(1);
+                }
+            }
         }
         Command::Run {
             source,
@@ -1115,11 +1136,15 @@ async fn main() {
         Command::Fetch => {
             run_fetch(&dump_dir, None).await.expect("fetch failed");
         }
-        Command::FindLatest { urls, relative, date } => {
+        Command::FindLatest {
+            urls,
+            relative,
+            date,
+        } => {
             run_find_latest(urls, relative, date).await;
         }
-        Command::Pull => {
-            run_pull(&dump_dir, &data_dir).await;
+        Command::Pull { push } => {
+            run_pull(&dump_dir, &data_dir, push).await;
         }
         Command::Sitemap => {
             run_sitemap().await;
