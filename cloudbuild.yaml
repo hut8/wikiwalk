@@ -4,9 +4,9 @@ steps:
     args:
     - 'build'
     - '-t'
-    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA'
     - '-t'
-    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:latest'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
     - '-f'
     - 'Dockerfile.build'
     - '.'
@@ -14,33 +14,16 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
     - 'push'
-    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA'
   - name: 'gcr.io/cloud-builders/docker'
     args:
     - 'push'
-    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:latest'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
   # Put data in GCS buckets
-  - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
+  - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA'
     entrypoint: ./wiki-dump-rc
     env:
-      - 'TOOL_PATH=/usr/local/bin/wikiwalk-tool'
-  - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build:$COMMIT_SHA'
-    script: |
-      #!/bin/bash
-      echo "Finding latest dump date..."
-      /usr/local/bin/wikiwalk-tool find-latest --date > /workspace/dump-date
-  # Docker build (data)
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-data:$COMMIT_SHA', '-f', 'Dockerfile.data', '.']
-  # Docker push (data)
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-data:$COMMIT_SHA']
-  # Docker build (app)
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA', '-f', 'Dockerfile', '.']
-  # Docker push (app)
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA']
+      - 'TOOL_PATH=/tool'
 timeout: 10800s
 options:
   machineType: 'E2_HIGHCPU_8'
