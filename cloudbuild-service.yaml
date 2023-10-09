@@ -10,7 +10,7 @@ steps:
       - '-c'
       - |
         set -e
-        /tool find-latest > /workspace/latest-build
+        /tool find-latest --date > /workspace/latest-build
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: /bin/bash
     args:
