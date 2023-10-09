@@ -19,5 +19,5 @@ do
     --size-only \
     --http-url "$dump_source_host" \
     --log-level INFO \
-    ":http:$line" ":gcs:wikiwalk/$name"
+    ":http:$line" ":gcs:wikiwalk/dumps"
 done < <("$tool" find-latest --urls --relative)
