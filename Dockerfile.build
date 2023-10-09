@@ -19,7 +19,7 @@ RUN cargo install cargo-chef --locked
 # Plan the build with chef
 FROM chef AS planner
 COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+RUN cargo chef prepare --recipe-path /app/recipe.json
 
 # Build the frontend
 FROM node:20-bullseye-slim AS frontend-build
@@ -31,7 +31,7 @@ RUN npm run build
 
 # Build the executables
 FROM chef
-COPY --from=planner recipe.json recipe.json
+COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 COPY --from=frontend-build /web/dist wikiwalk-ui/dist
