@@ -1,5 +1,4 @@
 steps:
-  # Docker Build (tooling)
   - name: 'gcr.io/cloud-builders/docker'
     args:
     - 'build'
@@ -10,7 +9,6 @@ steps:
     - '-f'
     - 'Dockerfile.build'
     - '.'
-  # Docker Push (tooling)
   - name: 'gcr.io/cloud-builders/docker'
     args:
     - 'push'
@@ -19,11 +17,6 @@ steps:
     args:
     - 'push'
     - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
-  # Put data in GCS buckets
-  - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA'
-    entrypoint: ./wiki-dump-rc
-    env:
-      - 'TOOL_PATH=/tool'
 timeout: 10800s
 options:
   machineType: 'E2_HIGHCPU_8'
