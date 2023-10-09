@@ -34,6 +34,7 @@ mod api;
 mod fetch;
 mod page_source;
 mod pagelink_source;
+#[cfg(feature = "google-cloud-storage")]
 mod push;
 mod sitemap;
 
@@ -1086,6 +1087,7 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool) {
     log::info!("building sitemap");
     run_sitemap().await;
 
+    #[cfg(feature = "google-cloud-storage")]
     if push {
         log::info!("pushing built files");
         if let Err(err) = push::push_built_files(current_path).await {
@@ -1120,6 +1122,7 @@ async fn main() {
     match cli.command {
         Command::Build { dump_date, push } => {
             run_build(&data_dir, &dump_date).await.unwrap();
+            #[cfg(feature = "google-cloud-storage")]
             if push {
                 log::info!("pushing built files");
                 if let Err(err) = push::push_built_files(Paths::new().db_paths("current")).await {
