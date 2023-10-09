@@ -13,7 +13,7 @@ ENV RCLONE_GCS_BUCKET_POLICY_ONLY="true"
 ENV RCLONE_GCS_OBJECT_ACL="private"
 ENV RCLONE_GCS_ENV_AUTH="true"
 
-RUN apt-get update && apt-get install -y libssl-dev pkg-config libsqlite3-dev nodejs npm jq rclone && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libssl-dev pkg-config libsqlite3-dev jq rclone && rm -rf /var/lib/apt/lists/*
 RUN cargo install cargo-chef --locked
 
 # Plan the build with chef
