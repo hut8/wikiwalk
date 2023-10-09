@@ -2,6 +2,9 @@ use static_files::NpmBuild;
 
 fn main() {
     if std::env::var("WIKIWALK_SKIP_FRONTEND_BUILD").is_ok() {
+        static_files::resource_dir("../wikiwalk-ui/dist")
+            .build()
+            .unwrap();
         return;
     }
     NpmBuild::new("../wikiwalk-ui")
