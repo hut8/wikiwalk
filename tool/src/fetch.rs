@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, Utc};
+use chrono::Utc;
 use futures::StreamExt;
 // use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{
@@ -19,7 +19,8 @@ pub async fn find_latest() -> Option<DumpStatus> {
             .checked_sub_days(chrono::Days::new(past_days))
             .unwrap();
         log::info!("checking dump for {date:?}");
-        match fetch_dump_status(&client, date).await {
+        let date_fmt = date.format("%Y%m%d").to_string();
+        match fetch_dump_status(&client, &date_fmt).await {
             Ok(status) => {
                 log::info!("dump status: {status:?}");
                 if status.jobs.done() {
@@ -35,12 +36,8 @@ pub async fn find_latest() -> Option<DumpStatus> {
     None
 }
 
-pub async fn fetch_dump_status(
-    client: &Client,
-    date: NaiveDate,
-) -> Result<DumpStatus, anyhow::Error> {
-    let date_fmt = date.format("%Y%m%d").to_string();
-    let url_str = format!("https://dumps.wikimedia.org/enwiki/{date_fmt}/dumpstatus.json");
+pub async fn fetch_dump_status(client: &Client, date: &str) -> Result<DumpStatus, anyhow::Error> {
+    let url_str = format!("https://dumps.wikimedia.org/enwiki/{date}/dumpstatus.json");
     log::info!("fetching dump status from: {url_str}");
     let mut dump_status: DumpStatus = client
         .get(url_str)
@@ -49,7 +46,7 @@ pub async fn fetch_dump_status(
         .error_for_status()?
         .json()
         .await?;
-    dump_status.dump_date = date_fmt;
+    dump_status.dump_date = date.to_owned();
     Ok(dump_status)
 }
 

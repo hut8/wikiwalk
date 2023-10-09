@@ -13,6 +13,7 @@ use itertools::Itertools;
 use memmap2::{Mmap, MmapMut};
 use memory_stats::memory_stats;
 use rayon::slice::ParallelSliceMut;
+use reqwest::Client;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
@@ -899,7 +900,10 @@ enum Command {
         relative: bool,
     },
     /// Fetch latest dumps
-    Fetch,
+    Fetch {
+        #[clap(long)]
+        dump_date: Option<String>,
+    },
     /// Fetch latest dump and import it
     Pull {
         #[clap(long)]
@@ -917,9 +921,9 @@ async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
     gddb.build_database().await
 }
 
-async fn run_fetch(dump_dir: &Path, latest_dump: Option<DumpStatus>) -> anyhow::Result<()> {
-    let latest_dump = match latest_dump {
-        Some(latest_dump) => latest_dump,
+async fn run_fetch(dump_dir: &Path, dump_date: Option<DumpStatus>) -> anyhow::Result<()> {
+    let latest_dump = match dump_date {
+        Some(dump_status) => dump_status,
         None => match fetch::find_latest().await {
             None => {
                 log::error!("[pull] found no recent dumps");
@@ -1133,8 +1137,20 @@ async fn main() {
         Command::Query { target } => {
             run_query(&data_dir, target).await;
         }
-        Command::Fetch => {
-            run_fetch(&dump_dir, None).await.expect("fetch failed");
+        Command::Fetch { dump_date } => {
+            let dump_status = match dump_date {
+                Some(date) => fetch::fetch_dump_status(&Client::default(), &date)
+                    .await
+                    .map_or_else(
+                        |err| {
+                            log::error!("fetch dump status for specified date failed: {:#?}", err);
+                            process::exit(1);
+                        },
+                        Some,
+                    ),
+                None => None,
+            };
+            run_fetch(&dump_dir, dump_status).await.expect("fetch failed");
         }
         Command::FindLatest {
             urls,
