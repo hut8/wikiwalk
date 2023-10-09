@@ -1,0 +1,6 @@
+FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-build
+WORKDIR /app
+ARG DUMP_DATE
+RUN /tool fetch --dump-date $DUMP_DATE
+RUN /tool build --dump-date $DUMP_DATE
+CMD [ "/server" ]
