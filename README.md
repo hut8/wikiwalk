@@ -139,3 +139,25 @@ SELECT
   ORDER BY degrees DESC
   LIMIT 20;
 ```
+
+### Deployment on Google Cloud Run
+
+Each time a new commit is pushed to `main`, Google Cloud Build will automatically build a container containing the both the server and tool, which are tagged with the commit hash. However, this will be without the local graph data files, and therefore cannot be deployed directly to Cloud Run. The container will need the data files baked into it. The container for the Cloud Run service will also need to be updated every time Wikipedia releases a new database dump.
+
+Wikipedia's dump server seems to throttle dump requests, so it's advantageous to download the dumps and then upload them to GCS. They are currently pushed to GCS but not used during the service-image build process.
+
+#### cloudbuild-service.yaml
+
+Invoking this build will:
+
+* Find the latest dump date from the Wikipedia database dumps
+* Find the container that is running the Cloud Run service, and extract the dump date from its tag
+* If the Wikipedia dump date is newer than the Cloud Run container's dump date, it will start a new Cloud Build job to build a new `wikiwalk-service` image (see `Dockerfile.service`) - This will find the latest date that the Wikipedia database dumps were updated, and if that date is newer than the date of the latest graph database, it will download the new dumps, build a new graph database, and upload all the artifacts to Google Cloud Storage.
+
+
+#### Triggers:
+
+* A new commit is pushed to `main`
+  * Google Cloud Build will build a new "app" container (containing `/server` and `/tool`) and push it to the container registry
+  * A new Cloud Run Job will run `tool sync-cloud-data`
+* Every day the cloudbuild-service.yaml should be run
