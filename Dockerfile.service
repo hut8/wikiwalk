@@ -3,6 +3,5 @@ WORKDIR /app
 ARG DUMP_DATE
 # RUN /tool fetch --dump-date $DUMP_DATE
 COPY data /data
-RUN find /data
-RUN /tool build --dump-date $DUMP_DATE
+RUN find /data && /tool build --dump-date $DUMP_DATE  && rm -rf /data/dumps
 CMD [ "/server" ]
