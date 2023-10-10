@@ -23,7 +23,7 @@ steps:
         exit 1
       }
 
-      export DUMP_DATE=$(cat /workspace/latest-build)
+      export latest_dump=$(cat /workspace/latest-build)
       echo "Latest dump date: '$latest_dump'"
       service_image="us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-service"
       service_image_tagged="$service_image:$COMMIT_SHA-$latest_dump"
