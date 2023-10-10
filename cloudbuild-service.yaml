@@ -1,23 +1,35 @@
 steps:
-# - name: gcr.io/cloud-builders/gsutil
-#   args: ['cp', '/workspace/', 'gs://wikiwalk/']
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - 'build'
-      - '-t'
-      - '${_SERVICE_IMAGE_TAGGED_LATEST}'
-      - '-t'
-      - '${_SERVICE_IMAGE_TAGGED}'
-      - '-f'
-      - 'Dockerfile.service'
-      - '--build-arg'
-      - 'DUMP_DATE=${_DUMP_DATE}'
-      - '.'
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - 'push'
-      - '${_SERVICE_IMAGE_TAGGED_LATEST}'
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - 'push'
-      - '${_SERVICE_IMAGE_TAGGED}'
+- name: bash
+  args:
+    - 'mkdir'
+    - '-p'
+    - '/workspace/data/dumps/'
+- name: gcr.io/cloud-builders/gsutil
+  args:
+    - 'cp'
+    - 'gs://wikiwalk/enwiki-%{_DUMP_DATE}-*.sql.gz'
+    - '/workspace/data/dumps/'
+- name: bash
+  args:
+    - 'find'
+    - '/workspace/'
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '-t'
+    - '${_SERVICE_IMAGE_TAGGED_LATEST}'
+    - '-t'
+    - '${_SERVICE_IMAGE_TAGGED}'
+    - '-f'
+    - 'Dockerfile.service'
+    - '--build-arg'
+    - 'DUMP_DATE=${_DUMP_DATE}'
+    - '.'
+- name: gcr.io/cloud-builders/docker
+  args:
+    - 'push'
+    - '${_SERVICE_IMAGE_TAGGED_LATEST}'
+- name: gcr.io/cloud-builders/docker
+  args:
+    - 'push'
+    - '${_SERVICE_IMAGE_TAGGED}'
