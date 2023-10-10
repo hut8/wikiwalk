@@ -11,7 +11,22 @@ use std::{cmp::min, collections::HashMap, fs::File, io::Write, path::Path};
 /// Look back this many days for the oldest dump
 pub static OLDEST_DUMP: u64 = 60;
 
+static DUMP_INDEX_URL: &str = "https://dumps.wikimedia.org/index.json";
+
 pub async fn find_latest() -> Option<DumpStatus> {
+    // let client = Client::default();
+    // let dump_index: DumpIndex = client
+    //     .get(DUMP_INDEX_URL)
+    //     .send()
+    //     .await
+    //     .expect("fetch dump index")
+    //     .error_for_status()
+    //     .expect("check dump index status")
+    //     .json()
+    //     .await
+    //     .expect("parse dump index");
+    //   let dump_status = dump_index.wikis.enwiki;
+
     let today = Utc::now().date_naive();
     let client = Client::default();
     for past_days in 0..OLDEST_DUMP {
@@ -20,7 +35,7 @@ pub async fn find_latest() -> Option<DumpStatus> {
             .unwrap();
         log::info!("checking dump for {date:?}");
         let date_fmt = date.format("%Y%m%d").to_string();
-        match fetch_dump_status(&client, &date_fmt).await {
+        match fetch_dump_status_for_date(&client, &date_fmt).await {
             Ok(status) => {
                 log::info!("dump status: {status:?}");
                 if status.jobs.done() {
@@ -36,7 +51,7 @@ pub async fn find_latest() -> Option<DumpStatus> {
     None
 }
 
-pub async fn fetch_dump_status(client: &Client, date: &str) -> Result<DumpStatus, anyhow::Error> {
+pub async fn fetch_dump_status_for_date(client: &Client, date: &str) -> Result<DumpStatus, anyhow::Error> {
     let url_str = format!("https://dumps.wikimedia.org/enwiki/{date}/dumpstatus.json");
     log::info!("fetching dump status from: {url_str}");
     let mut dump_status: DumpStatus = client
@@ -212,6 +227,18 @@ pub struct DumpStatus {
     pub version: String,
     #[serde(skip_deserializing)]
     pub dump_date: String,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DumpIndex {
+  pub wikis: DumpWikis,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DumpWikis {
+  pub enwiki: DumpStatus,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

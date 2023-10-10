@@ -1142,7 +1142,7 @@ async fn main() {
         }
         Command::Fetch { dump_date } => {
             let dump_status = match dump_date {
-                Some(date) => fetch::fetch_dump_status(&Client::default(), &date)
+                Some(date) => fetch::fetch_dump_status_for_date(&Client::default(), &date)
                     .await
                     .map_or_else(
                         |err| {
