@@ -1,41 +1,23 @@
 steps:
-  # Put data in GCS buckets
-  - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
-    entrypoint: ./wiki-dump-rc
-    env:
-      - 'TOOL_PATH=/tool'
-  - name: 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
-    entrypoint: /bin/bash
+# - name: gcr.io/cloud-builders/gsutil
+#   args: ['cp', '/workspace/', 'gs://wikiwalk/']
+  - name: gcr.io/cloud-builders/docker
     args:
-      - '-c'
-      - |
-        set -e
-        /tool find-latest --date > /workspace/latest-build
-  - name: 'gcr.io/cloud-builders/docker'
-    entrypoint: /bin/bash
+      - 'build'
+      - '-t'
+      - '${_SERVICE_IMAGE_TAGGED_LATEST}'
+      - '-t'
+      - '${_SERVICE_IMAGE_TAGGED}'
+      - '-f'
+      - 'Dockerfile.service'
+      - '--build-arg'
+      - 'DUMP_DATE=${_DUMP_DATE}'
+      - '.'
+  - name: gcr.io/cloud-builders/docker
     args:
-    - '-c'
-    - |
-      set -e
-      export DUMP_DATE=$(cat /workspace/latest-build)
-      echo "Latest dump date: $latest_dump"
-      service_image="us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-service"
-      service_image_tagged="$service_image:$COMMIT_SHA-$latest_dump"
-      echo "Checking for image: $service_image_tagged"
-      gcloud artifacts docker images describe "$service_image_tagged" || {
-        echo "Image not found, building..."
-        service_image_tagged_latest="$service_image:$COMMIT_SHA-$latest_dump"
-        docker build \
-          -t "$service_image_tagged" \
-          -t "$service_image_tagged_latest" \
-          -f Dockerfile.service \
-          --build-arg DUMP_DATE="$latest_dump" \
-          .
-        docker push "$service_image_tagged"
-        docker push "$service_image_tagged_latest"
-        echo "Image built and pushed to $service_image_tagged and $service_image_tagged_latest"
-      }
-timeout: 10800s
-options:
-  machineType: 'E2_HIGHCPU_8'
-  automapSubstitutions: true
+      - 'push'
+      - '${_SERVICE_IMAGE_TAGGED_LATEST}'
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - 'push'
+      - '${_SERVICE_IMAGE_TAGGED}'
