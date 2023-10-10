@@ -38,10 +38,6 @@ impl WPPageLinkSource {
         pagelinks_line_iter.par_bridge().for_each(|chunk| {
             let line = chunk.expect("read line");
             if !line.starts_with("INSERT ") {
-                log::debug!(
-                    "skipping pagelinks line which does not start with INSERT: {}",
-                    line
-                );
                 return;
             }
             let lines = vec![line];
