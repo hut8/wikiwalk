@@ -1,5 +1,6 @@
-use chrono::Utc;
+use chrono::{Utc, NaiveDate};
 use futures::StreamExt;
+use itertools::Itertools;
 // use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -14,21 +15,37 @@ pub static OLDEST_DUMP: u64 = 60;
 static DUMP_INDEX_URL: &str = "https://dumps.wikimedia.org/index.json";
 
 pub async fn find_latest() -> Option<DumpStatus> {
-    // let client = Client::default();
-    // let dump_index: DumpIndex = client
-    //     .get(DUMP_INDEX_URL)
-    //     .send()
-    //     .await
-    //     .expect("fetch dump index")
-    //     .error_for_status()
-    //     .expect("check dump index status")
-    //     .json()
-    //     .await
-    //     .expect("parse dump index");
-    //   let dump_status = dump_index.wikis.enwiki;
+    let client = Client::default();
+    let dump_index_response = client
+        .get(DUMP_INDEX_URL)
+        .send()
+        .await
+        .ok()
+        .and_then(|res| res.error_for_status().ok());
+    let dump_index = match dump_index_response {
+        Some(res) => res.json::<DumpIndex>().await.ok(),
+        None => None,
+    }
+    .map(|ix| ix.wikis.enwiki)
+    .and_then(|ix| match ix.jobs.done() {
+        true => Some(ix),
+        false => None,
+    }).and_then(|mut ix| {
+      match ix.jobs.dump_date() {
+        Some(date) => {
+          ix.dump_date = date;
+          Some(ix)
+        },
+        None => None
+      }
+    });
+
+    if dump_index.is_some() {
+        log::info!("found complete dump via index file");
+        return dump_index;
+    }
 
     let today = Utc::now().date_naive();
-    let client = Client::default();
     for past_days in 0..OLDEST_DUMP {
         let date = today
             .checked_sub_days(chrono::Days::new(past_days))
@@ -51,7 +68,10 @@ pub async fn find_latest() -> Option<DumpStatus> {
     None
 }
 
-pub async fn fetch_dump_status_for_date(client: &Client, date: &str) -> Result<DumpStatus, anyhow::Error> {
+pub async fn fetch_dump_status_for_date(
+    client: &Client,
+    date: &str,
+) -> Result<DumpStatus, anyhow::Error> {
     let url_str = format!("https://dumps.wikimedia.org/enwiki/{date}/dumpstatus.json");
     log::info!("fetching dump status from: {url_str}");
     let mut dump_status: DumpStatus = client
@@ -232,13 +252,13 @@ pub struct DumpStatus {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DumpIndex {
-  pub wikis: DumpWikis,
+    pub wikis: DumpWikis,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DumpWikis {
-  pub enwiki: DumpStatus,
+    pub enwiki: DumpStatus,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -256,6 +276,20 @@ pub struct Jobs {
 impl Jobs {
     pub fn done(&self) -> bool {
         self.all().iter().all(|job| job.done())
+    }
+
+    pub fn dump_date(&self) -> Option<String> {
+      let dates = self.all().iter().map(|f| {
+        NaiveDate::parse_from_str(&f.updated, "%Y-%m-%d %H:%M:%S").unwrap().format("%Y%m%d").to_string()
+      }).unique().collect_vec();
+      match dates.len() {
+        0 => None,
+        1 => Some(dates[0].clone()),
+        _ => {
+          log::warn!("dump appears to contain data from multiple dates: {:?}", dates);
+          None
+        }
+      }
     }
 
     pub fn all(&self) -> Vec<&JobStatus> {
