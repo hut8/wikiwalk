@@ -2,7 +2,7 @@ FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app
 WORKDIR /app
 ARG DUMP_DATE
 # RUN /tool fetch --dump-date $DUMP_DATE
-COPY /workspace/data /data
+COPY data /data
 RUN find /data
 RUN /tool build --dump-date $DUMP_DATE
 CMD [ "/server" ]

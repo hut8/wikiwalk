@@ -3,16 +3,16 @@ steps:
   args:
     - 'mkdir'
     - '-p'
-    - '/workspace/data/dumps/'
+    - './data/dumps/'
 - name: gcr.io/cloud-builders/gsutil
   args:
     - 'cp'
     - 'gs://wikiwalk/enwiki-${_DUMP_DATE}-*.sql.gz'
-    - '/workspace/data/dumps/'
+    - './data/dumps/'
 - name: bash
   args:
     - 'find'
-    - '/workspace/'
+    - './data/'
 - name: 'gcr.io/cloud-builders/docker'
   args:
     - 'build'
