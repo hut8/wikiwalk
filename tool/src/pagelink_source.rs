@@ -40,25 +40,23 @@ impl WPPageLinkSource {
             if !line.starts_with("INSERT ") {
                 return;
             }
-            let lines = vec![line];
             let sender = self.sender.clone();
             let edge_count = self.edge_count.clone();
-            Self::load_edges_dump_chunk(lines, sender, edge_count);
+            Self::load_edges_dump_chunk(line, sender, edge_count);
         });
         log::info!("pagelinks load complete");
         self.edge_count.load(Ordering::Relaxed)
     }
 
     fn load_edges_dump_chunk(
-        chunk: Vec<String>,
+        chunk: String,
         sender: Sender<WPPageLink>,
         count: Arc<AtomicU32>,
     ) {
         use parse_mediawiki_sql::{
             field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
         };
-        let chunk_str = chunk.join("\n");
-        let chunk = chunk_str.as_bytes();
+        let chunk = chunk.as_bytes();
         let mut sql_iterator = iterate_sql_insertions(chunk);
         let links = sql_iterator.filter_map(
             |PageLink {
