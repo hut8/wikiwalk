@@ -13,7 +13,6 @@ env
 
 while read -r line
 do
-  name="$(basename "$line")"
   rclone copy \
     --multi-thread-streams 3 \
     --size-only \
