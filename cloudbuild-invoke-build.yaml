@@ -33,7 +33,8 @@ steps:
         service_image_tagged_latest="$service_image:latest"
         gcloud builds submit . \
           --config cloudbuild-service.yaml \
-          --substitutions _SERVICE_IMAGE_TAGGED="$service_image_tagged",_SERVICE_IMAGE_TAGGED_LATEST="$service_image_tagged_latest",_DUMP_DATE="$latest_dump"
+          --substitutions _SERVICE_IMAGE_TAGGED="$service_image_tagged",_SERVICE_IMAGE_TAGGED_LATEST="$service_image_tagged_latest",_DUMP_DATE="$latest_dump" \
+          --timeout=10800s
         echo "Cloud build submitted"
       }
 timeout: 10800s
