@@ -695,7 +695,7 @@ impl GraphDBBuilder {
         let mut edge_db = edge_db.truncate();
 
         log::debug!("spawning pagelink source");
-        let pagelink_thread = pagelink_source.run();
+        let pagelink_thread = tokio::spawn(pagelink_source.run());
 
         log::debug!("spawning edge resolver");
         let (resolved_total_count, resolved_hit_count) =
@@ -707,7 +707,7 @@ impl GraphDBBuilder {
         );
 
         log::debug!("joining pagelink count thread");
-        let edge_count = pagelink_thread.await;
+        let edge_count = pagelink_thread.await.expect("join pagelink thread");
         log::debug!("pagelink count = {}", edge_count);
         db_status.edge_count = edge_count;
 

@@ -1,5 +1,4 @@
 use std::{
-    cell::RefCell,
     fs::File,
     io::{BufRead, BufReader, Read},
     path::PathBuf,
@@ -7,7 +6,7 @@ use std::{
         atomic::{self, AtomicU32, Ordering},
         Arc, RwLock,
     },
-    time::Instant, rc::Rc,
+    time::Instant,
 };
 
 use crossbeam::channel::Sender;
@@ -22,10 +21,9 @@ pub struct WPPageLinkSource {
     pub edge_count: Arc<AtomicU32>,
 }
 
-type ReadGuard<R> = Arc<std::sync::RwLock<std::cell::RefCell<R>>>;
 struct ByteReadCounter<R> {
     count: atomic::AtomicUsize,
-    inner: ReadGuard<R>,
+    inner: RwLock<R>,
 }
 
 impl<R> ByteReadCounter<R>
@@ -35,7 +33,7 @@ where
     fn new(inner: R) -> Self {
         Self {
             count: atomic::AtomicUsize::new(0),
-            inner: Arc::new(RwLock::new(RefCell::new(inner))),
+            inner: RwLock::new(inner),
         }
     }
 }
@@ -45,8 +43,8 @@ where
     R: Read + Sized + Send + Sync,
 {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let guard = self.inner.read().unwrap();
-        let read = guard.borrow_mut().read(buf)?;
+        let mut guard = self.inner.write().unwrap();
+        let read = guard.read(buf)?;
         self.count.fetch_add(read, Ordering::Relaxed);
         Ok(read)
     }
@@ -70,9 +68,10 @@ impl WPPageLinkSource {
     pub async fn run(self) -> u32 {
         let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
         let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
+        let pagelinks_lock = Arc::new(pagelinks_sql_file);
         // let file_cell = RefCell::new(pagelinks_sql_file);
         // let file_lock = Arc::new(RwLock::new(file_cell));
-        let pagelinks_byte_counter = Rc::new(ByteReadCounter::new(pagelinks_sql_file));
+        let pagelinks_byte_counter = Arc::new(ByteReadCounter::new(pagelinks_lock));
         let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_byte_counter.as_ref());
         let pagelinks_sql = BufReader::new(pagelinks_sql);
         let pagelinks_line_iter = pagelinks_sql.lines();
