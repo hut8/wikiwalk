@@ -142,6 +142,10 @@ impl RedirectMapFile {
     pub fn get(&self, from: u32) -> Option<u32> {
         let u32_size = std::mem::size_of::<u32>();
         let offset = (from as usize) * u32_size;
+        if offset + u32_size > self.map.len() {
+            log::error!("will not get redirect for {} (offset {}): out of bounds!", from, offset);
+            return None;
+        }
         let to = u32::from_le_bytes(self.map[offset..offset + u32_size].try_into().unwrap());
         if to == 0 {
             None
