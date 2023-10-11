@@ -5,6 +5,7 @@ use std::io::Write;
 use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 use std::{process, thread};
 
 use chrono::NaiveDate;
@@ -398,16 +399,28 @@ impl GraphDBBuilder {
             RedirectMapFile::new(self.db_paths.redirects_path(), max_page_id).unwrap(),
         ));
 
-        log::info!(
-            "loading redirects from {} to {}",
-            self.redirects_path.clone().display(),
-            self.db_paths.redirects_path().display(),
-        );
-
-        let redirect_builder =
-            RedirectMapBuilder::new(self.redirects_path.clone(), redirects_map_file.clone());
-        let redirect_count = redirect_builder.build(db.clone()).await;
-        log::info!("loaded {} redirects", redirect_count);
+        if db_status.redirects_resolved {
+            log::info!(
+                "loading redirects from {} to {}",
+                self.redirects_path.clone().display(),
+                self.db_paths.redirects_path().display(),
+            );
+            let start = Instant::now();
+            let redirect_builder =
+                RedirectMapBuilder::new(self.redirects_path.clone(), redirects_map_file.clone());
+            let redirect_count = redirect_builder.build(db.clone()).await;
+            let elapsed = start.elapsed();
+            log::info!(
+                "loaded {} redirects in {} seconds ({}/sec)",
+                redirect_count,
+                elapsed.as_secs(),
+                (f64::from(redirect_count) / elapsed.as_secs_f64()).round() as u64,
+            );
+            db_status.redirects_resolved = true;
+            db_status.save();
+        } else {
+            log::info!("skipping redirects: build status indicates redirects were loaded");
+        }
 
         log::debug!("loading edges dump");
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(64);
