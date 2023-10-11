@@ -1,16 +1,15 @@
 use std::{
     fs::File,
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader},
     path::PathBuf,
     sync::{
-        atomic::{self, AtomicU32, Ordering},
-        Arc, RwLock,
+        atomic::{AtomicU32, AtomicU64, Ordering},
+        Arc,
     },
     time::Instant,
 };
 
-use crossbeam::channel::Sender;
-use futures::{stream, StreamExt};
+use crossbeam::channel::{Receiver, Sender};
 
 use crate::WPPageLink;
 
@@ -19,41 +18,6 @@ pub struct WPPageLinkSource {
     sender: Sender<WPPageLink>,
     source_path: PathBuf,
     pub edge_count: Arc<AtomicU32>,
-}
-
-struct ByteReadCounter<R> {
-    count: atomic::AtomicUsize,
-    inner: RwLock<R>,
-}
-
-impl<R> ByteReadCounter<R>
-where
-    R: Read + Sized + Send + Sync,
-{
-    fn new(inner: R) -> Self {
-        Self {
-            count: atomic::AtomicUsize::new(0),
-            inner: RwLock::new(inner),
-        }
-    }
-}
-
-impl<R> Read for &ByteReadCounter<R>
-where
-    R: Read + Sized + Send + Sync,
-{
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut guard = self.inner.write().unwrap();
-        let read = guard.read(buf)?;
-        self.count.fetch_add(read, Ordering::Relaxed);
-        Ok(read)
-    }
-}
-
-impl<R: Read + Send + Sync> ByteReadCounter<R> {
-    fn count(&self) -> usize {
-        self.count.load(Ordering::Relaxed)
-    }
 }
 
 impl WPPageLinkSource {
