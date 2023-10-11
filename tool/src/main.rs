@@ -1100,7 +1100,7 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool) {
 #[tokio::main]
 async fn main() {
     stderrlog::new()
-        .module(module_path!())
+        // .module(module_path!())
         .show_module_names(true)
         .quiet(false)
         .verbosity(3)
