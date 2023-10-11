@@ -116,7 +116,6 @@ impl RedirectMap {
     fn reduce(rx: std::sync::mpsc::Receiver<HashMap<u32, u32>>) -> HashMap<u32, u32> {
         let mut reduced: HashMap<u32, u32> = HashMap::new();
         for chunk in rx.iter() {
-            log::info!("received chunk of {} redirects", chunk.len());
             reduced.extend(chunk);
         }
         log::info!("reduced to {} redirects", reduced.len());
