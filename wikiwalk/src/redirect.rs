@@ -1,7 +1,7 @@
-use std::cell::RefCell;
+use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::{collections::HashMap, fs::File};
 
 use futures::stream::StreamExt;
@@ -13,25 +13,14 @@ use sea_orm::{ColumnTrait, DbConn, EntityTrait, QueryFilter};
 
 use crate::schema;
 
-pub struct RedirectMap {
+pub struct RedirectMapBuilder {
     path: PathBuf,
-    redirects: RwLock<RefCell<HashMap<u32, u32>>>,
+    map_file: Arc<RwLock<RedirectMapFile>>,
 }
 
-impl RedirectMap {
-    pub fn new(path: PathBuf) -> RedirectMap {
-        RedirectMap {
-            path,
-            redirects: RwLock::new(RefCell::new(HashMap::new())),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.redirects.read().unwrap().take().len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.redirects.read().unwrap().take().is_empty()
+impl RedirectMapBuilder {
+    pub fn new(path: PathBuf, map_file: Arc<RwLock<RedirectMapFile>>) -> RedirectMapBuilder {
+        RedirectMapBuilder { path, map_file }
     }
 
     pub async fn parse_line(
@@ -88,7 +77,7 @@ impl RedirectMap {
         tx.send(redirects).expect("send redirects");
     }
 
-    pub async fn parse(&self, db: DbConn) -> HashMap<u32, u32> {
+    pub async fn build(&self, db: DbConn) -> u32 {
         log::info!("parsing redirects table at {}", &self.path.display());
 
         let redirect_sql_file = File::open(&self.path).expect("open redirects file");
@@ -97,12 +86,13 @@ impl RedirectMap {
         let redirect_line_iter = redirect_sql.lines();
 
         let (tx, rx) = std::sync::mpsc::channel::<HashMap<u32, u32>>();
-        let reducer = tokio::task::spawn_blocking(move || Self::reduce(rx));
+        let map_file = self.map_file.clone();
+        let reducer = tokio::task::spawn_blocking(move || Self::reduce(rx, map_file));
         let lines = redirect_line_iter
             .map(|l| l.expect("read line"))
             .filter(|l| l.starts_with("INSERT "));
         futures::stream::iter(lines)
-            .for_each_concurrent(16, |line| {
+            .for_each_concurrent(num_cpus::get(), |line| {
                 let tx = tx.clone();
                 let db = db.clone();
                 Self::parse_line(db, line, tx)
@@ -113,17 +103,64 @@ impl RedirectMap {
         reducer.await.expect("join reducer")
     }
 
-    fn reduce(rx: std::sync::mpsc::Receiver<HashMap<u32, u32>>) -> HashMap<u32, u32> {
-        let mut reduced: HashMap<u32, u32> = HashMap::new();
+    fn reduce(
+        rx: std::sync::mpsc::Receiver<HashMap<u32, u32>>,
+        map_file: Arc<RwLock<RedirectMapFile>>,
+    ) -> u32 {
+        let mut count = 0_u32;
+        let mut write_guard = map_file.as_ref().write().unwrap();
         for chunk in rx.iter() {
-            reduced.extend(chunk);
+            for (from, to) in chunk {
+                write_guard.set(from, to);
+                count += 1;
+            }
         }
-        log::info!("reduced to {} redirects", reduced.len());
-        reduced
+        log::info!("reduced to {} redirects", count);
+        count
+    }
+}
+
+pub struct RedirectMapFile {
+    map: memmap2::MmapMut,
+}
+
+impl RedirectMapFile {
+    pub fn new(path: PathBuf, max_page_id: u32) -> anyhow::Result<RedirectMapFile> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)
+            .expect("open edge proc db file");
+        let file_size: u64 = max_page_id as u64 * 4;
+        file.set_len(file_size)?;
+
+        let map = unsafe { memmap2::MmapMut::map_mut(&file).expect("map anon") };
+        Ok(RedirectMapFile { map })
     }
 
     pub fn get(&self, from: u32) -> Option<u32> {
-        let guard = self.redirects.read().unwrap();
-        guard.take().get(&from).cloned()
+        let u32_size = std::mem::size_of::<u32>();
+        let offset = (from as usize) * u32_size;
+        let to = u32::from_le_bytes(self.map[offset..offset + u32_size].try_into().unwrap());
+        if to == 0 {
+            None
+        } else {
+            Some(to)
+        }
+    }
+
+    pub fn set(&mut self, from: u32, to: u32) {
+        let u32_size = std::mem::size_of::<u32>();
+        let offset = (from as usize) * u32_size;
+        if offset + u32_size > self.map.len() {
+            log::error!(
+                "will not set redirect for {} to {}: out of bounds!",
+                from,
+                to
+            );
+            return;
+        }
+        self.map[offset..offset + u32_size].copy_from_slice(&to.to_le_bytes());
     }
 }
