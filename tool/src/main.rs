@@ -399,7 +399,7 @@ impl GraphDBBuilder {
             RedirectMapFile::new(self.db_paths.redirects_path(), max_page_id).unwrap(),
         ));
 
-        if db_status.redirects_resolved {
+        if !db_status.redirects_resolved {
             log::info!(
                 "loading redirects from {} to {}",
                 self.redirects_path.clone().display(),
@@ -423,7 +423,7 @@ impl GraphDBBuilder {
         }
 
         log::debug!("loading edges dump");
-        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(64);
+        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(4096);
         let pagelink_source = pagelink_source::WPPageLinkSource::new(path, pagelink_tx);
 
         log::debug!("truncating edge db");
