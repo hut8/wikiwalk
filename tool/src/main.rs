@@ -604,7 +604,7 @@ impl GraphDBBuilder {
         rx: Receiver<WPPageLink>,
         edge_db: &mut EdgeProcDB,
         db: DbConn,
-        redirects: &mut RedirectMap,
+        redirects: &mut HashMap<u32, u32>
     ) -> (u32, u32) {
         // look up and write in chunks
         let mut received_count = 0u32;
@@ -613,7 +613,7 @@ impl GraphDBBuilder {
         for page_link_chunk in &rx.iter().chunks(32760) {
             let page_links: Vec<WPPageLink> = page_link_chunk.collect();
             received_count += page_links.len() as u32;
-            let mut title_map = HashMap::new();
+            let mut title_map: HashMap<String,u32> = HashMap::new();
             let titles = page_links
                 .iter()
                 .map(|l| l.dest_page_title.clone())
@@ -630,9 +630,9 @@ impl GraphDBBuilder {
                     // is in the redirects table, which is loaded into the RedirectMap.
                     // this will make it appear that our current vertex (by title) maps
                     // to the page ID of the destination of the redirect
-                    match redirects.get(v.id) {
+                    match redirects.get(&v.id) {
                         Some(dest) => {
-                            title_map.insert(v.title, dest);
+                            title_map.insert(v.title, *dest);
                         }
                         None => {
                             redirect_failures.push(v);
@@ -644,10 +644,10 @@ impl GraphDBBuilder {
             }
 
             for link in page_links {
-                if let Some(dest) = title_map.get(&link.dest_page_title) {
+                if let Some(dest) = title_map.get(&link.dest_page_title).copied() {
                     let edge = Edge {
                         source_vertex_id: link.source_page_id,
-                        dest_vertex_id: *dest,
+                        dest_vertex_id: dest,
                     };
                     edge_db.write_edge(&edge);
                 } else {
@@ -683,8 +683,8 @@ impl GraphDBBuilder {
             "loading redirects from {}",
             self.redirects_path.clone().display()
         );
-        let mut redirects = RedirectMap::new(self.redirects_path.clone());
-        redirects.parse(db.clone()).await;
+        let redirects = RedirectMap::new(self.redirects_path.clone());
+        let mut redirects= redirects.parse(db.clone()).await;
         log::info!("loaded {} redirects", redirects.len());
 
         log::debug!("loading edges dump");
