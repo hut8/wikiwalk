@@ -695,7 +695,7 @@ impl GraphDBBuilder {
         let mut edge_db = edge_db.truncate();
 
         log::debug!("spawning pagelink source");
-        let pagelink_thread = thread::spawn(move || pagelink_source.run());
+        let pagelink_thread = pagelink_source.run();
 
         log::debug!("spawning edge resolver");
         let (resolved_total_count, resolved_hit_count) =
@@ -707,7 +707,7 @@ impl GraphDBBuilder {
         );
 
         log::debug!("joining pagelink count thread");
-        let edge_count = pagelink_thread.join().unwrap();
+        let edge_count = pagelink_thread.await;
         log::debug!("pagelink count = {}", edge_count);
         db_status.edge_count = edge_count;
 
@@ -1100,7 +1100,14 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool) {
 #[tokio::main]
 async fn main() {
     stderrlog::new()
-        // .module(module_path!())
+        .module(module_path!())
+        .module("wikiwalk")
+        .module("wikiwalk::graphdb")
+        .module("wikiwalk::fetch")
+        .module("wikiwalk::push")
+        .module("wikiwalk::sitemap")
+        .module("wikiwalk::page_source")
+        .module("wikiwalk::pagelink_source")
         .show_module_names(true)
         .quiet(false)
         .verbosity(3)
@@ -1108,7 +1115,7 @@ async fn main() {
         .init()
         .unwrap();
 
-    log::info!("WikiWalk");
+    log::info!("WikiWalk: {}", module_path!());
     let cli = Cli::parse();
 
     let home_dir = dirs::home_dir().unwrap();
@@ -1153,7 +1160,9 @@ async fn main() {
                     ),
                 None => None,
             };
-            run_fetch(&dump_dir, dump_status).await.expect("fetch failed");
+            run_fetch(&dump_dir, dump_status)
+                .await
+                .expect("fetch failed");
         }
         Command::FindLatest {
             urls,
