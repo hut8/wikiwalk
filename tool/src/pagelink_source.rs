@@ -65,42 +65,78 @@ impl WPPageLinkSource {
         }
     }
 
+    pub async fn count_lines(self) -> usize {
+        let pagelinks_sql_file = File::open(self.source_path).expect("open pagelinks file");
+        let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
+        let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_sql_file);
+        let pagelinks_sql = BufReader::new(pagelinks_sql);
+        let line_count = pagelinks_sql.lines().count();
+        log::info!(
+            "pagelinks line count: {} total bytes: {} bytes per line: {}",
+            line_count,
+            total_bytes,
+            (total_bytes as f64 / line_count as f64).round(),
+        );
+        line_count
+    }
+
     pub async fn run(self) -> u32 {
         let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
-        let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
-        let pagelinks_lock = Arc::new(pagelinks_sql_file);
-        // let file_cell = RefCell::new(pagelinks_sql_file);
-        // let file_lock = Arc::new(RwLock::new(file_cell));
-        let pagelinks_byte_counter = Arc::new(ByteReadCounter::new(pagelinks_lock));
-        let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_byte_counter.as_ref());
-        let pagelinks_sql = BufReader::new(pagelinks_sql);
-        let pagelinks_line_iter = pagelinks_sql.lines();
+        //let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
+        // let pagelinks_lock = Arc::new(pagelinks_sql_file);
+
+        // let pagelinks_byte_counter = Arc::new(ByteReadCounter::new(pagelinks_lock));
+
+        // let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_byte_counter.as_ref());
+        let pagelinks_sql_buf = BufReader::new(pagelinks_sql_file);
+        let pagelinks_sql = flate2::bufread::GzDecoder::new(pagelinks_sql_buf);
+        let reader = BufReader::new(pagelinks_sql);
+
+        let pagelinks_line_iter = reader.lines();
         let start = Instant::now();
-        let lines_iter = pagelinks_line_iter
+
+        let (chunk_tx, chunk_rx): (Sender<String>, Receiver<String>) =
+            crossbeam::channel::bounded(1024);
+        let num_cpus = num_cpus::get() * 2;
+        for i in 0..num_cpus {
+            let chunk_rx = chunk_rx.clone();
+            let sender = self.sender.clone();
+            let edge_count = self.edge_count.clone();
+            std::thread::spawn(move || {
+                for chunk in chunk_rx {
+                    log::info!("pagelinks load chunk: proc {}: {} bytes", i, chunk.len());
+                    Self::load_edges_dump_chunk(chunk, sender.clone(), edge_count.clone());
+                }
+            });
+        }
+
+        let byte_count = AtomicU64::new(0);
+
+        pagelinks_line_iter
             .map(|l| l.expect("read line"))
             .filter(|line| line.starts_with("INSERT "))
             .map(|line| {
-                let read_bytes = pagelinks_byte_counter.count();
+                // let read_bytes = pagelinks_byte_counter.count();
+                let read_bytes = byte_count.fetch_add(line.len() as u64, Ordering::Relaxed);
                 let elapsed = start.elapsed();
+
                 let bytes_per_second = read_bytes as f64 / elapsed.as_secs_f64();
-                let total_time_estimate = elapsed.mul_f64(total_bytes as f64 / read_bytes as f64);
-                let time_remaining = total_time_estimate - elapsed;
+                //                let total_time_estimate = elapsed.mul_f64(total_bytes as f64 / read_bytes as f64);
+                // let time_remaining = total_time_estimate - elapsed;
                 log::info!(
-                    "pagelinks load progress: {} {}/sec - {}% complete: {} remaining",
+                    // "pagelinks load progress: {} {}/sec - {}% complete: {} remaining",
+                    "pagelinks load progress: {} {}/sec",
                     human_bytes::human_bytes(read_bytes as f64),
                     human_bytes::human_bytes(bytes_per_second),
-                    100_f64 * (read_bytes as f64 / total_bytes as f64),
-                    indicatif::HumanDuration(time_remaining).to_string(),
+                    // 100_f64 * (read_bytes as f64 / total_bytes as f64),
+                    // indicatif::HumanDuration(time_remaining).to_string(),
                 );
                 line
+            })
+            .for_each(|line| {
+                chunk_tx.send(line).expect("send chunk");
             });
-        stream::iter(lines_iter).for_each_concurrent(num_cpus::get(), |line| {
-            let sender = self.sender.clone();
-            let edge_count = self.edge_count.clone();
-            async {
-                Self::load_edges_dump_chunk(line, sender, edge_count);
-            }
-        }).await;
+        drop(chunk_tx);
 
         log::info!("pagelinks load complete");
         self.edge_count.load(Ordering::Relaxed)
