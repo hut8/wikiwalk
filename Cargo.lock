@@ -2069,6 +2069,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lrumap"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1251ce8e8f9909600e127dcbe74ac50d8464e6685cf5953d37df7a741dbf9e9d"
+
+[[package]]
 name = "match_cfg"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4163,6 +4169,7 @@ dependencies = [
  "indicatif",
  "itertools 0.11.0",
  "log",
+ "lrumap",
  "memmap2 0.9.0",
  "memory-stats",
  "num_cpus",
