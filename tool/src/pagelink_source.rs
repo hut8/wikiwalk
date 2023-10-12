@@ -3,10 +3,9 @@ use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
     sync::{
-        atomic::{AtomicU32, AtomicU64, Ordering},
+        atomic::{AtomicU32, Ordering},
         Arc,
     },
-    time::Instant,
 };
 
 use crossbeam::channel::{Receiver, Sender};
@@ -57,46 +56,44 @@ impl WPPageLinkSource {
         let reader = BufReader::new(pagelinks_sql);
 
         let pagelinks_line_iter = reader.lines();
-        let start = Instant::now();
 
         let (chunk_tx, chunk_rx): (Sender<String>, Receiver<String>) =
             crossbeam::channel::bounded(1024);
+
         let num_cpus = num_cpus::get() * 2;
-        for i in 0..num_cpus {
+        for _ in 0..num_cpus {
             let chunk_rx = chunk_rx.clone();
             let sender = self.sender.clone();
             let edge_count = self.edge_count.clone();
             std::thread::spawn(move || {
                 for chunk in chunk_rx {
-                    log::info!("pagelinks load chunk: proc {}: {} bytes", i, chunk.len());
                     Self::load_edges_dump_chunk(chunk, sender.clone(), edge_count.clone());
                 }
             });
         }
 
-        let byte_count = AtomicU64::new(0);
+        // let byte_count = AtomicU64::new(0);
 
         pagelinks_line_iter
             .map(|l| l.expect("read line"))
             .filter(|line| line.starts_with("INSERT "))
-            .map(|line| {
-                // let read_bytes = pagelinks_byte_counter.count();
-                let read_bytes = byte_count.fetch_add(line.len() as u64, Ordering::Relaxed);
-                let elapsed = start.elapsed();
-
-                let bytes_per_second = read_bytes as f64 / elapsed.as_secs_f64();
-                //                let total_time_estimate = elapsed.mul_f64(total_bytes as f64 / read_bytes as f64);
-                // let time_remaining = total_time_estimate - elapsed;
-                log::info!(
-                    // "pagelinks load progress: {} {}/sec - {}% complete: {} remaining",
-                    "pagelinks load progress: {} {}/sec",
-                    human_bytes::human_bytes(read_bytes as f64),
-                    human_bytes::human_bytes(bytes_per_second),
-                    // 100_f64 * (read_bytes as f64 / total_bytes as f64),
-                    // indicatif::HumanDuration(time_remaining).to_string(),
-                );
-                line
-            })
+            // .map(|line| {
+            //     // let read_bytes = pagelinks_byte_counter.count();
+            //     let read_bytes = byte_count.fetch_add(line.len() as u64, Ordering::Relaxed);
+            //     let elapsed = start.elapsed();
+            //     let bytes_per_second = read_bytes as f64 / elapsed.as_secs_f64();
+            //     // let total_time_estimate = elapsed.mul_f64(total_bytes as f64 / read_bytes as f64);
+            //     // let time_remaining = total_time_estimate - elapsed;
+            //     log::info!(
+            //         // "pagelinks load progress: {} {}/sec - {}% complete: {} remaining",
+            //         "pagelinks load progress: {} {}/sec",
+            //         human_bytes::human_bytes(read_bytes as f64),
+            //         human_bytes::human_bytes(bytes_per_second),
+            //         // 100_f64 * (read_bytes as f64 / total_bytes as f64),
+            //         // indicatif::HumanDuration(time_remaining).to_string(),
+            //     );
+            //     line
+            // })
             .for_each(|line| {
                 chunk_tx.send(line).expect("send chunk");
             });
