@@ -29,20 +29,20 @@ impl WPPageLinkSource {
         }
     }
 
-    pub async fn count_lines(self) -> usize {
-        let pagelinks_sql_file = File::open(self.source_path).expect("open pagelinks file");
-        let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
-        let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_sql_file);
-        let pagelinks_sql = BufReader::new(pagelinks_sql);
-        let line_count = pagelinks_sql.lines().count();
-        log::info!(
-            "pagelinks line count: {} total bytes: {} bytes per line: {}",
-            line_count,
-            total_bytes,
-            (total_bytes as f64 / line_count as f64).round(),
-        );
-        line_count
-    }
+    // pub async fn count_lines(self) -> usize {
+    //     let pagelinks_sql_file = File::open(self.source_path).expect("open pagelinks file");
+    //     let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
+    //     let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_sql_file);
+    //     let pagelinks_sql = BufReader::new(pagelinks_sql);
+    //     let line_count = pagelinks_sql.lines().count();
+    //     log::info!(
+    //         "pagelinks line count: {} total bytes: {} bytes per line: {}",
+    //         line_count,
+    //         total_bytes,
+    //         (total_bytes as f64 / line_count as f64).round(),
+    //     );
+    //     line_count
+    // }
 
     pub async fn run(self) -> u32 {
         let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
