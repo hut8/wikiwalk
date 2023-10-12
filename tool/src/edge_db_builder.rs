@@ -68,12 +68,13 @@ impl EdgeProcDB {
       }
   }
 
-  pub fn write_fail(&mut self, source_vertex_id: u32, dest_page_title: String) {
-      let line = format!("{source_vertex_id},{dest_page_title}\n");
-      self.fail_writer
-          .write_all(line.as_bytes())
-          .expect("write edge fail");
-  }
+  // FIXME: Use this
+  // pub fn write_fail(&mut self, source_vertex_id: u32, dest_page_title: String) {
+  //     let line = format!("{source_vertex_id},{dest_page_title}\n");
+  //     self.fail_writer
+  //         .write_all(line.as_bytes())
+  //         .expect("write edge fail");
+  // }
 
   fn sort_basename(sort_by: &EdgeSort) -> String {
       format!(

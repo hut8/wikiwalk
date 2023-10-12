@@ -336,9 +336,9 @@ impl GraphDBBuilder {
         // 2. The link may point to a page that is a redirect (according to the page table),
         //    but the redirect destination is not present in the redirects table (less common)
         for pl in rx {
-          // Check LRU cache first (thread-local)
-          // TODO: make it shared? Might cause excessive contention
-          // TODO: Find hit rate. Is it even worth it?
+            // Check LRU cache first (thread-local)
+            // TODO: make it shared? Might cause excessive contention
+            // TODO: Find hit rate. Is it even worth it?
             if let Some(dest_vertex_id) = cache.get_without_update(&pl.dest_page_title) {
                 let edge = Edge {
                     source_vertex_id: pl.source_page_id,
@@ -371,6 +371,14 @@ impl GraphDBBuilder {
                     tx.send(edge).expect("send edge");
                 }
             }
+        }
+
+        // send the last batch now that we've read all the pagelinks
+        let batch_lookup = Self::lookup_batch(lookup_q, db.clone(), redirects.clone()).await;
+        // don't bother caching; cache is about to be dropped
+        // TODO: Send redirect failures
+        for edge in batch_lookup.edges {
+            tx.send(edge).expect("send edge");
         }
     }
 
