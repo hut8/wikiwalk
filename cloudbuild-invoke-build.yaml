@@ -35,7 +35,8 @@ steps:
           --config cloudbuild-service.yaml \
           --substitutions _SERVICE_IMAGE_TAGGED="$service_image_tagged",_SERVICE_IMAGE_TAGGED_LATEST="$service_image_tagged_latest",_DUMP_DATE="$latest_dump" \
           --region us-central1 \
-          --timeout=10800s
+          --timeout=10800s \
+          --async
         echo "Cloud build submitted"
       }
 timeout: 10800s
