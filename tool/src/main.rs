@@ -4,13 +4,13 @@ use std::hash::Hash;
 use std::io::Write;
 use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use std::{process, thread};
 
 use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
-use crossbeam::channel::Receiver;
+use crossbeam::channel::{Receiver, Sender};
 use edge_db_builder::{AdjacencySet, EdgeProcDB};
 use itertools::Itertools;
 use memory_stats::memory_stats;
@@ -29,6 +29,7 @@ use fetch::DumpStatus;
 use wikiwalk::dbstatus::DBStatus;
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::{RedirectMapBuilder, RedirectMapFile};
+use wikiwalk::schema::vertex::Model;
 use wikiwalk::{schema, Edge, GraphDB, Vertex};
 
 mod api;
@@ -70,6 +71,12 @@ struct GraphDBBuilder {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
 enum QueryAs {
     MaxVertexId,
+}
+
+struct BatchLookup {
+    edges: Vec<Edge>,
+    title_map: HashMap<String, u32>,
+    redirect_failures: Vec<Model>,
 }
 
 impl GraphDBBuilder {
@@ -315,69 +322,109 @@ impl GraphDBBuilder {
 
     async fn resolve_edges(
         rx: Receiver<WPPageLink>,
-        edge_db: &mut EdgeProcDB,
+        tx: Sender<Edge>,
+        redirects: Arc<RwLock<RedirectMapFile>>,
         db: DbConn,
-        redirects: std::sync::Arc<std::sync::RwLock<RedirectMapFile>>,
-    ) -> (u32, u32) {
-        // look up and write in chunks
+    ) {
+        let mut cache: lrumap::LruHashMap<String, u32> = lrumap::LruHashMap::new(100000);
+        let mut lookup_q: Vec<WPPageLink> = Vec::new();
 
-        let mut received_count = 0u32;
-        let mut hit_count = 0u32;
-        let mut redirect_failures = Vec::new();
-        for page_link_chunk in &rx.iter().chunks(32760) {
-            let page_links: Vec<WPPageLink> = page_link_chunk.collect();
-            received_count += page_links.len() as u32;
-            let mut title_map: HashMap<String, u32> = HashMap::new();
-            let titles = page_links
-                .iter()
-                .map(|l| l.dest_page_title.clone())
-                .unique();
-            let vertexes = schema::vertex::Entity::find()
-                .filter(schema::vertex::Column::Title.is_in(titles))
-                .all(&db)
-                .await
-                .expect("query vertexes by title");
-            for v in vertexes {
-                hit_count += 1;
-                if v.is_redirect {
-                    // in this case, "v" is a redirect. The destination of the redirect
-                    // is in the redirects table, which is loaded into the RedirectMap.
-                    // this will make it appear that our current vertex (by title) maps
-                    // to the page ID of the destination of the redirect
-                    let redirects = redirects.read().unwrap();
-                    match redirects.get(v.id) {
-                        Some(dest) => {
-                            title_map.insert(v.title, dest);
-                        }
-                        None => {
-                            redirect_failures.push(v);
+        for pl in rx {
+            if let Some(dest_vertex_id) = cache.get_without_update(&pl.dest_page_title) {
+                let edge = Edge {
+                    source_vertex_id: pl.source_page_id,
+                    dest_vertex_id: *dest_vertex_id,
+                };
+                tx.send(edge).expect("send edge");
+            } else {
+                lookup_q.push(pl);
+                if lookup_q.len() > 32000 {
+                    let pending_q = lookup_q.clone();
+                    let batch_lookup =
+                        Self::lookup_batch(pending_q, db.clone(), redirects.clone()).await;
+                    for (title, id) in batch_lookup.title_map {
+                        cache.push(title, id);
+                    }
+                    for failure in batch_lookup.redirect_failures {
+                        log::debug!("redirect failure: {} marked as redirect but no entry in redirects table", failure.title);
+                    }
+                    for edge in batch_lookup.edges {
+                        tx.send(edge).expect("send edge");
+                    }
+                    for pl in lookup_q.iter() {
+                        if let Some(dest_vertex_id) = cache.get_without_update(&pl.dest_page_title)
+                        {
+                            let edge = Edge {
+                                source_vertex_id: pl.source_page_id,
+                                dest_vertex_id: *dest_vertex_id,
+                            };
+                            tx.send(edge).expect("send edge");
                         }
                     }
-                    continue;
-                }
-                title_map.insert(v.title, v.id);
-            }
-
-            for link in page_links {
-                if let Some(dest) = title_map.get(&link.dest_page_title).copied() {
-                    let edge = Edge {
-                        source_vertex_id: link.source_page_id,
-                        dest_vertex_id: dest,
-                    };
-                    edge_db.write_edge(&edge);
-                } else {
-                    edge_db.write_fail(link.source_page_id, link.dest_page_title);
                 }
             }
         }
+    }
 
-        let failed_ids = redirect_failures.iter().map(|p| p.id).collect_vec();
+    async fn lookup_batch(
+        q: Vec<WPPageLink>,
+        db: DbConn,
+        redirects: Arc<RwLock<RedirectMapFile>>,
+    ) -> BatchLookup {
+        let mut title_map: HashMap<String, u32> = HashMap::new();
+        let titles = q.iter().map(|l| l.dest_page_title.clone()).unique();
+        let vertexes = schema::vertex::Entity::find()
+            .filter(schema::vertex::Column::Title.is_in(titles))
+            .all(&db)
+            .await
+            .expect("query vertexes by title");
 
-        log::info!(
-            "redirection failures: {}",
-            serde_json::to_string(&failed_ids).unwrap()
-        );
-        (received_count, hit_count)
+        let mut redirect_failures = Vec::new();
+        for v in vertexes {
+            if v.is_redirect {
+                // in this case, "v" is a redirect. The destination of the redirect
+                // is in the redirects table, which is loaded into the RedirectMap.
+                // this will make it appear that our current vertex (by title) maps
+                // to the page ID of the destination of the redirect
+                let redirects = redirects.read().unwrap();
+                match redirects.get(v.id) {
+                    Some(dest) => {
+                        title_map.insert(v.title, dest);
+                    }
+                    None => {
+                        redirect_failures.push(v);
+                    }
+                }
+                continue;
+            }
+            title_map.insert(v.title, v.id);
+        }
+        let mut edges = Vec::new();
+        for pl in q {
+            if let Some(dest) = title_map.get(&pl.dest_page_title).copied() {
+                let edge = Edge {
+                    source_vertex_id: pl.source_page_id,
+                    dest_vertex_id: dest,
+                };
+                edges.push(edge);
+            }
+        }
+
+        BatchLookup {
+            edges,
+            title_map,
+            redirect_failures,
+        }
+    }
+
+    async fn write_edges(rx: Receiver<Edge>, edge_db: &mut EdgeProcDB) -> u32 {
+        let mut count = 0;
+        // look up and write in chunks
+        for link in rx {
+            edge_db.write_edge(&link);
+            count += 1;
+        }
+        count
     }
 
     // load edges from the pagelinks.sql dump
@@ -434,13 +481,28 @@ impl GraphDBBuilder {
 
         log::debug!("spawning edge resolver");
 
-        let (resolved_total_count, resolved_hit_count) =
-            Self::resolve_edges(pagelink_rx, &mut edge_db, db, redirects_map_file.clone()).await;
-        log::debug!(
-            "edge resolver: received {} pagelinks and resolved {}",
-            resolved_total_count,
-            resolved_hit_count
-        );
+        let (edge_tx, edge_rx) = crossbeam::channel::bounded(2048);
+        for _ in 0..num_cpus::get() {
+            let redirects_map_file = redirects_map_file.clone();
+            let pagelink_rx = pagelink_rx.clone();
+            let edge_tx = edge_tx.clone();
+            let db = db.clone();
+            thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread().enable_all()
+                    .build()
+                    .unwrap();
+                rt.block_on(Self::resolve_edges(
+                    pagelink_rx,
+                    edge_tx,
+                    redirects_map_file,
+                    db,
+                ));
+                log::info!("edge resolver thread exiting");
+            });
+        }
+
+        let edge_write_count = Self::write_edges(edge_rx, &mut edge_db).await;
+        log::debug!("edge resolver: written {}", edge_write_count,);
 
         log::debug!("joining pagelink count thread");
         let edge_count = pagelink_thread.await.expect("join pagelink thread");
