@@ -5,7 +5,7 @@ use std::io::Write;
 use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use std::{process, thread};
 
 use chrono::NaiveDate;
@@ -137,6 +137,7 @@ impl GraphDBBuilder {
             .create_if_missing(true);
         let pool = SqlitePoolOptions::new()
             .max_connections(64)
+            .acquire_timeout(Duration::from_secs(600))
             .connect_with(opts)
             .await
             .expect("db connect");
