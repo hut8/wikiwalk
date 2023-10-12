@@ -22,7 +22,7 @@ use sea_orm::{
     EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::SqlitePool;
 
 use fetch::DumpStatus;
@@ -135,7 +135,11 @@ impl GraphDBBuilder {
             .journal_mode(SqliteJournalMode::Memory)
             .filename(&db_path)
             .create_if_missing(true);
-        let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(64)
+            .connect_with(opts)
+            .await
+            .expect("db connect");
         let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
 
         if !db_status.vertexes_loaded {
@@ -525,10 +529,11 @@ impl GraphDBBuilder {
                 log::info!("edge resolver thread exiting");
             });
         }
+        drop(edge_tx);
 
         log::debug!("running edge writer");
         let edge_write_count = Self::write_edges(edge_rx, &mut edge_db).await;
-        log::debug!("edge resolver: wrote {} edges", edge_write_count,);
+        log::debug!("edge resolver: wrote {} edges", edge_write_count);
 
         log::debug!("joining pagelink thread");
         let edge_count = pagelink_thread.await.expect("join pagelink thread");
