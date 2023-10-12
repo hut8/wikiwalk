@@ -329,38 +329,46 @@ impl GraphDBBuilder {
         let mut cache: lrumap::LruHashMap<String, u32> = lrumap::LruHashMap::new(100000);
         let mut lookup_q: Vec<WPPageLink> = Vec::new();
 
+        // looping over every relevant entry in the pagelinks table,
+        // we want to send as many edges as we possibly can resolve. Not all pagelink table entries
+        // will be resolved, because:
+        // 1. The link may point to a page that doesn't exist (very common)
+        // 2. The link may point to a page that is a redirect (according to the page table),
+        //    but the redirect destination is not present in the redirects table (less common)
         for pl in rx {
+          // Check LRU cache first (thread-local)
+          // TODO: make it shared? Might cause excessive contention
+          // TODO: Find hit rate. Is it even worth it?
             if let Some(dest_vertex_id) = cache.get_without_update(&pl.dest_page_title) {
                 let edge = Edge {
                     source_vertex_id: pl.source_page_id,
                     dest_vertex_id: *dest_vertex_id,
                 };
                 tx.send(edge).expect("send edge");
-            } else {
-                lookup_q.push(pl);
-                if lookup_q.len() > 32000 {
-                    let pending_q = lookup_q.clone();
-                    let batch_lookup =
-                        Self::lookup_batch(pending_q, db.clone(), redirects.clone()).await;
-                    for (title, id) in batch_lookup.title_map {
-                        cache.push(title, id);
-                    }
-                    for failure in batch_lookup.redirect_failures {
-                        log::debug!("redirect failure: {} marked as redirect but no entry in redirects table", failure.title);
-                    }
-                    for edge in batch_lookup.edges {
-                        tx.send(edge).expect("send edge");
-                    }
-                    for pl in lookup_q.iter() {
-                        if let Some(dest_vertex_id) = cache.get_without_update(&pl.dest_page_title)
-                        {
-                            let edge = Edge {
-                                source_vertex_id: pl.source_page_id,
-                                dest_vertex_id: *dest_vertex_id,
-                            };
-                            tx.send(edge).expect("send edge");
-                        }
-                    }
+                continue;
+            }
+
+            // We don't want to look up every page that's passed in individually. SQLite
+            // is much more effective if we put it in batches. The maximum number of placeholders
+            // seems to be roughly 2^15 (signed 16-bit integer) minus a few, so we'll
+            // batch our lookups until we hit that point.
+            lookup_q.push(pl);
+            if lookup_q.len() > 32000 {
+                let pending_q = lookup_q.clone();
+                lookup_q.clear();
+                let batch_lookup =
+                    Self::lookup_batch(pending_q, db.clone(), redirects.clone()).await;
+                for (title, id) in batch_lookup.title_map {
+                    cache.push(title, id);
+                }
+                for failure in batch_lookup.redirect_failures {
+                    log::debug!(
+                        "redirect failure: {} marked as redirect but no entry in redirects table",
+                        failure.title
+                    );
+                }
+                for edge in batch_lookup.edges {
+                    tx.send(edge).expect("send edge");
                 }
             }
         }
@@ -408,6 +416,7 @@ impl GraphDBBuilder {
                 };
                 edges.push(edge);
             }
+            // FIXME: If title not found, send to the "fail log" thing
         }
 
         BatchLookup {
@@ -480,7 +489,6 @@ impl GraphDBBuilder {
         let pagelink_thread = tokio::spawn(pagelink_source.run());
 
         log::debug!("spawning edge resolver");
-
         let (edge_tx, edge_rx) = crossbeam::channel::bounded(2048);
         for _ in 0..num_cpus::get() {
             let redirects_map_file = redirects_map_file.clone();
@@ -488,7 +496,8 @@ impl GraphDBBuilder {
             let edge_tx = edge_tx.clone();
             let db = db.clone();
             thread::spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread().enable_all()
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
                     .build()
                     .unwrap();
                 rt.block_on(Self::resolve_edges(
@@ -501,10 +510,11 @@ impl GraphDBBuilder {
             });
         }
 
+        log::debug!("running edge writer");
         let edge_write_count = Self::write_edges(edge_rx, &mut edge_db).await;
-        log::debug!("edge resolver: written {}", edge_write_count,);
+        log::debug!("edge resolver: wrote {} edges", edge_write_count,);
 
-        log::debug!("joining pagelink count thread");
+        log::debug!("joining pagelink thread");
         let edge_count = pagelink_thread.await.expect("join pagelink thread");
         log::debug!("pagelink count = {}", edge_count);
         db_status.edge_count = edge_count;
