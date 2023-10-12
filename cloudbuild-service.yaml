@@ -7,7 +7,7 @@ steps:
 - name: gcr.io/cloud-builders/gsutil
   args:
     - 'cp'
-    - 'gs://wikiwalk/enwiki-${_DUMP_DATE}-*.sql.gz'
+    - 'gs://wikiwalk/dumps/enwiki-${_DUMP_DATE}-*.sql.gz'
     - './data/dumps/'
 - name: bash
   args:
