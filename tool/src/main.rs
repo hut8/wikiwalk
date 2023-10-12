@@ -77,6 +77,7 @@ struct BatchLookup {
     edges: Vec<Edge>,
     title_map: HashMap<String, u32>,
     redirect_failures: Vec<Model>,
+    lookup_failures: Vec<String>,
 }
 
 impl GraphDBBuilder {
@@ -326,7 +327,7 @@ impl GraphDBBuilder {
         redirects: Arc<RwLock<RedirectMapFile>>,
         db: DbConn,
     ) {
-        let mut cache: lrumap::LruHashMap<String, u32> = lrumap::LruHashMap::new(100000);
+        let mut cache: lrumap::LruHashMap<String, Option<u32>> = lrumap::LruHashMap::new(100000);
         let mut lookup_q: Vec<WPPageLink> = Vec::new();
 
         // looping over every relevant entry in the pagelinks table,
@@ -337,14 +338,17 @@ impl GraphDBBuilder {
         //    but the redirect destination is not present in the redirects table (less common)
         for pl in rx {
             // Check LRU cache first (thread-local)
+            // The fact that a lookup is failed is important; we should cache that too.
             // TODO: make it shared? Might cause excessive contention
             // TODO: Find hit rate. Is it even worth it?
-            if let Some(dest_vertex_id) = cache.get_without_update(&pl.dest_page_title) {
-                let edge = Edge {
-                    source_vertex_id: pl.source_page_id,
-                    dest_vertex_id: *dest_vertex_id,
-                };
-                tx.send(edge).expect("send edge");
+            if let Some(cache_entry) = cache.get(&pl.dest_page_title) {
+                if let Some(dest_vertex_id) = cache_entry {
+                    let edge = Edge {
+                        source_vertex_id: pl.source_page_id,
+                        dest_vertex_id: *dest_vertex_id,
+                    };
+                    tx.send(edge).expect("send edge");
+                }
                 continue;
             }
 
@@ -359,13 +363,14 @@ impl GraphDBBuilder {
                 let batch_lookup =
                     Self::lookup_batch(pending_q, db.clone(), redirects.clone()).await;
                 for (title, id) in batch_lookup.title_map {
-                    cache.push(title, id);
+                    cache.push(title, Some(id));
                 }
                 for failure in batch_lookup.redirect_failures {
-                    log::debug!(
-                        "redirect failure: {} marked as redirect but no entry in redirects table",
-                        failure.title
-                    );
+                    cache.push(failure.title, None);
+                    // TODO: Send this somewhere for debugging
+                }
+                for failure in batch_lookup.lookup_failures {
+                    cache.push(failure, None);
                 }
                 for edge in batch_lookup.edges {
                     tx.send(edge).expect("send edge");
@@ -416,6 +421,7 @@ impl GraphDBBuilder {
             title_map.insert(v.title, v.id);
         }
         let mut edges = Vec::new();
+        let mut lookup_failures: Vec<String> = Vec::new();
         for pl in q {
             if let Some(dest) = title_map.get(&pl.dest_page_title).copied() {
                 let edge = Edge {
@@ -423,14 +429,16 @@ impl GraphDBBuilder {
                     dest_vertex_id: dest,
                 };
                 edges.push(edge);
+            } else {
+                lookup_failures.push(pl.dest_page_title);
             }
-            // FIXME: If title not found, send to the "fail log" thing
         }
 
         BatchLookup {
             edges,
             title_map,
             redirect_failures,
+            lookup_failures,
         }
     }
 
