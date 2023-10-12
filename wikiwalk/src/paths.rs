@@ -113,6 +113,10 @@ impl DBPaths {
         self.path_for("vertex-al-ix")
     }
 
+    pub fn redirects_path(&self) -> PathBuf {
+        self.path_for("redirects")
+    }
+
     pub fn graph_db(&self) -> PathBuf {
         self.path_for("graph.db")
     }

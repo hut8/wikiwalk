@@ -3,13 +3,13 @@ use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
     sync::{
-        atomic::{AtomicU32, Ordering},
+        atomic::{AtomicU32, AtomicU64, Ordering},
         Arc,
     },
+    time::Instant,
 };
 
-use crossbeam::channel::Sender;
-use rayon::prelude::*;
+use crossbeam::channel::{Receiver, Sender};
 
 use crate::WPPageLink;
 
@@ -29,30 +29,84 @@ impl WPPageLinkSource {
         }
     }
 
-    pub fn run(self) -> u32 {
-        let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
+    pub async fn count_lines(self) -> usize {
+        let pagelinks_sql_file = File::open(self.source_path).expect("open pagelinks file");
+        let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
         let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_sql_file);
         let pagelinks_sql = BufReader::new(pagelinks_sql);
-        let pagelinks_line_iter = pagelinks_sql.lines();
-        log::info!("loading pagelinks");
-        pagelinks_line_iter.par_bridge().for_each(|chunk| {
-            let line = chunk.expect("read line");
-            if !line.starts_with("INSERT ") {
-                return;
-            }
+        let line_count = pagelinks_sql.lines().count();
+        log::info!(
+            "pagelinks line count: {} total bytes: {} bytes per line: {}",
+            line_count,
+            total_bytes,
+            (total_bytes as f64 / line_count as f64).round(),
+        );
+        line_count
+    }
+
+    pub async fn run(self) -> u32 {
+        let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
+        //let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
+        // let pagelinks_lock = Arc::new(pagelinks_sql_file);
+
+        // let pagelinks_byte_counter = Arc::new(ByteReadCounter::new(pagelinks_lock));
+
+        // let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_byte_counter.as_ref());
+        let pagelinks_sql_buf = BufReader::new(pagelinks_sql_file);
+        let pagelinks_sql = flate2::bufread::GzDecoder::new(pagelinks_sql_buf);
+        let reader = BufReader::new(pagelinks_sql);
+
+        let pagelinks_line_iter = reader.lines();
+        let start = Instant::now();
+
+        let (chunk_tx, chunk_rx): (Sender<String>, Receiver<String>) =
+            crossbeam::channel::bounded(1024);
+        let num_cpus = num_cpus::get() * 2;
+        for i in 0..num_cpus {
+            let chunk_rx = chunk_rx.clone();
             let sender = self.sender.clone();
             let edge_count = self.edge_count.clone();
-            Self::load_edges_dump_chunk(line, sender, edge_count);
-        });
+            std::thread::spawn(move || {
+                for chunk in chunk_rx {
+                    log::info!("pagelinks load chunk: proc {}: {} bytes", i, chunk.len());
+                    Self::load_edges_dump_chunk(chunk, sender.clone(), edge_count.clone());
+                }
+            });
+        }
+
+        let byte_count = AtomicU64::new(0);
+
+        pagelinks_line_iter
+            .map(|l| l.expect("read line"))
+            .filter(|line| line.starts_with("INSERT "))
+            .map(|line| {
+                // let read_bytes = pagelinks_byte_counter.count();
+                let read_bytes = byte_count.fetch_add(line.len() as u64, Ordering::Relaxed);
+                let elapsed = start.elapsed();
+
+                let bytes_per_second = read_bytes as f64 / elapsed.as_secs_f64();
+                //                let total_time_estimate = elapsed.mul_f64(total_bytes as f64 / read_bytes as f64);
+                // let time_remaining = total_time_estimate - elapsed;
+                log::info!(
+                    // "pagelinks load progress: {} {}/sec - {}% complete: {} remaining",
+                    "pagelinks load progress: {} {}/sec",
+                    human_bytes::human_bytes(read_bytes as f64),
+                    human_bytes::human_bytes(bytes_per_second),
+                    // 100_f64 * (read_bytes as f64 / total_bytes as f64),
+                    // indicatif::HumanDuration(time_remaining).to_string(),
+                );
+                line
+            })
+            .for_each(|line| {
+                chunk_tx.send(line).expect("send chunk");
+            });
+        drop(chunk_tx);
+
         log::info!("pagelinks load complete");
         self.edge_count.load(Ordering::Relaxed)
     }
 
-    fn load_edges_dump_chunk(
-        chunk: String,
-        sender: Sender<WPPageLink>,
-        count: Arc<AtomicU32>,
-    ) {
+    fn load_edges_dump_chunk(chunk: String, sender: Sender<WPPageLink>, count: Arc<AtomicU32>) {
         use parse_mediawiki_sql::{
             field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
         };

@@ -5,6 +5,7 @@ pub struct DBStatus {
     #[serde(rename = "dump_date")]
     pub dump_date_str: String,
     pub vertexes_loaded: bool,
+    pub redirects_resolved: bool,
     pub edges_resolved: bool,
     pub edges_sorted: bool,
     pub build_complete: bool,
