@@ -1,14 +1,14 @@
 #!/bin/bash
+set -euo pipefail
+
 # Copy the latest dump from the Wikimedia Foundation to Google Cloud Storage.
 hash rclone 2>/dev/null || {
   echo >&2 "I require rclone but it's not installed.  Aborting."
   exit 1
 }
 
-tool="${TOOL_PATH:-wikiwalk-tool}"
+tool="${TOOL_PATH:-/tool}"
 dump_source_host="https://dumps.wikimedia.org/"
-
-env
 
 while read -r line
 do
