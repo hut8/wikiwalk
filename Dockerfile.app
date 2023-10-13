@@ -13,7 +13,14 @@ ENV RCLONE_GCS_BUCKET_POLICY_ONLY="true"
 ENV RCLONE_GCS_OBJECT_ACL="private"
 ENV RCLONE_GCS_ENV_AUTH="true"
 
-RUN apt-get update && apt-get install -y libssl-dev pkg-config libsqlite3-dev jq rclone && rm -rf /var/lib/apt/lists/*
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | \
+  tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+  curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
+  apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add -
+RUN apt-get update \
+  && apt-get install -y google-cloud-cli libssl-dev pkg-config libsqlite3-dev jq rclone && \
+  rm -rf /var/lib/apt/lists/*
+
 RUN cargo install cargo-chef --locked
 
 # Plan the build with chef

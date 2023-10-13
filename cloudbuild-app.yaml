@@ -1,3 +1,5 @@
+# Build tool and server
+# The generated image also has rsync and gcloud
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -7,16 +9,13 @@ steps:
     - '-t'
     - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
     - '-f'
-    - 'Dockerfile'
+    - 'Dockerfile.app'
     - '.'
   - name: 'gcr.io/cloud-builders/docker'
     args:
     - 'push'
+    - '-a'
     - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA'
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-    - 'push'
-    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
 timeout: 10800s
 options:
   machineType: 'E2_HIGHCPU_8'
