@@ -1,6 +1,5 @@
 #!/bin/bash
-# * Download the latest Wikipedia dump files
-# * Push into GCS
+# Copy the latest dump from the Wikimedia Foundation to Google Cloud Storage.
 hash rclone 2>/dev/null || {
   echo >&2 "I require rclone but it's not installed.  Aborting."
   exit 1
