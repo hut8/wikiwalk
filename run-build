@@ -8,6 +8,8 @@ if [ -z "${DATA_ROOT:-}" ]; then
   exit 1
 fi
 
+tool_path="${TOOL_PATH:-/tool}"
+
 dump_date="$($tool_path find-latest --date)"
 echo "building dump for: $dump_date"
 
@@ -53,8 +55,6 @@ submit_service_build() {
 echo "using tool path: ${tool_path}"
 
 ./run-import-dumps
-
-tool_path="${TOOL_PATH:-/tool}"
 
 if check_latest_is_built; then
   echo "latest dump: $dump_date is already built"
