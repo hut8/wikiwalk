@@ -57,7 +57,7 @@ echo "using tool path: ${tool_path}"
 ./run-import-dumps
 
 if check_latest_is_built; then
-  echo "latest dump: $dump_date is already built"
+  submit_service_build
   exit 0
 fi
 
