@@ -14,8 +14,11 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
     - 'push'
-    - '-a'
     - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+    - 'push'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
 timeout: 10800s
 options:
   machineType: 'E2_HIGHCPU_8'
