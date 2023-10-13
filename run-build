@@ -3,31 +3,76 @@ set -euo pipefail
 
 cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
-if [ -z "${DUMP_DATE:-}" ]; then
-  echo "DUMP_DATE must be set"
-  exit 1
-fi
-
 if [ -z "${DATA_ROOT:-}" ]; then
   echo "DATA_ROOT must be set"
   exit 1
 fi
 
+dump_date="$($tool_path find-latest --date)"
+echo "building dump for: $dump_date"
+
+check_latest_is_built() {
+  local status_path
+  local status_data
+  local is_built
+  status_path="gs://wikiwalk/${dump_date}/status.json"
+  echo "checking if latest dump: $dump_date is already built at $status_path"
+  status_data="$(gcloud storage cat "${status_path}")" || return 1
+  echo "status:"
+  echo "$status_data"
+  is_built="$(echo "$status_data" | jq .build_complete)"
+  if [ "$is_built" = "true" ]; then
+    echo "latest dump: $dump_date is already built"
+    return 0
+  else
+    echo "latest dump: $dump_date is not built"
+    return 1
+  fi
+}
+
+submit_service_build() {
+  local service_image
+  local service_image_tagged
+  service_image="us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-service"
+  service_image_tagged="$service_image:$COMMIT_SHA-$dump_date"
+  echo "Checking for image: '$service_image_tagged'"
+
+  gcloud artifacts docker images describe "$service_image_tagged" || {
+    echo "Image not found for $service_image_tagged, building..."
+    service_image_tagged_latest="$service_image:latest"
+    gcloud builds submit . \
+      --config cloudbuild-service.yaml \
+      --substitutions _SERVICE_IMAGE_TAGGED="$service_image_tagged",_SERVICE_IMAGE_TAGGED_LATEST="$service_image_tagged_latest",_DUMP_DATE="$dump_date" \
+      --region us-central1 \
+      --timeout=10800s \
+      --async
+    echo "Cloud build submitted"
+  }
+}
+
+echo "using tool path: ${tool_path}"
+
 ./run-import-dumps
 
 tool_path="${TOOL_PATH:-wikiwalk-tool}"
-echo "using tool path: ${tool_path}"
-echo "building dump for: ${DUMP_DATE}"
+
+if check_latest_is_built; then
+  echo "latest dump: $dump_date is already built"
+  exit 0
+fi
 
 echo "fetching dumps from google cloud"
 mkdir -p "$DATA_ROOT/dumps"
-gcloud storage cp "gs://wikiwalk/dumps/enwiki-${DUMP_DATE}-*.sql.gz" "$DATA_ROOT/dumps"
+gcloud storage cp "gs://wikiwalk/dumps/enwiki-${dump_date}-*.sql.gz" "$DATA_ROOT/dumps"
 
 echo "building dump"
-"$tool_path" build --dump-date "$DUMP_DATE" --data-path "$DATA_ROOT"
+"$tool_path" build --dump-date "$dump_date" --data-path "$DATA_ROOT"
 
 echo "building sitemap"
 "$tool_path" sitemap --data-path "$DATA_ROOT"
 
 echo "copying data to google cloud"
-gcloud storage cp --recursive "${DATA_ROOT}/${DUMP_DATE}/*" "gs://wikiwalk/${DUMP_DATE}/"
+gcloud storage cp --recursive "${DATA_ROOT}/${dump_date}/*" "gs://wikiwalk/${dump_date}/"
+
+echo "submitting service build"
+submit_service_build

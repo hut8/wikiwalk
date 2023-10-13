@@ -1,5 +1,5 @@
 # Base for planner and builder
-FROM rust:1.72.1-slim-bullseye AS chef
+FROM rust:1.72.1-bullseye AS chef
 WORKDIR /app
 ENV RUST_BACKTRACE=full
 ENV DATA_ROOT=/data

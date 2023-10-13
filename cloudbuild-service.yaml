@@ -1,18 +1,4 @@
 steps:
-- name: bash
-  args:
-    - 'mkdir'
-    - '-p'
-    - './data/dumps/'
-- name: gcr.io/cloud-builders/gsutil
-  args:
-    - 'cp'
-    - 'gs://wikiwalk/dumps/enwiki-${_DUMP_DATE}-*.sql.gz'
-    - './data/dumps/'
-- name: bash
-  args:
-    - 'find'
-    - './data/'
 - name: 'gcr.io/cloud-builders/docker'
   args:
     - 'build'
@@ -28,6 +14,7 @@ steps:
 - name: gcr.io/cloud-builders/docker
   args:
     - 'push'
+    - '-a'
     - '${_SERVICE_IMAGE_TAGGED_LATEST}'
 - name: gcr.io/cloud-builders/docker
   args:
