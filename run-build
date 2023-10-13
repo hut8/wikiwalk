@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+
+if [ -z "${DUMP_DATE:-}" ]; then
+  echo "DUMP_DATE must be set"
+  exit 1
+fi
+
+if [ -z "${DATA_ROOT:-}" ]; then
+  echo "DATA_ROOT must be set"
+  exit 1
+fi
+
+./run-import-dumps
+
+tool_path="${TOOL_PATH:-wikiwalk-tool}"
+echo "using tool path: ${tool_path}"
+echo "building dump for: ${DUMP_DATE}"
+
+echo "fetching dumps from google cloud"
+mkdir -p "$DATA_ROOT/dumps"
+gcloud storage cp "gs://wikiwalk/dumps/enwiki-${DUMP_DATE}-*.sql.gz" "$DATA_ROOT/dumps"
+
+echo "building dump"
+"$tool_path" build --dump-date "$DUMP_DATE" --data-path "$DATA_ROOT"
+
+echo "building sitemap"
+"$tool_path" sitemap --data-path "$DATA_ROOT"
+
+echo "copying data to google cloud"
+gcloud storage cp --recursive "${DATA_ROOT}/${DUMP_DATE}/*" "gs://wikiwalk/${DUMP_DATE}/"
