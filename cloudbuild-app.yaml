@@ -10,15 +10,14 @@ steps:
     - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
     - '-f'
     - 'Dockerfile.app'
+    - '--cache-from'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
     - '.'
   - name: 'gcr.io/cloud-builders/docker'
     args:
     - 'push'
-    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:$COMMIT_SHA'
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-    - 'push'
-    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
+    - '-a'
+    - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app'
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:
