@@ -9,10 +9,6 @@ steps:
       -t "${_SERVICE_IMAGE_TAGGED_LATEST}" -t "${_SERVICE_IMAGE_TAGGED}" \
       -f Dockerfile.service \
       --build-arg "DUMP_DATE=${_DUMP_DATE},SERVICE_ACCOUNT_KEY=${SERVICE_ACCOUNT_KEY}" .
-  availableSecrets:
-    secretManager:
-    - versionName: projects/418523344453/secrets/wikiwalk-build-service-account-key
-      env: 'SERVICE_ACCOUNT_KEY'
 - name: gcr.io/cloud-builders/docker
   args:
     - 'push'
@@ -21,3 +17,7 @@ steps:
   args:
     - 'push'
     - '${_SERVICE_IMAGE_TAGGED}'
+availableSecrets:
+  secretManager:
+  - versionName: projects/418523344453/secrets/wikiwalk-build-service-account-key
+    env: 'SERVICE_ACCOUNT_KEY'
