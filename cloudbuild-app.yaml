@@ -20,7 +20,8 @@ steps:
     - 'push'
     - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
   # Start Cloud Run Job to build the database (if necessary) and deploy the app to Cloud Run
-  - name: 'gcr.io/cloud-builders/gcloud'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
     args:
     - 'run'
     - 'jobs'
