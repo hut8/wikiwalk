@@ -2,6 +2,6 @@ FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app
 WORKDIR /app
 ARG DUMP_DATE
 RUN mkdir -p /data/${DUMP_DATE} && \
-  gcloud cp --recursive "gs://wikiwalk-dumps/${DUMP_DATE}/*" "/data/${DUMP_DATE}" && \
+  gcloud storage cp --recursive "gs://wikiwalk-dumps/${DUMP_DATE}/*" "/data/${DUMP_DATE}" && \
   ln -s /data/${DUMP_DATE} /data/current
 CMD [ "/server" ]
