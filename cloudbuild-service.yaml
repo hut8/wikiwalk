@@ -19,7 +19,7 @@ steps:
     - '${_SERVICE_IMAGE_TAGGED}'
 availableSecrets:
   secretManager:
-  - versionName: projects/418523344453/secrets/wikiwalk-build-service-account-key
+  - versionName: projects/418523344453/secrets/wikiwalk-build-service-account-key/versions/1
     env: 'SERVICE_ACCOUNT_KEY'
 options:
     dynamicSubstitutions: true
