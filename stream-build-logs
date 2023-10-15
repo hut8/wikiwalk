@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euo pipefail
+
+show_stream() {
+  local build_id
+  build_id="$1"
+  gcloud builds log --region us-central1 --stream "$build_id"
+  exit 0
+}
+
+current_build="$(gcloud builds list --ongoing --region=us-central1 --format=json --filter='substitutions.TRIGGER_NAME="wikiwalk-app"') --format='value(id)'"
+if [ -n "$current_build" ]; then
+  echo "app build running"
+  show_stream "$current_build"
+fi
+
+echo "No app builds currently running. Checking for service builds."
+current_build="$(gcloud builds list --ongoing --region=us-central1 --format=json --filter='substitutions.TRIGGER_NAME="wikiwalk-service"') --format='value(id)'"
+if [ -n "$current_build" ]; then
+  echo "service build running"
+  show_stream "$current_build"
+fi
+
+echo "No service builds currently running. Checking for cloud run jobs."
+
+job="$(gcloud run jobs executions list --filter='metadata.labels["run.googleapis.com/job"] = wikiwalk-build' --format='value(metadata.name)' --sort-by='~status.startTime' --limit 1)"
+if [ -n "$job" ]; then
+  echo "cloud run job running"
+  gcloud beta run jobs logs tail "$job"
+  exit 0
+fi
