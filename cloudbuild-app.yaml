@@ -19,6 +19,20 @@ steps:
     args:
     - 'push'
     - 'us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app:latest'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+    - 'auth'
+    - 'list'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+    - '-c'
+    - |
+      find $(gcloud info --format='value(config.paths.global_config_dir)')
+      echo "maybe credential files"
+      find $(gcloud info --format='value(config.paths.global_config_dir)') -name '*.json'
+
   # Start Cloud Run Job to build the database (if necessary) and deploy the app to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
