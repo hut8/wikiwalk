@@ -8,7 +8,9 @@ steps:
     docker build \
       -t "${_SERVICE_IMAGE_TAGGED_LATEST}" -t "${_SERVICE_IMAGE_TAGGED}" \
       -f Dockerfile.service \
-      --build-arg "DUMP_DATE=${_DUMP_DATE},SERVICE_ACCOUNT_KEY=$$SERVICE_ACCOUNT_KEY" .
+      --build-arg "DUMP_DATE=${_DUMP_DATE}" \
+      --build-arg "SERVICE_ACCOUNT_KEY=$$SERVICE_ACCOUNT_KEY" \
+      .
 - name: gcr.io/cloud-builders/docker
   args:
     - 'push'
