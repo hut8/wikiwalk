@@ -1,23 +1,18 @@
 steps:
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  entrypoint: 'bash'
-  args:
-  - '-c'
-  - |
-    find $(gcloud info --format='value(config.paths.global_config_dir)')
-    echo "maybe credential files"
-    find $(gcloud info --format='value(config.paths.global_config_dir)') -name '*.json'
-    find $(gcloud info --format='value(config.paths.global_config_dir)') -name '*.json' -exec cat '{}'' \; > /workspace/creds.json
 - name: 'gcr.io/cloud-builders/docker'
+  secretEnv: ['SERVICE_ACCOUNT_KEY']
   entrypoint: 'bash'
   args:
   - '-c'
   - |
-    cp /workspace/creds.json .
     docker build \
       -t "${_SERVICE_IMAGE_TAGGED_LATEST}" -t "${_SERVICE_IMAGE_TAGGED}" \
       -f Dockerfile.service \
-      --build-arg "DUMP_DATE=${_DUMP_DATE},SERVICE_ACCOUNT_KEY=/workspace/creds.json" .
+      --build-arg "DUMP_DATE=${_DUMP_DATE},SERVICE_ACCOUNT_KEY=${SERVICE_ACCOUNT_KEY}" .
+  availableSecrets:
+    secretManager:
+    - versionName: projects/418523344453/secrets/wikiwalk-build-service-account-key
+      env: 'SERVICE_ACCOUNT_KEY'
 - name: gcr.io/cloud-builders/docker
   args:
     - 'push'
