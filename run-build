@@ -10,6 +10,8 @@ fi
 
 tool_path="${TOOL_PATH:-/tool}"
 
+commit_sha="$("$tool_path" version --commit)"
+
 dump_date="$($tool_path find-latest --date)"
 echo "building dump for: $dump_date"
 
@@ -36,7 +38,7 @@ submit_service_build() {
   local service_image
   local service_image_tagged
   service_image="us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-service"
-  service_image_tagged="$service_image:$COMMIT_SHA-$dump_date"
+  service_image_tagged="$service_image:$commit_sha-$dump_date"
   echo "Checking for image: '$service_image_tagged'"
 
   gcloud artifacts docker images describe "$service_image_tagged" || {

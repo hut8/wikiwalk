@@ -26,6 +26,7 @@ pub mod edge_db;
 pub mod paths;
 pub mod redirect;
 pub mod schema;
+pub mod version;
 pub mod errors;
 
 #[derive(Clone, Debug, Serialize)]

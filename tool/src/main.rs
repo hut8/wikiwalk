@@ -5,7 +5,7 @@ use std::io::Write;
 use std::io::{prelude::*, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 use std::{process, thread};
 
 use chrono::NaiveDate;
@@ -742,6 +742,15 @@ enum Command {
     },
     /// Build Sitemap
     Sitemap,
+    /// Display version
+    Version {
+        #[clap(long)]
+        /// Display commit hash
+        commit: bool,
+        #[clap(long)]
+        /// Display date
+        date: bool,
+    },
 }
 
 async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
@@ -947,7 +956,6 @@ async fn main() {
         .init()
         .unwrap();
 
-    log::info!("WikiWalk: {}", module_path!());
     let cli = Cli::parse();
 
     let home_dir = dirs::home_dir().unwrap();
@@ -955,11 +963,11 @@ async fn main() {
     let env_data_dir: Option<PathBuf> = std::env::var("DATA_ROOT").ok().map(PathBuf::from);
     let data_dir = cli.data_path.or(env_data_dir).unwrap_or(default_data_dir);
     let dump_dir = data_dir.join("dumps");
-    log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
 
     match cli.command {
         Command::Build { dump_date, push } => {
+            log::debug!("running build using data directory: {}", data_dir.display());
             run_build(&data_dir, &dump_date).await.unwrap();
             #[cfg(feature = "google-cloud-storage")]
             if push {
@@ -974,9 +982,14 @@ async fn main() {
             source,
             destination,
         } => {
+            log::debug!("finding paths using data directory: {}", data_dir.display());
             run_compute(&data_dir, source, destination).await;
         }
         Command::Query { target } => {
+            log::debug!(
+                "querying vertex using data directory: {}",
+                data_dir.display()
+            );
             run_query(&data_dir, target).await;
         }
         Command::Fetch { dump_date } => {
@@ -1004,10 +1017,22 @@ async fn main() {
             run_find_latest(urls, relative, date).await;
         }
         Command::Pull { push } => {
+            log::debug!("running pull using data directory: {}", data_dir.display());
             run_pull(&dump_dir, &data_dir, push).await;
         }
         Command::Sitemap => {
+            log::debug!("building sitemap using data directory: {}", data_dir.display());
             run_sitemap().await;
+        }
+        Command::Version { commit, date } => {
+            let show_commit = commit || !date;
+            let show_date = date || !commit;
+            if show_commit {
+                println!("{}", wikiwalk::version::version().commit);
+            }
+            if show_date {
+                println!("{}", wikiwalk::version::version().commit_date);
+            }
         }
     }
 }
