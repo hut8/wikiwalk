@@ -4,8 +4,10 @@ ARG DUMP_DATE
 ARG SERVICE_ACCOUNT_KEY
 ENV DUMP_DATE=${DUMP_DATE}
 ENV SERVICE_ACCOUNT_KEY=${SERVICE_ACCOUNT_KEY}
-RUN mkdir -p /data/${DUMP_DATE} && \
-  (echo "${SERVICE_ACCOUNT_KEY}" | gcloud auth activate-service-account --key-file=-) && \
+RUN mkdir -p "/data/${DUMP_DATE}" && \
+  echo "${SERVICE_ACCOUNT_KEY}" > key.json && \
+  cat key.json && \
+  gcloud auth activate-service-account --key-file=key.json && \
   gcloud storage cp --recursive "gs://wikiwalk-dumps/${DUMP_DATE}/*" "/data/${DUMP_DATE}" && \
   ln -s /data/${DUMP_DATE} /data/current
 CMD [ "/server" ]
