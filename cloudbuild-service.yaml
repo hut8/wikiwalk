@@ -1,6 +1,8 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  secretEnv: ['SERVICE_ACCOUNT_KEY']
+  secretEnv:
+  - 'SERVICE_ACCOUNT_KEY'
+  - 'SENTRY_KEY'
   entrypoint: 'bash'
   args:
   - '-c'
@@ -10,6 +12,7 @@ steps:
       -f Dockerfile.service \
       --build-arg "DUMP_DATE=${_DUMP_DATE}" \
       --build-arg "SERVICE_ACCOUNT_KEY=$$SERVICE_ACCOUNT_KEY" \
+      --build-arg "SENTRY_AUTH_TOKEN=$$SENTRY_KEY" \
       .
 - name: gcr.io/cloud-builders/docker
   args:
@@ -23,5 +26,7 @@ availableSecrets:
   secretManager:
   - versionName: projects/418523344453/secrets/wikiwalk-build-service-account-key/versions/1
     env: 'SERVICE_ACCOUNT_KEY'
+  - versionName: projects/418523344453/secrets/wikiwalk-build-sentry-key/versions/1
+    env: 'SENTRY_KEY'
 options:
     dynamicSubstitutions: true
