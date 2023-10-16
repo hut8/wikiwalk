@@ -2,8 +2,12 @@ FROM us-central1-docker.pkg.dev/supervillains/supervillains/wikiwalk-app
 WORKDIR /app
 ARG DUMP_DATE
 ARG SERVICE_ACCOUNT_KEY
+ARG SENTRY_AUTH_TOKEN=""
 ENV DUMP_DATE=${DUMP_DATE}
 ENV SERVICE_ACCOUNT_KEY=${SERVICE_ACCOUNT_KEY}
+ENV SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN}
+RUN (curl -sL https://sentry.io/get-cli/ | sh) && \
+  (sentry-cli debug-files upload --org wikiwalk --project wikiwalk --include-sources /server || echo "Debug upload failed")
 RUN mkdir -p "/data/${DUMP_DATE}" && \
   printf '%s' "${SERVICE_ACCOUNT_KEY}" > key.json && \
   gcloud auth activate-service-account --key-file=key.json && \
