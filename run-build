@@ -68,10 +68,10 @@ mkdir -p "$DATA_ROOT/dumps"
 gcloud storage cp "gs://wikiwalk/dumps/enwiki-${dump_date}-*.sql.gz" "$DATA_ROOT/dumps"
 
 echo "building dump"
-"$tool_path" build --dump-date "$dump_date" --data-path "$DATA_ROOT"
+"$tool_path" --data-path "$DATA_ROOT" build --dump-date "$dump_date"
 
 echo "building sitemap"
-"$tool_path" sitemap --data-path "$DATA_ROOT"
+"$tool_path"  --data-path "$DATA_ROOT" sitemap
 
 echo "copying data to google cloud"
 gcloud storage cp --recursive "${DATA_ROOT}/${dump_date}/*" "gs://wikiwalk/${dump_date}/"
