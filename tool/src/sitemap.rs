@@ -151,15 +151,13 @@ fn write_chunk(
 
 fn write_url<W: std::io::Write>(
     writer: &mut EventWriter<W>,
-    path: &str,
+    url: &str,
     priority: Option<f32>,
 ) -> Result<(), xml::writer::Error> {
-    let url = format!("{}/{}", BASE_URL, path);
-
     writer.write(xml::writer::XmlEvent::start_element("url"))?;
 
     writer.write(XmlEvent::start_element("loc"))?;
-    writer.write(XmlEvent::characters(&url))?;
+    writer.write(XmlEvent::characters(url))?;
     writer.write(XmlEvent::end_element())?;
 
     writer.write(XmlEvent::start_element("changefreq"))?;
