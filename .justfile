@@ -52,6 +52,8 @@ issue-tls-cert: install-lego
 # Provision server
 provision-server:
   sudo adduser --home /home/wikiwalk --shell /bin/bash --gecos 'WikiWalk' --disabled-password wikiwalk
+  sudo mkdir -p /var/wikiwalk/data
+  sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
   sudo apt-get install -y pkg-config libssl-dev
 
 # Deploy web server (must be run on server)
@@ -68,16 +70,16 @@ deploy-web: build-release-server
   sudo cp wikiwalk-certs /usr/local/bin/wikiwalk-certs
   sudo setcap cap_net_bind_service+eip /usr/local/bin/wikiwalk
   sudo cp ./wikiwalk.service /lib/systemd/system/wikiwalk.service
-  sudo cp ./wikiwalk-certs.service /lib/systemd/system/wikiwalk-certs.service
-  sudo cp ./wikiwalk-certs.timer /lib/systemd/system/wikiwalk-certs.timer
+# sudo cp ./wikiwalk-certs.service /lib/systemd/system/wikiwalk-certs.service
+# sudo cp ./wikiwalk-certs.timer /lib/systemd/system/wikiwalk-certs.timer
   sudo cp ./wikiwalk-watchdog.service /lib/systemd/system/wikiwalk-watchdog.service
   sudo systemctl daemon-reload
   sudo systemctl enable wikiwalk.service
-  sudo systemctl enable wikiwalk-certs.service
-  sudo systemctl enable wikiwalk-certs.timer
+# sudo systemctl enable wikiwalk-certs.service
+# sudo systemctl enable wikiwalk-certs.timer
   sudo systemctl enable wikiwalk-watchdog.service
   sudo systemctl restart wikiwalk.service
-  sudo systemctl restart wikiwalk-certs.timer
+# sudo systemctl restart wikiwalk-certs.timer
   sudo systemctl restart wikiwalk-watchdog.service
 
 # Deploy wikiwalk tool and periodic builds
