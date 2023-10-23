@@ -271,6 +271,8 @@ pub struct Jobs {
     pub pageprops_table: JobStatus,
     #[serde(rename = "pagelinkstable")]
     pub pagelinks_table: JobStatus,
+    #[serde(rename = "linktargettable")]
+    pub linktarget_table: JobStatus,
 }
 
 impl Jobs {
@@ -298,6 +300,7 @@ impl Jobs {
             &self.page_table,
             &self.pageprops_table,
             &self.pagelinks_table,
+            &self.linktarget_table,
         ]
     }
 }
