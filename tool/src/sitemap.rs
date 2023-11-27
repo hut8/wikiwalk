@@ -175,5 +175,5 @@ fn write_url<W: std::io::Write>(
 }
 
 fn path_url(source: u32, target: u32) -> String {
-    format!("{}/path/{}/{}", BASE_URL, source, target)
+    format!("{}/paths/{}/{}", BASE_URL, source, target)
 }
