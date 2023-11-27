@@ -4,7 +4,13 @@ use actix_web::http::header;
 pub fn accept_json_guard(ctx: &GuardContext) -> bool {
     // This makes JSON the default if no Accept header is present.
     match ctx.header::<header::Accept>() {
-        Some(hdr) => hdr.preference() == "application/json",
+        Some(hdr) => {
+          match hdr.preference() {
+            "application/json" => true,
+            "*/*" => true, // default, e.g., for curl
+            _ => false,
+          }
+        },
         None => true,
     }
 }
