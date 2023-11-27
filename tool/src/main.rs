@@ -739,6 +739,8 @@ enum Command {
     Pull {
         #[clap(long)]
         push: bool,
+        #[clap(long)]
+        clean: bool,
     },
     /// Build Sitemap
     Sitemap,
@@ -889,7 +891,7 @@ async fn run_find_latest(urls: bool, relative: bool, date: bool) {
     }
 }
 
-async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool) {
+async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
     let latest_dump = {
         match fetch::find_latest().await {
             None => {
@@ -921,8 +923,11 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool) {
         log::error!("build failed: {:#?}", err);
         process::exit(1);
     }
-    log::info!("built database from {latest_dump_date}. cleaning dump directory.");
-    fetch::clean_dump_dir(dump_dir);
+    log::info!("built database from {latest_dump_date}.");
+    if clean {
+        log::info!("cleaning dump directory");
+        fetch::clean_dump_dir(dump_dir);
+    }
     log::info!("building sitemap");
     run_sitemap().await;
 
@@ -1016,12 +1021,15 @@ async fn main() {
         } => {
             run_find_latest(urls, relative, date).await;
         }
-        Command::Pull { push } => {
+        Command::Pull { push, clean } => {
             log::debug!("running pull using data directory: {}", data_dir.display());
-            run_pull(&dump_dir, &data_dir, push).await;
+            run_pull(&dump_dir, &data_dir, push, clean).await;
         }
         Command::Sitemap => {
-            log::debug!("building sitemap using data directory: {}", data_dir.display());
+            log::debug!(
+                "building sitemap using data directory: {}",
+                data_dir.display()
+            );
             run_sitemap().await;
         }
         Command::Version { commit, date } => {
