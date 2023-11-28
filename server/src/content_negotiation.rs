@@ -5,7 +5,7 @@ pub fn accept_json_guard(ctx: &GuardContext) -> bool {
     // This makes JSON the default if no Accept header is present.
     match ctx.header::<header::Accept>() {
         Some(hdr) => {
-          match hdr.preference() {
+          match hdr.preference().essence_str() {
             "application/json" => true,
             "*/*" => true, // default, e.g., for curl
             _ => false,
