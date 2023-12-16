@@ -4,12 +4,13 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
-import MultipleStopIcon from "@mui/icons-material/MultipleStop";
+//import MultipleStopIcon from "@mui/icons-material/MultipleStop";
+import ArrowRight from "@mui/icons-material/ArrowRight";
+import GitHubIcon from '@mui/icons-material/GitHub';
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { PageInput } from "./PageInput";
-import { PageSummary } from "./PageSummary";
 import { Suspense, useEffect, useState } from "react";
 import { Page } from "./service";
 import { Await, useLoaderData, useNavigate } from "react-router-dom";
@@ -17,6 +18,7 @@ import { PathsDisplay } from "./PathsDisplay";
 import { PathLoaderData } from "./loaders";
 import { Activity } from "./Activity";
 import { StatusPanel } from "./StatusPanel";
+import { IconButton } from "@mui/material";
 
 const queryClient = new QueryClient();
 
@@ -54,15 +56,27 @@ export default function App() {
     navigate(url);
   };
 
+  const openGitHub = () => {
+    window.open("https://github.com/hut8/wikiwalk", "_blank");
+  };
+
   return (
     <>
       <QueryClientProvider client={queryClient}>
         <AppBar position="static">
           <Toolbar>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              WikiWalk.app
-            </Typography>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                WikiWalk.app
+              </Typography>
+            </Box>
+            <Box sx={{ flexGrow: 0 }}>
+              <IconButton onClick={() => openGitHub()} sx={{ p: 0 }}>
+                <GitHubIcon sx={{color: "white"}} />
+              </IconButton>
+            </Box>
           </Toolbar>
+
         </AppBar>
         <Container maxWidth={false}>
           <Box
@@ -71,7 +85,7 @@ export default function App() {
               display: "flex",
               flexDirection: "row",
               justifyContent: "space-between",
-              gap: 16,
+              gap: "64px",
             }}
           >
             <PageInput
@@ -79,6 +93,7 @@ export default function App() {
               page={sourcePage}
               setPage={setSourcePage}
             />
+            <ArrowRight sx={{ fontSize: 48, flexShrink: 1 }} />
             <PageInput
               label="Target page"
               page={targetPage}
@@ -91,22 +106,6 @@ export default function App() {
             >
               Go
             </Button>
-          </Box>
-
-          <Box sx={{ my: 4, display: "flex", flexDirection: "row" }}>
-            <Box sx={{ width: "45%" }}>
-              {sourcePage && <PageSummary page={sourcePage} />}
-            </Box>
-
-            <Box sx={{ width: "10%", display: "flex", alignItems: "center" }}>
-              {sourcePage && targetPage && (
-                <MultipleStopIcon sx={{ fontSize: 48 }} />
-              )}
-            </Box>
-
-            <Box sx={{ width: "45%" }}>
-              {targetPage && <PageSummary page={targetPage} />}
-            </Box>
           </Box>
 
           {!(sourcePage || targetPage) &&
@@ -124,7 +123,7 @@ export default function App() {
             />
           </Suspense>
         </Container>
-      </QueryClientProvider>
+      </QueryClientProvider >
     </>
   );
 }
