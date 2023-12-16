@@ -100,8 +100,7 @@ deploy-tool: build-release-tool
 deploy-config:
   sudo rm -f /etc/wikiwalk.conf
   sudo cp wikiwalk.conf /etc/wikiwalk.conf
-  sudo cp ./wikiwalk.service /lib/systemd/system/wikiwalk.service
-  sudo systemctl daemon-reload
+  echo "Now add variables to /etc/wikiwalk.conf"
 
 # Deploy web server and tool
-deploy: deploy-config deploy-tool deploy-web
+deploy: deploy-tool deploy-web
