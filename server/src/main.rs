@@ -123,7 +123,7 @@ async fn serve_paths(
             log::debug!("fetched cached entry for {source_id} - {dest_id}");
             paths
         }
-        None => gdb.bfs(source_id, dest_id).await,
+        None => gdb.bfs(source_id, dest_id, true).await,
     };
     let elapsed = start_time.elapsed();
     let count = paths.len();

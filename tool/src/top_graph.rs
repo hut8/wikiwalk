@@ -132,7 +132,7 @@ async fn compute_graphs(
         .expect("create graph db");
     for (source, target) in queries_rx {
         let start_time = std::time::Instant::now();
-        let pair_paths = gdb.bfs(source, target).await;
+        let pair_paths = gdb.bfs(source, target, false).await;
         let elapsed = start_time.elapsed();
         log::info!(
             "found {} paths between {} and {} in {} seconds",

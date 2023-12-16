@@ -23,11 +23,11 @@ pub mod bfs;
 pub mod dbstatus;
 pub mod dump;
 pub mod edge_db;
+pub mod errors;
 pub mod paths;
 pub mod redirect;
 pub mod schema;
 pub mod version;
-pub mod errors;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Vertex {
@@ -164,7 +164,7 @@ impl GraphDB {
         }
     }
 
-    pub async fn bfs(&self, src: u32, dest: u32) -> Vec<Vec<u32>> {
+    pub async fn bfs(&self, src: u32, dest: u32, record: bool) -> Vec<Vec<u32>> {
         let start_time = Instant::now();
         let timestamp = chrono::Utc::now();
         let paths = bfs::breadth_first_search(src, dest, &self.edge_db);
@@ -178,10 +178,12 @@ impl GraphDB {
             path_data: Set(paths_ser),
             ..Default::default()
         };
-        path_entity
-            .insert(&self.graph_db)
-            .await
-            .expect("insert path record");
+        if record {
+            path_entity
+                .insert(&self.graph_db)
+                .await
+                .expect("insert path record");
+        }
         paths
     }
 }

@@ -800,7 +800,7 @@ async fn run_compute(data_dir: &Path, source: String, destination: String) {
 
     log::info!("wikiwalk: [{:#?}] → [{:#?}]", source_vertex, dest_vertex);
 
-    let paths = gdb.bfs(source_vertex.id, dest_vertex.id).await;
+    let paths = gdb.bfs(source_vertex.id, dest_vertex.id, false).await;
     if paths.is_empty() {
         println!("\nno path found");
         return;
