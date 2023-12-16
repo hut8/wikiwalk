@@ -37,7 +37,7 @@ export const PageInput = ({ page, setPage, label }: PageInputParams) => {
   }, [inputValue]);
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1, width: "100%" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1, width: "100%", gap: "24px" }}>
       <Autocomplete sx={{
         minWidth: 300,
         flexGrow: 1,
