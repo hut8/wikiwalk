@@ -5,7 +5,7 @@ import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
 //import MultipleStopIcon from "@mui/icons-material/MultipleStop";
-import ArrowRight from "@mui/icons-material/ArrowRight";
+import ForwardIcon from "@mui/icons-material/Forward";
 import GitHubIcon from '@mui/icons-material/GitHub';
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -93,7 +93,7 @@ export default function App() {
               page={sourcePage}
               setPage={setSourcePage}
             />
-            <ArrowRight sx={{ fontSize: 48, flexShrink: 1 }} />
+            <ForwardIcon sx={{ fontSize: 48 }} />
             <PageInput
               label="Target page"
               page={targetPage}
