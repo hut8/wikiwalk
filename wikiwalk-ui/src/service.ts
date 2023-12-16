@@ -97,6 +97,14 @@ export async function findPaths(
     `/paths/${sourceId}/${targetId}`,
     serviceEndpointBase
   );
+
+  gtag("event", "search_paths", {
+    sourceId,
+    targetId,
+  });
+
+  const startTime = Date.now();
+
   const response = await fetch(endpoint, {
     headers: {
       Accept: "application/json",
@@ -106,6 +114,12 @@ export async function findPaths(
     throw new Error("bad response code from server");
   }
   const data = (await response.json()) as PathData;
+
+  const elapsed = Date.now() - startTime;
+  gtag("event", "path_search_duration", {
+    value: elapsed,
+  });
+
   const pagePaths = await fetchPathPageData(data);
   console.log("page paths", pagePaths);
   return pagePaths;
