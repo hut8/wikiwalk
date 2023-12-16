@@ -1,10 +1,10 @@
 # wikiwalk
 
-Shortest path algorithm between pages on Wikipedia. Let's say that you want to get from page `Exploding animal` to `Cucumber`. This will do that:
+Shortest path algorithm between pages on Wikipedia. Let's say that you want to get from page `Exploding animal` to `Cucumber`. This thing will find the set of shortest paths between them, and return the path as a list of page titles.
 
-```sh
-wikiwalk 'Exploding animal' 'Cucumber'
-```
+## Prior Art
+
+* [Six Degrees of Wikipedia](https://github.com/jwngr/sdow) by [Jacob Wenger](https://jwn.gr/) - The bi-directional BFS algorithm is based on this project. There are a lot of differences between the implementations: SDOW is in Python, and uses SQLite. This is in Rust and uses a bespoke graph memory-mapped database that I made. SDOW's import process uses shell scripts rather than a parser combinator library, and as a result, it is currently broken. Nonetheless, it's pretty brilliant,
 
 ## Graph Database
 
