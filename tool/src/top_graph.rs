@@ -20,10 +20,7 @@ struct GraphData {
     edges: Vec<GraphEdge>,
 }
 
-pub async fn generate_sub_graph(
-    sink_path: &std::path::Path,
-    db: &sea_orm::DatabaseConnection,
-) {
+pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::DatabaseConnection) {
     log::info!("top graph: finding top pages");
     let top_page_ids = crate::api::top_page_ids(Some(100)).await;
     log::info!("top graph: found {} valid top pages", top_page_ids.len());
@@ -63,13 +60,15 @@ pub async fn generate_sub_graph(
     let (paths_tx, paths_rx) = crossbeam::channel::unbounded();
     let (queries_tx, queries_rx) = crossbeam::channel::unbounded();
 
-    let computer_procs = (0..num_cpus::get()).map(|_| {
-        let queries_rx = queries_rx.clone();
-        let paths_tx = paths_tx.clone();
-        tokio::spawn(async move {
-            compute_graphs(queries_rx, paths_tx).await;
+    let computer_procs = (0..num_cpus::get())
+        .map(|_| {
+            let queries_rx = queries_rx.clone();
+            let paths_tx = paths_tx.clone();
+            tokio::spawn(async move {
+                compute_graphs(queries_rx, paths_tx).await;
+            })
         })
-    }).collect_vec();
+        .collect_vec();
     drop(paths_tx);
 
     for (source, target) in pairs {
@@ -89,19 +88,23 @@ pub async fn generate_sub_graph(
         paths.extend(path);
     }
 
-    // page id -> page title
-    let vertex_data: HashMap<u32, String> = Vertex::find()
-        .select_only()
-        .filter(wikiwalk::schema::vertex::Column::Id.is_in(page_id_set.clone()))
-        .column(wikiwalk::schema::vertex::Column::Id)
-        .column(wikiwalk::schema::vertex::Column::Title)
-        .into_tuple()
-        .all(db)
-        .await
-        .expect("query vertexes")
+    log::info!("top graph: resolving {} total vertexes", page_id_set.len());
+
+    let page_ids = page_id_set.into_iter().collect_vec();
+    let resolve_futures = page_ids
+        .chunks(1000)
         .into_iter()
-        .map(|(id, title)| (id, title))
-        .collect();
+        .map(|chunk| resolve_pages(chunk, db));
+
+    // page id -> page title
+    let page_id_title_maps = futures::future::join_all(resolve_futures).await;
+    let vertex_data = page_id_title_maps.into_iter().reduce(|mut acc, e| {
+        for ele in e {
+            acc.insert(ele.0, ele.1.to_string());
+        }
+        acc
+    }).expect("vertex data present");
+    log::info!("top graph: resolved {} pages", vertex_data.len());
 
     let mut edges = Vec::new();
     // let mut paths = Vec::new();
@@ -143,4 +146,24 @@ async fn compute_graphs(
         );
         results_tx.send(pair_paths).expect("send result");
     }
+}
+
+async fn resolve_pages(
+    page_ids: &[u32],
+    db: &sea_orm::DatabaseConnection,
+) -> HashMap<u32, String> {
+    let predicate = page_ids.to_owned();
+    let vertex_data: HashMap<u32, String> = Vertex::find()
+        .select_only()
+        .filter(wikiwalk::schema::vertex::Column::Id.is_in(predicate.clone()))
+        .column(wikiwalk::schema::vertex::Column::Id)
+        .column(wikiwalk::schema::vertex::Column::Title)
+        .into_tuple()
+        .all(db)
+        .await
+        .expect("query vertexes")
+        .into_iter()
+        .map(|(id, title)| (id, title))
+        .collect();
+    vertex_data
 }
