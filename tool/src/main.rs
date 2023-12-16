@@ -946,11 +946,6 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
 
 async fn run_build_topgraph() {
     let current_db_paths = Paths::new().db_paths("current");
-    let root_data_dir = Paths::new().base;
-    let graph_db = GraphDB::new("current".into(), &root_data_dir)
-        .await
-        .unwrap();
-
     let db_path = current_db_paths.graph_db();
     let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
     log::debug!("building sitemap using database: {}", conn_str);
@@ -961,7 +956,7 @@ async fn run_build_topgraph() {
         .create_if_missing(true);
     let pool = SqlitePool::connect_with(opts).await.expect("db connect");
     let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
-    top_graph::generate_sub_graph(&current_db_paths.topgraph_path(), &db, &graph_db).await;
+    top_graph::generate_sub_graph(&current_db_paths.topgraph_path(), &db).await;
 }
 
 #[tokio::main]

@@ -52,8 +52,12 @@ async fn top_page_titles() -> Vec<String> {
       .collect::<Vec<String>>()
 }
 
-pub async fn top_page_ids() -> Vec<u32> {
-  let page_titles = top_page_titles().await;
+pub async fn top_page_ids(count: Option<usize>) -> Vec<u32> {
+  let mut page_titles = top_page_titles().await;
+  if let Some(count) = count {
+    page_titles.truncate(count);
+  }
+
   let chunks = page_titles.chunks(50);
   let chunk_iterator = chunks.into_iter();
   let chunk_futures = chunk_iterator.map(fetch_pages_data);

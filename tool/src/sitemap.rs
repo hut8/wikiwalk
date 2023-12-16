@@ -22,7 +22,7 @@ const BASE_URL: &str = "https://wikiwalk.app";
 pub async fn make_sitemap(db: &sea_orm::DatabaseConnection, sitemaps_path: &std::path::Path) {
     std::fs::create_dir_all(sitemaps_path).expect("create sitemaps directory");
     log::info!("sitemap: finding top pages");
-    let top_page_ids = crate::api::top_page_ids().await;
+    let top_page_ids = crate::api::top_page_ids(None).await;
     log::info!("sitemap: found {} valid top pages", top_page_ids.len());
     let page_ids: Vec<u32> = Vertex::find()
         .select_only()
