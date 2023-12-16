@@ -4,14 +4,13 @@ After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/wikiwalk-tool pull
+ExecStartPre=-/usr/bin/curl "${SENTRY_CRONS}?status=in_progress"
 EnvironmentFile=/etc/wikiwalk.conf
 Type=oneshot
 User=wikiwalk
 Group=wikiwalk
-ExecStartPost=+/usr/bin/systemctl restart wikiwalk.service
+ExecStopPost=+/usr/bin/systemctl restart wikiwalk.service
+ExecStopPost=-/bin/bash -c 'status="error"; [[ $SERVICE_RESULT = success ]] && [[ $EXIT_CODE = exited ]] && status="complete"; /usr/bin/curl "${SENTRY_CRONS}?status=${status}"'
 
 [Install]
 WantedBy=multi-user.target
-
-
-
