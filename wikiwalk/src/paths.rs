@@ -124,4 +124,8 @@ impl DBPaths {
     pub fn sitemaps_path(&self) -> PathBuf {
         self.path_for("sitemaps")
     }
+
+    pub fn topgraph_path(&self) -> PathBuf {
+        self.path_for("topgraph.json")
+    }
 }

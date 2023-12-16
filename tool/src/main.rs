@@ -40,6 +40,7 @@ mod pagelink_source;
 #[cfg(feature = "google-cloud-storage")]
 mod push;
 mod sitemap;
+mod top_graph;
 
 /// Intermediate type of only fields necessary to create an Edge
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -744,6 +745,8 @@ enum Command {
     },
     /// Build Sitemap
     Sitemap,
+    /// Build TopGraph
+    MakeTopGraph,
     /// Display version
     Version {
         #[clap(long)]
@@ -941,6 +944,26 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
     }
 }
 
+async fn run_build_topgraph() {
+    let current_db_paths = Paths::new().db_paths("current");
+    let root_data_dir = Paths::new().base;
+    let graph_db = GraphDB::new("current".into(), &root_data_dir)
+        .await
+        .unwrap();
+
+    let db_path = current_db_paths.graph_db();
+    let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
+    log::debug!("building sitemap using database: {}", conn_str);
+    let opts = SqliteConnectOptions::new()
+        .synchronous(SqliteSynchronous::Off)
+        .journal_mode(SqliteJournalMode::Memory)
+        .filename(&db_path)
+        .create_if_missing(true);
+    let pool = SqlitePool::connect_with(opts).await.expect("db connect");
+    let db = SqlxSqliteConnector::from_sqlx_sqlite_pool(pool);
+    top_graph::generate_sub_graph(&current_db_paths.topgraph_path(), &db, &graph_db).await;
+}
+
 #[tokio::main]
 async fn main() {
     stderrlog::new()
@@ -1031,6 +1054,13 @@ async fn main() {
                 data_dir.display()
             );
             run_sitemap().await;
+        }
+        Command::MakeTopGraph => {
+            log::debug!(
+                "building topgraph using data directory: {}",
+                data_dir.display()
+            );
+            run_build_topgraph().await;
         }
         Command::Version { commit, date } => {
             let show_commit = commit || !date;
