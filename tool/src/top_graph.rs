@@ -15,8 +15,15 @@ struct GraphEdge {
 }
 
 #[derive(Serialize)]
+struct GraphVertex {
+    id: String,
+    title: String,
+    color: String,
+}
+
+#[derive(Serialize)]
 struct GraphData {
-    vertexes: Vec<String>,
+    vertexes: Vec<GraphVertex>,
     edges: Vec<GraphEdge>,
 }
 
@@ -53,6 +60,7 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
     log::info!("sitemap: found {} pairs", pairs.len());
 
     // page_id_set is the set of all page ids that we encounter in the paths between the top pages
+    let top_page_id_set: HashSet<u32> = top_page_ids.into_iter().collect();
     let mut page_id_set = HashSet::new();
 
     let mut paths = Vec::new();
@@ -91,19 +99,19 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
     log::info!("top graph: resolving {} total vertexes", page_id_set.len());
 
     let page_ids = page_id_set.into_iter().collect_vec();
-    let resolve_futures = page_ids
-        .chunks(1000)
-        .into_iter()
-        .map(|chunk| resolve_pages(chunk, db));
+    let resolve_futures = page_ids.chunks(1000).map(|chunk| resolve_pages(chunk, db));
 
     // page id -> page title
     let page_id_title_maps = futures::future::join_all(resolve_futures).await;
-    let vertex_data = page_id_title_maps.into_iter().reduce(|mut acc, e| {
-        for ele in e {
-            acc.insert(ele.0, ele.1.to_string());
-        }
-        acc
-    }).expect("vertex data present");
+    let vertex_data = page_id_title_maps
+        .into_iter()
+        .reduce(|mut acc, e| {
+            for ele in e {
+                acc.insert(ele.0, ele.1.to_string());
+            }
+            acc
+        })
+        .expect("vertex data present");
     log::info!("top graph: resolved {} pages", vertex_data.len());
 
     let mut edges = Vec::new();
@@ -119,7 +127,18 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
         }
     }
 
-    let vertexes: Vec<String> = vertex_data.values().cloned().collect();
+    let vertexes: Vec<GraphVertex> = vertex_data
+        .into_iter()
+        .map(|(id, title)| GraphVertex {
+            id: id.to_string(),
+            color: if top_page_id_set.contains(&id) {
+                "red".to_string()
+            } else {
+                "blue".to_string()
+            },
+            title,
+        })
+        .collect();
     let graph_data = GraphData { vertexes, edges };
     let topgraph_file = File::create(sink_path).expect("create topgraph file");
     serde_json::to_writer_pretty(topgraph_file, &graph_data).expect("write topgraph file");
@@ -148,10 +167,7 @@ async fn compute_graphs(
     }
 }
 
-async fn resolve_pages(
-    page_ids: &[u32],
-    db: &sea_orm::DatabaseConnection,
-) -> HashMap<u32, String> {
+async fn resolve_pages(page_ids: &[u32], db: &sea_orm::DatabaseConnection) -> HashMap<u32, String> {
     let predicate = page_ids.to_owned();
     let vertex_data: HashMap<u32, String> = Vertex::find()
         .select_only()
