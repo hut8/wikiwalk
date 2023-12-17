@@ -982,15 +982,15 @@ async fn main() {
         .init()
         .unwrap();
 
-    tracing_subscriber::Registry::default()
-        .with(sentry::integrations::tracing::layer())
-        .init();
-
     let _sentry = sentry::init(sentry::ClientOptions {
         release: sentry::release_name!(),
         traces_sample_rate: 1.0,
         ..Default::default()
     });
+
+    // tracing_subscriber::Registry::default()
+    //     .with(sentry::integrations::tracing::layer())
+    //     .init();
 
     let cli = Cli::parse();
 

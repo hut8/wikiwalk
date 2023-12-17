@@ -29,7 +29,7 @@ struct GraphData {
 
 pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::DatabaseConnection) {
     log::info!("top graph: finding top pages");
-    let top_page_ids = crate::api::top_page_ids(Some(100)).await;
+    let top_page_ids = crate::api::top_page_ids(Some(10)).await;
     log::info!("top graph: found {} valid top pages", top_page_ids.len());
     let page_ids: Vec<u32> = Vertex::find()
         .select_only()
