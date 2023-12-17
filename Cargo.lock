@@ -3988,7 +3988,7 @@ dependencies = [
  "httpdate",
  "reqwest",
  "rustls 0.21.7",
- "sentry-anyhow",
+ "sentry-anyhow 0.31.8",
  "sentry-backtrace 0.31.8",
  "sentry-contexts 0.31.8",
  "sentry-core 0.31.8",
@@ -4008,12 +4008,15 @@ dependencies = [
  "httpdate",
  "native-tls",
  "reqwest",
+ "sentry-anyhow 0.32.0",
  "sentry-backtrace 0.32.0",
  "sentry-contexts 0.32.0",
  "sentry-core 0.32.0",
  "sentry-debug-images 0.32.0",
+ "sentry-log",
  "sentry-panic 0.32.0",
  "sentry-tracing 0.32.0",
+ "serde_json",
  "tokio",
  "ureq",
 ]
@@ -4038,6 +4041,17 @@ dependencies = [
  "anyhow",
  "sentry-backtrace 0.31.8",
  "sentry-core 0.31.8",
+]
+
+[[package]]
+name = "sentry-anyhow"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d956b9a5d5facc962eaae0206fd785bb641a412c395c9a1a914719af35c9dd5"
+dependencies = [
+ "anyhow",
+ "sentry-backtrace 0.32.0",
+ "sentry-core 0.32.0",
 ]
 
 [[package]]
@@ -4137,6 +4151,16 @@ checksum = "0bcd02214397892a3ec25372cc68c210d858f39314535f5d640bdf41294fd441"
 dependencies = [
  "findshlibs",
  "once_cell",
+ "sentry-core 0.32.0",
+]
+
+[[package]]
+name = "sentry-log"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c5505bfb293190e88fd5a098e2df92b5bcdb45d9c77bb470b174709ae599794"
+dependencies = [
+ "log",
  "sentry-core 0.32.0",
 ]
 
@@ -4895,6 +4919,8 @@ dependencies = [
  "symlink",
  "tokio",
  "tokio-util",
+ "tracing",
+ "tracing-subscriber",
  "url",
  "wikiwalk",
  "xml-rs",

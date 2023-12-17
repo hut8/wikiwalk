@@ -26,6 +26,8 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 use sqlx::SqlitePool;
 
 use fetch::DumpStatus;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use wikiwalk::dbstatus::DBStatus;
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::{RedirectMapBuilder, RedirectMapFile};
@@ -972,12 +974,23 @@ async fn main() {
         .module("wikiwalk::page_source")
         .module("wikiwalk::pagelink_source")
         .module("wikiwalk::edge_db_builder")
+        .module("wikiwalk::top_graph")
         .show_module_names(true)
         .quiet(false)
         .verbosity(3)
         .timestamp(stderrlog::Timestamp::Second)
         .init()
         .unwrap();
+
+    tracing_subscriber::Registry::default()
+        .with(sentry::integrations::tracing::layer())
+        .init();
+
+    let _sentry = sentry::init(sentry::ClientOptions {
+        release: sentry::release_name!(),
+        traces_sample_rate: 1.0,
+        ..Default::default()
+    });
 
     let cli = Cli::parse();
 
