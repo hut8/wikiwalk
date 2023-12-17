@@ -114,8 +114,8 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
         .expect("vertex data present");
     log::info!("top graph: resolved {} pages", vertex_data.len());
 
+    log::info!("top graph: building edge list");
     let mut edges = Vec::new();
-    // let mut paths = Vec::new();
     for path in paths {
         for (source, target) in path.iter().tuple_windows() {
             let source_title = vertex_data.get(source).expect("source title");
@@ -127,6 +127,7 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
         }
     }
 
+    log::info!("top graph: building vertex list");
     let vertexes: Vec<GraphVertex> = vertex_data
         .into_iter()
         .map(|(id, title)| GraphVertex {
@@ -139,6 +140,8 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
             title,
         })
         .collect();
+
+    log::info!("top graph: writing graph data to file");
     let graph_data = GraphData { vertexes, edges };
     let topgraph_file = File::create(sink_path).expect("create topgraph file");
     serde_json::to_writer_pretty(topgraph_file, &graph_data).expect("write topgraph file");
