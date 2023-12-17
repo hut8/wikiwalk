@@ -109,6 +109,16 @@ async fn serve_ui_paths(
     Ok(HttpResponse::Ok().body(content.data))
 }
 
+#[get("/top-graph")]
+async fn serve_top_graph() -> actix_web::Result<impl Responder> {
+    let top_graph_path = Paths::new().db_paths("current").topgraph_path();
+    let source = fs::NamedFile::open(top_graph_path).map_err(|e| {
+        log::error!("failed to open top graph: {:?}", e);
+        e
+    })?;
+    Ok(source)
+}
+
 async fn serve_paths(
     path: web::Path<PathParams>,
     gdb: web::Data<GraphDB>,
@@ -272,6 +282,7 @@ async fn main() -> std::io::Result<()> {
                     .guard(content_negotiation::accept_html_guard)
                     .to(serve_ui_paths),
             )
+            .service(serve_top_graph)
             .service(status)
             .service(sitemap);
         match &well_known_path {
