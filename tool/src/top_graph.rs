@@ -18,7 +18,7 @@ struct GraphEdge {
 struct GraphVertex {
     id: String,
     title: String,
-    color: String,
+    top: bool,
 }
 
 #[derive(Serialize)]
@@ -130,11 +130,7 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
         .into_iter()
         .map(|(id, title)| GraphVertex {
             id: id.to_string(),
-            color: if top_page_id_set.contains(&id) {
-                "red".to_string()
-            } else {
-                "blue".to_string()
-            },
+            top: top_page_id_set.contains(&id),
             title,
         })
         .collect();

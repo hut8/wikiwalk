@@ -51,6 +51,24 @@ export type DBStatus = {
   date: string;
 };
 
+export type Vertex = {
+  id: string
+  title: string
+  color?: string
+  top: boolean
+}
+
+export type Edge = {
+  source: string
+  target: string
+  color?: string
+}
+
+export type GraphPayload = {
+  vertexes: Vertex[]
+  edges: Edge[]
+}
+
 export async function runSearch(term: string): Promise<Page[]> {
   const wikiParams = new URLSearchParams();
   wikiParams.set("action", "query");
@@ -88,6 +106,25 @@ export async function runSearch(term: string): Promise<Page[]> {
 }
 
 const serviceEndpointBase = new URL("https://wikiwalk.app/");
+
+export async function topGraph(): Promise<GraphPayload> {
+  const endpoint = new URL(
+    `/top-graph`,
+    serviceEndpointBase
+  );
+
+  const response = await fetch(endpoint, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error("bad response code from server");
+  }
+  const data = (await response.json()) as GraphPayload;
+
+  return data;
+}
 
 export async function findPaths(
   sourceId: number,
