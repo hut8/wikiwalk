@@ -118,11 +118,9 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
     let mut edges = Vec::new();
     for path in paths {
         for (source, target) in path.iter().tuple_windows() {
-            let source_title = vertex_data.get(source).expect("source title");
-            let target_title = vertex_data.get(target).expect("target title");
             edges.push(GraphEdge {
-                source: source_title.to_string(),
-                target: target_title.to_string(),
+                source: source.to_string(),
+                target: target.to_string(),
             });
         }
     }
