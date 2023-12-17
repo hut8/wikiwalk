@@ -32,9 +32,13 @@ export function TopGraph() {
   return (
     <CosmographProvider nodes={vertexes} links={edges}>
       <Cosmograph<Vertex, Edge>
+        style={{ height: '60vh', width: '80vw' }}
         nodeColor={d => d.color || null}
         nodeLabelAccessor={d => d.title}
         nodeSize={2}
+        nodeLabelColor={d => d.top ? 'white' : 'grey'}
+        simulationDecay={2000}
+        simulationRepulsion={.8}
         curvedLinks={true}
         linkColor={d => d.color || null}
         linkWidth={2} />

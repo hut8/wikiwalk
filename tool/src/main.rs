@@ -26,8 +26,8 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 use sqlx::SqlitePool;
 
 use fetch::DumpStatus;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
+// use tracing_subscriber::layer::SubscriberExt;
+// use tracing_subscriber::util::SubscriberInitExt;
 use wikiwalk::dbstatus::DBStatus;
 use wikiwalk::paths::{DBPaths, Paths};
 use wikiwalk::redirect::{RedirectMapBuilder, RedirectMapFile};

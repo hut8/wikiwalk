@@ -28,49 +28,73 @@ struct Article {
     pub article: String,
     pub views: i64,
     pub rank: i64,
+    pub id: Option<u32>,
 }
 
-async fn top_page_titles() -> Vec<String> {
-  use chrono::prelude::*;
-  let last_month = Utc::now()
-      .checked_sub_months(Months::new(1))
-      .expect("subtract month");
-  let date_component = last_month.format("%Y/%m").to_string();
-  log::info!("sitemap: fetching top pages for {}", date_component);
-  let top_pages_url = format!("https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia.org/all-access/{}/all-days", date_component);
-  let top_pages_response = reqwest::get(top_pages_url)
-      .await
-      .expect("get top pages from api");
-  let top_pages_root: TopPagesRoot = top_pages_response
-      .json()
-      .await
-      .expect("parse top pages json");
-  top_pages_root
-      .items
-      .into_iter()
-      .flat_map(|item| item.articles.into_iter().map(|article| article.article))
-      .collect::<Vec<String>>()
+async fn top_pages() -> Vec<Article> {
+    use chrono::prelude::*;
+    let last_month = Utc::now()
+        .checked_sub_months(Months::new(1))
+        .expect("subtract month");
+    let date_component = last_month.format("%Y/%m").to_string();
+    log::info!("sitemap: fetching top pages for {}", date_component);
+    let top_pages_url = format!("https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia.org/all-access/{}/all-days", date_component);
+    let top_pages_response = reqwest::get(top_pages_url)
+        .await
+        .expect("get top pages from api");
+    let top_pages_root: TopPagesRoot = top_pages_response
+        .json()
+        .await
+        .expect("parse top pages json");
+    let articles: Vec<Article> = top_pages_root
+        .items
+        .into_iter()
+        .flat_map(|item| item.articles.into_iter())
+        .collect();
+
+    let page_titles = articles
+        .iter()
+        .map(|article| article.article.clone())
+        .collect::<Vec<_>>();
+    let chunks = page_titles.chunks(50);
+    let chunk_iterator = chunks.into_iter();
+    let chunk_futures = chunk_iterator.map(fetch_pages_data);
+    let chunk_futures = chunk_futures.collect::<FuturesUnordered<_>>();
+    let ids: Vec<(u32, String)> = chunk_futures
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
+    // Add the IDs to the articles
+
+    let mut articles = articles
+        .into_iter()
+        .map(|mut article| {
+            let id = ids
+                .iter()
+                .find(|(_id, title)| title == &article.article)
+                .map(|(id, _)| *id);
+            article.id = id;
+            article
+        })
+        .collect::<Vec<_>>();
+
+    articles.sort_by(|a, b| a.rank.cmp(&b.rank));
+
+    articles
 }
 
 pub async fn top_page_ids(count: Option<usize>) -> Vec<u32> {
-  let mut page_titles = top_page_titles().await;
-  if let Some(count) = count {
-    page_titles.truncate(count);
-  }
-
-  let chunks = page_titles.chunks(50);
-  let chunk_iterator = chunks.into_iter();
-  let chunk_futures = chunk_iterator.map(fetch_pages_data);
-  let chunk_futures = chunk_futures.collect::<FuturesUnordered<_>>();
-  chunk_futures
-      .collect::<Vec<_>>()
-      .await
-      .into_iter()
-      .flatten()
-      .collect()
+    let top = top_pages().await;
+    let mut top_ids: Vec<u32> = top.iter().filter_map(|article| article.id).collect();
+    if let Some(count) = count {
+        top_ids.truncate(count);
+    }
+    top_ids
 }
 
-async fn fetch_pages_data(titles: &[String]) -> Vec<u32> {
+async fn fetch_pages_data(titles: &[String]) -> Vec<(u32, String)> {
     assert!(titles.len() <= 50);
     let titles = titles.join("|");
     log::info!("sitemap: fetch page data chunk: titles = {}", titles);
@@ -101,8 +125,9 @@ async fn fetch_pages_data(titles: &[String]) -> Vec<u32> {
             page["ns"].as_i64().and_then(|ns| match ns {
                 0 => {
                     let pageid_raw = page["pageid"].as_i64().expect("find pageid");
-                    let page_id: Option<u32> = pageid_raw.try_into().ok();
-                    page_id
+                    let title = page["title"].as_str().expect("find title").to_string();
+                    let page_id: u32 = pageid_raw.try_into().expect("pageid to u32");
+                    Some((page_id, title))
                 }
                 _ => {
                     log::info!(
