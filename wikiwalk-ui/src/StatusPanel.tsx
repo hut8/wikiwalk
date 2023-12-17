@@ -1,10 +1,11 @@
 import { Box, Link, Paper, Typography } from "@mui/material";
 import { DBStatus } from "./service";
 import { Warning } from "@mui/icons-material";
+import { TopGraph } from "./Graph";
 
 export function StatusPanel({ dbStatus }: { dbStatus: DBStatus }) {
   return (
-    <Paper elevation={8} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh', flexDirection: 'column' }}>
+    <Paper elevation={8} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh', flexDirection: 'column' }}>
       <Box>
         <Typography variant="h4">WikiWalk</Typography>
       </Box>
@@ -21,6 +22,9 @@ export function StatusPanel({ dbStatus }: { dbStatus: DBStatus }) {
             <Typography variant="caption">
               Data current as of: {dbStatus.date} (updated from <Link href="https://dumps.wikimedia.org/backup-index.html">Wikipedia dumps</Link>)
             </Typography>
+          </Box>
+          <Box>
+            <TopGraph />
           </Box>
         </>)
       }
