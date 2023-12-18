@@ -28,7 +28,7 @@ sentry = { version = "0.31.7", features = [
   "ureq",
 ], default-features = false }
 actix-web = { version = "4.2.1", features = ["rustls"] }
-actix-web-lab = { version = "0.18.8" }
+actix-web-lab = { version = "0.20.1" }
 rustls = "0.20.2"
 rustls-pemfile = "2"
 futures-util = { version = "0.3.17", default-features = false, features = [
