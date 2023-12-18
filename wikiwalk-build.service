@@ -4,13 +4,14 @@ After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/wikiwalk-tool pull
-ExecStartPre=-/usr/bin/curl "${SENTRY_CRONS}?status=in_progress"
+ExecStartPre=-/usr/bin/curl "https://o4506004333199360.ingest.sentry.io/api/4506004334510080/cron/build-graph/2377de2b8f109351d1d4d349e0f152e0/?status=in_progress"
 EnvironmentFile=/etc/wikiwalk.conf
 Type=oneshot
 User=wikiwalk
 Group=wikiwalk
 ExecStopPost=+/usr/bin/systemctl restart wikiwalk.service
-ExecStopPost=-/bin/bash -c 'status="error"; [[ $SERVICE_RESULT = success ]] && [[ $EXIT_CODE = exited ]] && status="complete"; /usr/bin/curl "${SENTRY_CRONS}?status=${status}"'
+ExecStopPost=-/bin/bash -c \
+  'status="error"; [[ $SERVICE_RESULT = success ]] && [[ $EXIT_CODE = exited ]] && status="complete"; /usr/bin/curl "https://o4506004333199360.ingest.sentry.io/api/4506004334510080/cron/build-graph/2377de2b8f109351d1d4d349e0f152e0/?status=${status}"'
 
 [Install]
 WantedBy=multi-user.target
