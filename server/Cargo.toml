@@ -30,7 +30,7 @@ sentry = { version = "0.31.7", features = [
 actix-web = { version = "4.2.1", features = ["rustls"] }
 actix-web-lab = { version = "0.18.8" }
 rustls = "0.20.2"
-rustls-pemfile = "1"
+rustls-pemfile = "2"
 futures-util = { version = "0.3.17", default-features = false, features = [
   "std",
 ] }
