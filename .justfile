@@ -86,8 +86,9 @@ deploy-web: build-release-server
 deploy-tool: build-release-tool
   sudo mkdir -p /var/wikiwalk/ /var/wikiwalk/data /var/wikiwalk/webroot/.well-known
   sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
-  sudo rm -f /usr/local/bin/wikiwalk-tool
+  sudo rm -f /usr/local/bin/wikiwalk-tool /usr/local/bin/wikiwalk-build-sentry-watchdog
   sudo cp target/release/tool /usr/local/bin/wikiwalk-tool
+  sudo cp wikiwalk-build-sentry-watchdog /usr/local/bin/wikiwalk-build-sentry-watchdog
   sudo cp ./wikiwalk-build.timer /lib/systemd/system/wikiwalk-build.timer
   sudo cp ./wikiwalk-build.service /lib/systemd/system/wikiwalk-build.service
   sudo systemctl daemon-reload
