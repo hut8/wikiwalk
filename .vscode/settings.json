@@ -1,0 +1,5 @@
+{
+  "rust-analyzer.cargo.extraEnv": {
+    "WIKIWALK_SKIP_FRONTEND_BUILD": "1"
+  }
+}
