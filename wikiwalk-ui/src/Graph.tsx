@@ -37,6 +37,8 @@ export function TopGraph() {
         nodeLabelAccessor={d => d.title}
         nodeSize={2}
         nodeLabelColor={d => d.top ? 'white' : 'grey'}
+        hoveredNodeLabelColor={d => d.top ? 'white' : 'grey'}
+        showTopLabelsValueKey='top'
         simulationDecay={2000}
         simulationRepulsion={.8}
         curvedLinks={true}
