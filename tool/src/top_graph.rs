@@ -19,6 +19,7 @@ struct GraphVertex {
     id: String,
     title: String,
     top: bool,
+    rank: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -29,7 +30,15 @@ struct GraphData {
 
 pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::DatabaseConnection) {
     log::info!("top graph: finding top pages");
-    let top_page_ids = crate::api::top_page_ids(Some(10)).await;
+    let top_pages = crate::api::top_pages()
+        .await
+        .into_iter()
+        .take(10)
+        .collect_vec();
+    let top_page_ids = top_pages
+        .iter()
+        .map(|article| article.id.expect("article id"))
+        .collect_vec();
     log::info!("top graph: found {} valid top pages", top_page_ids.len());
     let page_ids: Vec<u32> = Vertex::find()
         .select_only()
@@ -128,10 +137,14 @@ pub async fn generate_sub_graph(sink_path: &std::path::Path, db: &sea_orm::Datab
     log::info!("top graph: building vertex list");
     let vertexes: Vec<GraphVertex> = vertex_data
         .into_iter()
-        .map(|(id, title)| GraphVertex {
-            id: id.to_string(),
-            top: top_page_id_set.contains(&id),
-            title,
+        .map(|(id, title)| {
+            let article = top_pages.iter().find(|article| article.id == Some(id));
+            GraphVertex {
+                id: id.to_string(),
+                top: top_page_id_set.contains(&id),
+                title,
+                rank: article.map(|article| article.rank.try_into().expect("convert rank to u32")),
+            }
         })
         .collect();
 

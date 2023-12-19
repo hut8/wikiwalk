@@ -24,14 +24,14 @@ struct Item {
 
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Article {
+pub struct Article {
     pub article: String,
     pub views: i64,
     pub rank: i64,
     pub id: Option<u32>,
 }
 
-async fn top_pages() -> Vec<Article> {
+pub async fn top_pages() -> Vec<Article> {
     use chrono::prelude::*;
     let last_month = Utc::now()
         .checked_sub_months(Months::new(1))
