@@ -56,6 +56,7 @@ export type Vertex = {
   title: string
   color?: string
   top: boolean
+  rank?: number
 }
 
 export type Edge = {

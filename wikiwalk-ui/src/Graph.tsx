@@ -12,6 +12,9 @@ const fetchGraph = async (
   const findVertex = (id: string) => graph.vertexes.find(v => v.id === id);
   for (const vertex of graph.vertexes) {
     vertex.color = randomColor(vertex.top);
+    if (vertex.rank) {
+      vertex.title = `${vertex.title} (Rank: ${vertex.rank})`;
+    }
   }
   setVertexes(graph.vertexes);
   for (const edge of graph.edges) {
