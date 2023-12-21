@@ -4,13 +4,13 @@ After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/wikiwalk-tool pull
-ExecStartPre=-/usr/bin/curl "https://o4506004333199360.ingest.sentry.io/api/4506004334510080/cron/build-graph/2377de2b8f109351d1d4d349e0f152e0/?status=in_progress"
+ExecStartPre=/usr/local/bin/wikiwalk-build-sentry-watchdog-ping
 EnvironmentFile=/etc/wikiwalk.conf
 Type=oneshot
 User=wikiwalk
 Group=wikiwalk
 ExecStartPost=+/usr/bin/systemctl restart wikiwalk.service
-ExecStopPost=-/usr/local/bin/wikiwalk-build-sentry-watchdog
+ExecStopPost=/usr/local/bin/wikiwalk-build-sentry-watchdog-commit
 
 [Install]
 WantedBy=multi-user.target

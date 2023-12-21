@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+sentry_url='https://o4506004333199360.ingest.sentry.io/api/4506004334510080/cron/build-graph/2377de2b8f109351d1d4d349e0f152e0/?status=in_progress'
+echo "$(date) wikiwalk-build-sentry-watchdog: pinging $sentry_url" | tee -a /var/wikiwalk/sentry-watchdog.log
+/usr/bin/curl --no-progress-meter -L "$sentry_url" | tee -a /var/wikiwalk/sentry-watchdog.log

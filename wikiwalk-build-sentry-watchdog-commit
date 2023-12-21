@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+status="error"
+[[ $SERVICE_RESULT = success ]] && [[ $EXIT_CODE = exited ]] && status="complete"
+echo "$(date) wikiwalk-build-sentry-watchdog: pinging https://o4506004333199360.ingest.sentry.io/api/4506004334510080/cron/build-graph/2377de2b8f109351d1d4d349e0f152e0/?status=${status}" | tee -a /var/wikiwalk/sentry-watchdog.log
+env | tee -a /var/wikiwalk/sentry-watchdog.log
+/usr/bin/curl --no-progress-meter -L "https://o4506004333199360.ingest.sentry.io/api/4506004334510080/cron/build-graph/2377de2b8f109351d1d4d349e0f152e0/?status=${status}" | tee -a /var/wikiwalk/sentry-watchdog.log
