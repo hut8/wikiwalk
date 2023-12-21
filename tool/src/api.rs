@@ -50,6 +50,10 @@ pub async fn top_pages() -> Vec<Article> {
         .items
         .into_iter()
         .flat_map(|item| item.articles.into_iter())
+        .map(|mut article| {
+            article.article = article.article.replace('_', " ");
+            article
+        })
         .collect();
 
     let page_titles = articles
@@ -60,23 +64,26 @@ pub async fn top_pages() -> Vec<Article> {
     let chunk_iterator = chunks.into_iter();
     let chunk_futures = chunk_iterator.map(fetch_pages_data);
     let chunk_futures = chunk_futures.collect::<FuturesUnordered<_>>();
-    let ids: Vec<(u32, String)> = chunk_futures
+    let page_title_ids: Vec<(u32, String)> = chunk_futures
         .collect::<Vec<_>>()
         .await
         .into_iter()
         .flatten()
         .collect();
     // Add the IDs to the articles
+    log::info!("top pages: built id map: {:?}", page_title_ids);
 
     let mut articles = articles
         .into_iter()
-        .map(|mut article| {
-            let id = ids
+        .filter_map(|mut article| {
+            let id = page_title_ids
                 .iter()
                 .find(|(_id, title)| title == &article.article)
                 .map(|(id, _)| *id);
-            article.id = id;
-            article
+              id.map(|article_id| {
+                article.id = Some(article_id);
+                article
+              })
         })
         .collect::<Vec<_>>();
 
@@ -94,6 +101,8 @@ pub async fn top_page_ids(count: Option<usize>) -> Vec<u32> {
     top_ids
 }
 
+// Fetch the page ids for a chunk of page titles
+// The returned vector is a list of (page_id, page_title) pairs, where the page_title has been normalized without underscores
 async fn fetch_pages_data(titles: &[String]) -> Vec<(u32, String)> {
     assert!(titles.len() <= 50);
     let titles = titles.join("|");
