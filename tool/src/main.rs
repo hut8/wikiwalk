@@ -935,6 +935,8 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
     }
     log::info!("building sitemap");
     run_sitemap().await;
+    log::info!("building top graph");
+    run_build_top_graph().await;
 
     #[cfg(feature = "google-cloud-storage")]
     if push {
@@ -946,7 +948,7 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
     }
 }
 
-async fn run_build_topgraph() {
+async fn run_build_top_graph() {
     let current_db_paths = Paths::new().db_paths("current");
     let db_path = current_db_paths.graph_db();
     let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
@@ -1068,7 +1070,7 @@ async fn main() {
                 "building topgraph using data directory: {}",
                 data_dir.display()
             );
-            run_build_topgraph().await;
+            run_build_top_graph().await;
         }
         Command::Version { commit, date } => {
             let show_commit = commit || !date;
