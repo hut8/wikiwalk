@@ -76,18 +76,20 @@ export default function App() {
               </Typography>
             </Box>
             <Box>
-              <Await resolve={dbStatus} children={(status) =>
-                <Typography variant="caption">
-                  <Box>
-                    Searching {status.edgeCount.toLocaleString()} {' '}connections between{' '}
-                    {status.vertexCount.toLocaleString()}{' '}pages.
-                    {' '}
-                    <Link color={'#ffffff'} href="https://dumps.wikimedia.org/backup-index.html" target="_blank">
-                      Data from {status.date}
-                    </Link>
-                  </Box>
-                </Typography>
-              } />
+              <Suspense>
+                <Await resolve={dbStatus} children={(status) =>
+                  <Typography variant="caption">
+                    <Box>
+                      Searching {status.edgeCount.toLocaleString()} {' '}connections between{' '}
+                      {status.vertexCount.toLocaleString()}{' '}pages.
+                      {' '}
+                      <Link color={'#ffffff'} href="https://dumps.wikimedia.org/backup-index.html" target="_blank">
+                        Data from {status.date}
+                      </Link>
+                    </Box>
+                  </Typography>
+                } />
+              </Suspense>
             </Box>
             <Box sx={{ flexGrow: 0, marginLeft: 3 }}>
               <IconButton onClick={() => openGitHub()} sx={{ p: 0 }}>
@@ -96,7 +98,7 @@ export default function App() {
             </Box>
           </Toolbar>
         </AppBar>
-        <Container sx={{flexGrow: 1, display: "flex", flexDirection: "column"}} maxWidth={false}>
+        <Container sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }} maxWidth={false}>
           <Box
             sx={{
               my: 4,
@@ -127,7 +129,9 @@ export default function App() {
           </Box>
 
           {!(sourcePage || targetPage) &&
-            <Await resolve={dbStatus} children={(status) => <StatusPanel dbStatus={status} />} />
+            <Suspense>
+              <Await resolve={dbStatus} children={(status) => <StatusPanel dbStatus={status} />} />
+            </Suspense>
           }
 
           <Suspense fallback={<Activity />}>
