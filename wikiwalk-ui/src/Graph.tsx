@@ -42,8 +42,7 @@ export function TopGraph() {
         nodeLabelColor={d => d.top ? 'white' : 'grey'}
         hoveredNodeLabelColor={d => d.top ? 'white' : 'grey'}
         showTopLabels={true}
-        showFPSMonitor={true}
-        showTopLabelsValueKey='top'
+        showTopLabelsValueKey='rank'
         showDynamicLabels={false}
         simulationDecay={2000}
         simulationRepulsion={1.4}
