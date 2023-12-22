@@ -35,15 +35,19 @@ export function TopGraph() {
   return (
     <CosmographProvider nodes={vertexes} links={edges}>
       <Cosmograph<Vertex, Edge>
-        style={{ height: '60vh', width: '80vw' }}
+        // style={{ height: '100%', width: '100%' }}
         nodeColor={d => d.color || null}
         nodeLabelAccessor={d => d.title}
         nodeSize={2}
         nodeLabelColor={d => d.top ? 'white' : 'grey'}
         hoveredNodeLabelColor={d => d.top ? 'white' : 'grey'}
+        showTopLabels={true}
+        showFPSMonitor={true}
         showTopLabelsValueKey='top'
+        showDynamicLabels={false}
         simulationDecay={2000}
-        simulationRepulsion={.8}
+        simulationRepulsion={1.4}
+        simulationCenter={.1}
         curvedLinks={true}
         linkColor={d => d.color || null}
         linkWidth={2} />

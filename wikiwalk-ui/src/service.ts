@@ -123,6 +123,9 @@ export async function topGraph(): Promise<GraphPayload> {
     throw new Error("bad response code from server");
   }
   const data = (await response.json()) as GraphPayload;
+  for (const v of data.vertexes) {
+    v.rank ??= 0;
+  }
 
   return data;
 }

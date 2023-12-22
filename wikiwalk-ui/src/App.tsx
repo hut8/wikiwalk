@@ -18,7 +18,7 @@ import { PathsDisplay } from "./PathsDisplay";
 import { PathLoaderData } from "./loaders";
 import { Activity } from "./Activity";
 import { StatusPanel } from "./StatusPanel";
-import { IconButton } from "@mui/material";
+import { IconButton, Link } from "@mui/material";
 
 const queryClient = new QueryClient();
 
@@ -70,15 +70,33 @@ export default function App() {
                 WikiWalk.app
               </Typography>
             </Box>
-            <Box sx={{ flexGrow: 0 }}>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="caption">
+                Find the shortest paths between two Wikipedia pages
+              </Typography>
+            </Box>
+            <Box>
+              <Await resolve={dbStatus} children={(status) =>
+                <Typography variant="caption">
+                  <Box>
+                    Searching {status.edgeCount.toLocaleString()} {' '}connections between{' '}
+                    {status.vertexCount.toLocaleString()}{' '}pages.
+                    {' '}
+                    <Link color={'#ffffff'} href="https://dumps.wikimedia.org/backup-index.html" target="_blank">
+                      Data from {status.date}
+                    </Link>
+                  </Box>
+                </Typography>
+              } />
+            </Box>
+            <Box sx={{ flexGrow: 0, marginLeft: 3 }}>
               <IconButton onClick={() => openGitHub()} sx={{ p: 0 }}>
-                <GitHubIcon sx={{color: "white"}} />
+                <GitHubIcon sx={{ color: "white" }} />
               </IconButton>
             </Box>
           </Toolbar>
-
         </AppBar>
-        <Container maxWidth={false}>
+        <Container sx={{flexGrow: 1, display: "flex", flexDirection: "column"}} maxWidth={false}>
           <Box
             sx={{
               my: 4,
