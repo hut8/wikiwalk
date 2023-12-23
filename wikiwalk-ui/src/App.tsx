@@ -4,9 +4,9 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
-//import MultipleStopIcon from "@mui/icons-material/MultipleStop";
+import Grid from "@mui/material/Unstable_Grid2";
 import ForwardIcon from "@mui/icons-material/Forward";
-import GitHubIcon from '@mui/icons-material/GitHub';
+import GitHubIcon from "@mui/icons-material/GitHub";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -25,7 +25,8 @@ const queryClient = new QueryClient();
 export default function App() {
   const [sourcePage, setSourcePage] = useState<Page | null>(null);
   const [targetPage, setTargetPage] = useState<Page | null>(null);
-  const { pagePaths, source, target, dbStatus } = useLoaderData() as PathLoaderData;
+  const { pagePaths, source, target, dbStatus } =
+    useLoaderData() as PathLoaderData;
   const navigate = useNavigate();
 
   const setTitle = (sourcePage: Page, targetPage: Page) => {
@@ -42,7 +43,7 @@ export default function App() {
       const [s, t] = await Promise.all([source, target]);
       s && setSourcePage(s);
       t && setTargetPage(t);
-      (s && t) && setTitle(s, t);
+      s && t && setTitle(s, t);
     })();
   }, [source, target]);
 
@@ -77,18 +78,25 @@ export default function App() {
             </Box>
             <Box>
               <Suspense>
-                <Await resolve={dbStatus} children={(status) =>
-                  <Typography variant="caption">
-                    <Box>
-                      Searching {status.edgeCount.toLocaleString()} {' '}connections between{' '}
-                      {status.vertexCount.toLocaleString()}{' '}pages.
-                      {' '}
-                      <Link color={'#ffffff'} href="https://dumps.wikimedia.org/backup-index.html" target="_blank">
-                        Data from {status.date}
-                      </Link>
-                    </Box>
-                  </Typography>
-                } />
+                <Await
+                  resolve={dbStatus}
+                  children={(status) => (
+                    <Typography variant="caption">
+                      <Box>
+                        Searching {status.edgeCount.toLocaleString()}{" "}
+                        connections between{" "}
+                        {status.vertexCount.toLocaleString()} pages.{" "}
+                        <Link
+                          color={"#ffffff"}
+                          href="https://dumps.wikimedia.org/backup-index.html"
+                          target="_blank"
+                        >
+                          Data from {status.date}
+                        </Link>
+                      </Box>
+                    </Typography>
+                  )}
+                />
               </Suspense>
             </Box>
             <Box sx={{ flexGrow: 0, marginLeft: 3 }}>
@@ -98,41 +106,48 @@ export default function App() {
             </Box>
           </Toolbar>
         </AppBar>
-        <Container sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }} maxWidth={false}>
-          <Box
-            sx={{
-              my: 4,
-              display: "flex",
-              flexDirection: "row",
-              justifyContent: "space-between",
-              gap: "64px",
-            }}
-          >
-            <PageInput
-              label="Source page"
-              page={sourcePage}
-              setPage={setSourcePage}
-            />
-            <ForwardIcon sx={{ fontSize: 48 }} />
-            <PageInput
-              label="Target page"
-              page={targetPage}
-              setPage={setTargetPage}
-            />
-            <Button
-              variant="contained"
-              sx={{ flexShrink: 1 }}
-              onClick={triggerSearch}
-            >
-              Go
-            </Button>
-          </Box>
+        <Container
+          sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}
+          maxWidth={false}
+        >
+          <Grid container spacing={2} my={4}>
+            <Grid xs={12} md={5}>
+              <PageInput
+                label="Source page"
+                page={sourcePage}
+                setPage={setSourcePage}
+              />
+            </Grid>
+            <Grid xs={0} md={1} justifyContent={"center"} display={"flex"}>
+              <ForwardIcon sx={{ fontSize: 48 }} />
+            </Grid>
+            <Grid xs={12} md={5}>
+              <PageInput
+                label="Target page"
+                page={targetPage}
+                setPage={setTargetPage}
+              />
+            </Grid>
+            <Grid xs={12} md={1} display={"flex"} alignItems={"center"} justifyContent={"center"}>
+              <Button
+                variant="contained"
+                sx={{ flexShrink: 1 }}
+                onClick={triggerSearch}
+              >
+                Go
+              </Button>
+            </Grid>
+          </Grid>
 
-          {!(sourcePage || targetPage) &&
+
+          {!(sourcePage || targetPage) && (
             <Suspense>
-              <Await resolve={dbStatus} children={(status) => <StatusPanel dbStatus={status} />} />
+              <Await
+                resolve={dbStatus}
+                children={(status) => <StatusPanel dbStatus={status} />}
+              />
             </Suspense>
-          }
+          )}
 
           <Suspense fallback={<Activity />}>
             <Await
@@ -145,7 +160,7 @@ export default function App() {
             />
           </Suspense>
         </Container>
-      </QueryClientProvider >
+      </QueryClientProvider>
     </>
   );
 }
