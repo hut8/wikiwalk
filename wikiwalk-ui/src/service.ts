@@ -52,23 +52,23 @@ export type DBStatus = {
 };
 
 export type Vertex = {
-  id: string
-  title: string
-  color?: string
-  top: boolean
-  rank?: number
-}
+  id: string;
+  title: string;
+  color?: string;
+  top: boolean;
+  rank?: number;
+};
 
 export type Edge = {
-  source: string
-  target: string
-  color?: string
-}
+  source: string;
+  target: string;
+  color?: string;
+};
 
 export type GraphPayload = {
-  vertexes: Vertex[]
-  edges: Edge[]
-}
+  vertexes: Vertex[];
+  edges: Edge[];
+};
 
 export async function runSearch(term: string): Promise<Page[]> {
   const wikiParams = new URLSearchParams();
@@ -109,10 +109,7 @@ export async function runSearch(term: string): Promise<Page[]> {
 const serviceEndpointBase = new URL("https://wikiwalk.app/");
 
 export async function topGraph(): Promise<GraphPayload> {
-  const endpoint = new URL(
-    `/top-graph`,
-    serviceEndpointBase
-  );
+  const endpoint = new URL(`/top-graph`, serviceEndpointBase);
 
   const response = await fetch(endpoint, {
     headers: {
@@ -128,6 +125,35 @@ export async function topGraph(): Promise<GraphPayload> {
   }
 
   return data;
+}
+
+export function pathsGraph(pd: PagePaths): GraphPayload {
+  const vertexMap = pd.paths
+    .flatMap((x) => x)
+    .reduce((agg, val) => {
+      agg[val.id] = {
+        id: val.id.toString(),
+        top: false,
+        title: val.title,
+      };
+      return agg;
+    }, {} as Record<number, Vertex>);
+  const vertexes = Object.values(vertexMap);
+
+  const makeEdges = (path: Page[]) =>
+    path
+      .slice(0, -1)
+      .map((currentPage, ix, pages) => {
+        const source = currentPage.id.toString();
+        const target = pages[ix + 1].id.toString();
+        return {source, target};
+      });
+
+  const edges: Edge[] = pd.paths.map(makeEdges).flat();
+  return {
+    edges,
+    vertexes,
+  };
 }
 
 export async function findPaths(
