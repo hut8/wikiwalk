@@ -27,7 +27,6 @@ indicatif = { version = "0.17.2" }
 itertools = { version = "*" }
 log = "*"
 memmap2 = "*"
-memory-stats = "1.0.0"
 num_cpus = "1.13.1"
 parse-mediawiki-sql = { version = "*", features = ["utils"] }
 rayon = "*"

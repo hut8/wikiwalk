@@ -13,7 +13,6 @@ use clap::{Parser, Subcommand};
 use crossbeam::channel::{Receiver, Sender};
 use edge_db_builder::{AdjacencySet, EdgeProcDB};
 use itertools::Itertools;
-use memory_stats::memory_stats;
 use reqwest::Client;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
@@ -561,13 +560,6 @@ impl GraphDBBuilder {
         let _ = db.execute(db.get_database_backend().build(&stmt)).await;
         self.create_vertex_table(&db).await;
         self.create_paths_table(&db).await;
-
-        if let Some(usage) = memory_stats() {
-            println!("Current physical memory usage: {}", usage.physical_mem);
-            println!("Current virtual memory usage: {}", usage.virtual_mem);
-        } else {
-            println!("Couldn't get the current memory usage :(");
-        }
 
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
