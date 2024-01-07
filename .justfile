@@ -133,6 +133,15 @@ deploy-config:
   sudo cp wikiwalk.conf /etc/wikiwalk.conf
   echo "Now add variables to /etc/wikiwalk.conf"
 
+deploy-tool:
+  just deploy-tool-{{os()}}
+
+deploy-web:
+  just deploy-web-{{os()}}
+
 # Deploy web server and tool
 deploy-linux: deploy-tool-linux deploy-web-linux
 deploy-freebsd: deploy-tool-freebsd deploy-web-freebsd
+
+deploy:
+  just deploy-{{os()}}
