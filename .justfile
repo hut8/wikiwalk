@@ -58,7 +58,7 @@ provision-server-debian:
 
 provision-server-freebsd:
   sudo pw user add -n wikiwalk -m
-  
+
 
 # Deploy web server (must be run on server)
 deploy-web-linux: build-release-server
@@ -112,8 +112,8 @@ deploy-web-freebsd: build-release-server
   sudo cp wikiwalk-watchdog /usr/local/bin/wikiwalk-watchdog
   sudo cp wikiwalk-monitor /usr/local/bin/wikiwalk-monitor
   sudo cp wikiwalk-server.rc /usr/local/etc/rc.d/wikiwalk-server
-  sudo service enable wikiwalk-server  
-  sudo service restart wikiwalk-server
+  sudo service wikiwalk-server enable
+  sudo service wikiwalk-server restart
 
 deploy-tool-freebsd: build-release-tool
   sudo mkdir -p /var/wikiwalk/data

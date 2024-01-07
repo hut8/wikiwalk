@@ -4,6 +4,6 @@
 SHELL=/bin/sh
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 MAILTO=""
-DATA_ROOT="/usr/local/var/wikiwalk"
+DATA_ROOT="/var/wikiwalk"
 
 @daily /usr/local/bin/wikiwalk-tool pull
