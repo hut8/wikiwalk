@@ -1,0 +1,19 @@
+#!/bin/sh
+# PROVIDE: wikiwalk-server
+# REQUIRE: networking
+# KEYWORD:
+
+. /etc/rc.subr
+
+name="wikiwalk-server"
+rcvar="wikiwalk_server_enable"
+wikiwalk_server_user="wikiwalk"
+wikiwalk_server_command="/usr/local/bin/wikiwalk-server"
+pidfile="/var/run/wikiwalk-server/${name}.pid"
+command="/usr/sbin/daemon"
+command_args="-P ${pidfile} -r -f ${wikiwalk_server_command}"
+
+load_rc_config $name
+: ${godaemon_enable:=no}
+
+run_rc_command "$1"
