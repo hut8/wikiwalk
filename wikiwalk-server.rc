@@ -7,13 +7,12 @@
 
 name="wikiwalk_server"
 rcvar="wikiwalk_server_enable"
-wikiwalk_server_user="wikiwalk"
 wikiwalk_server_command="/usr/local/bin/wikiwalk-server"
 pidfile="/var/wikiwalk/${name}.pid"
 command="/usr/sbin/daemon"
-command_args="-P ${pidfile} -r -f ${wikiwalk_server_command}"
+command_args="--syslog --user wikiwalk -P ${pidfile} -f ${wikiwalk_server_command}"
 
 load_rc_config $name
-: ${godaemon_enable:=no}
+: ${wikiwalk_server_enable:=no}
 
 run_rc_command "$1"

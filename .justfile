@@ -28,11 +28,9 @@ fix:
 build-release: build-release-server build-release-tool
 
 build-release-server:
-    rm -f target/release/server
     cargo build --release --bin server
 
 build-release-tool:
-    rm -f target/release/tool
     cargo build --release --bin tool
 
 # Build for development
@@ -112,8 +110,10 @@ deploy-web-freebsd: build-release-server
   sudo cp wikiwalk-watchdog /usr/local/bin/wikiwalk-watchdog
   sudo cp wikiwalk-monitor /usr/local/bin/wikiwalk-monitor
   sudo cp wikiwalk-server.rc /usr/local/etc/rc.d/wikiwalk-server
+  sudo cp wikiwalk.conf.freebsd /usr/local/etc/wikiwalk.conf
   sudo service wikiwalk-server enable
-  sudo service wikiwalk-server restart
+  sudo service wikiwalk-server stop || true
+  sudo service wikiwalk-server start
 
 deploy-tool-freebsd: build-release-tool
   sudo mkdir -p /var/wikiwalk/data
