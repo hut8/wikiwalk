@@ -9,7 +9,7 @@ edition = "2021"
 wikiwalk = { path = "../wikiwalk" }
 anyhow = "1.0.68"
 chrono = "0.4.23"
-clap = { version = "3.0", features = ["derive"] }
+clap = { version = "4.4", features = ["derive"] }
 crossbeam = "*"
 hex = "*"
 dirs = "5.0"
