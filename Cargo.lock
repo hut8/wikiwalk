@@ -1706,7 +1706,7 @@ dependencies = [
  "gix-chunk",
  "gix-features",
  "gix-hash",
- "memmap2 0.9.0",
+ "memmap2 0.9.3",
  "thiserror",
 ]
 
@@ -2739,9 +2739,9 @@ dependencies = [
 
 [[package]]
 name = "memmap2"
-version = "0.9.0"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "deaba38d7abf1d4cca21cc89e932e542ba2b9258664d2a9ef0e61512039c9375"
+checksum = "45fd3a57831bf88bc63f8cebc0cf956116276e97fef3966103e96416209f7c92"
 dependencies = [
  "libc",
 ]
@@ -4898,7 +4898,7 @@ dependencies = [
  "itertools 0.12.0",
  "log",
  "lrumap",
- "memmap2 0.9.0",
+ "memmap2 0.9.3",
  "num_cpus",
  "parse-mediawiki-sql 0.10.0",
  "rayon",
@@ -5323,7 +5323,7 @@ dependencies = [
  "futures",
  "itertools 0.12.0",
  "log",
- "memmap2 0.9.0",
+ "memmap2 0.9.3",
  "num_cpus",
  "parse-mediawiki-sql 0.9.0",
  "sea-orm 0.11.3",
