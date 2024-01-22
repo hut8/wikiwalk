@@ -4318,7 +4318,7 @@ dependencies = [
  "futures-util",
  "log",
  "mime",
- "rustls 0.20.9",
+ "rustls 0.21.7",
  "rustls-pemfile 2.0.0",
  "sea-orm 0.11.3",
  "sentry 0.31.8",
