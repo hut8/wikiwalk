@@ -177,7 +177,7 @@ dependencies = [
  "impl-more",
  "pin-project-lite",
  "rustls 0.21.7",
- "rustls-webpki",
+ "rustls-webpki 0.101.6",
  "tokio",
  "tokio-rustls 0.23.4",
  "tokio-util",
@@ -3634,8 +3634,22 @@ checksum = "cd8d6c9f025a446bc4d18ad9632e69aec8f287aa84499ee335599fabd20c3fd8"
 dependencies = [
  "log",
  "ring 0.16.20",
- "rustls-webpki",
+ "rustls-webpki 0.101.6",
  "sct",
+]
+
+[[package]]
+name = "rustls"
+version = "0.22.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e87c9956bd9807afa1f77e0f7594af32566e830e088a5576d27c5b6f30f49d41"
+dependencies = [
+ "log",
+ "ring 0.17.3",
+ "rustls-pki-types",
+ "rustls-webpki 0.102.1",
+ "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -3671,6 +3685,17 @@ checksum = "3c7d5dece342910d9ba34d259310cae3e0154b873b35408b787b59bce53d34fe"
 dependencies = [
  "ring 0.16.20",
  "untrusted 0.7.1",
+]
+
+[[package]]
+name = "rustls-webpki"
+version = "0.102.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef4ca26037c909dedb327b48c3327d0ba91d3dd3c4e05dad328f210ffb68e95b"
+dependencies = [
+ "ring 0.17.3",
+ "rustls-pki-types",
+ "untrusted 0.9.0",
 ]
 
 [[package]]
@@ -4318,7 +4343,7 @@ dependencies = [
  "futures-util",
  "log",
  "mime",
- "rustls 0.21.7",
+ "rustls 0.22.2",
  "rustls-pemfile 2.0.0",
  "sea-orm 0.11.3",
  "sentry 0.31.8",
@@ -4620,6 +4645,12 @@ name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+
+[[package]]
+name = "subtle"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
 
 [[package]]
 name = "symlink"
@@ -5080,7 +5111,7 @@ dependencies = [
  "native-tls",
  "once_cell",
  "rustls 0.21.7",
- "rustls-webpki",
+ "rustls-webpki 0.101.6",
  "url",
  "webpki-roots 0.25.2",
 ]
