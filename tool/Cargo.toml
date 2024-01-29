@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 wikiwalk = { path = "../wikiwalk" }
 anyhow = "1.0.68"
-chrono = "0.4.23"
+chrono = "0.4.33"
 clap = { version = "4.4", features = ["derive"] }
 crossbeam = "*"
 hex = "*"
