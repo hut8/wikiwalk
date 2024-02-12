@@ -23,7 +23,7 @@ sea-orm = { version = "^0", features = [
   "runtime-tokio-rustls",
   "macros",
 ] }
-indicatif = { version = "0.17.2" }
+indicatif = { version = "0.17.8" }
 itertools = { version = "*" }
 log = "*"
 memmap2 = "*"
