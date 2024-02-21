@@ -83,8 +83,8 @@ struct BatchLookup {
 }
 
 impl GraphDBBuilder {
-    pub fn new(dump_date: String, root_data_dir: &Path) -> GraphDBBuilder {
-        let paths = Paths::with_base(root_data_dir);
+    pub fn new(dump_date: String) -> GraphDBBuilder {
+        let paths = Paths::with_base(std::env::current_dir().unwrap().as_path());
         let dump_paths = paths.dump_paths(&dump_date);
         let page_path = dump_paths.page();
         let redirects_path = dump_paths.redirect();
@@ -752,8 +752,8 @@ enum Command {
     },
 }
 
-async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
-    let mut gddb = GraphDBBuilder::new(dump_date.to_owned(), data_dir);
+async fn run_build(dump_date: &str) -> anyhow::Result<()> {
+    let mut gddb = GraphDBBuilder::new(dump_date.to_owned());
     log::info!("cleaning old databases");
     gddb.clean_old_databases();
     log::info!("building database");
@@ -888,7 +888,7 @@ async fn run_find_latest(urls: bool, relative: bool, date: bool) {
     }
 }
 
-async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
+async fn run_pull(dump_dir: &Path, push: bool, clean: bool) {
     let latest_dump = {
         match fetch::find_latest().await {
             None => {
@@ -916,7 +916,7 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
         .await
         .expect("fetch dump");
     log::info!("fetched data from {latest_dump_date}",);
-    if let Err(err) = run_build(data_dir, latest_dump_date).await {
+    if let Err(err) = run_build(latest_dump_date).await {
         log::error!("build failed: {:#?}", err);
         process::exit(1);
     }
@@ -994,11 +994,12 @@ async fn main() {
     let data_dir = cli.data_path.or(env_data_dir).unwrap_or(default_data_dir);
     let dump_dir = data_dir.join("dumps");
     std::fs::create_dir_all(&data_dir).unwrap();
+    std::env::set_current_dir(data_dir.as_path()).expect("change to data directory");
 
     match cli.command {
         Command::Build { dump_date, push } => {
-            log::debug!("running build using data directory: {}", data_dir.display());
-            run_build(&data_dir, &dump_date).await.unwrap();
+            log::debug!("running build");
+            run_build(&dump_date).await.unwrap();
             #[cfg(feature = "google-cloud-storage")]
             if push {
                 log::info!("pushing built files");
@@ -1048,7 +1049,7 @@ async fn main() {
         }
         Command::Pull { push, clean } => {
             log::debug!("running pull using data directory: {}", data_dir.display());
-            run_pull(&dump_dir, &data_dir, push, clean).await;
+            run_pull(&dump_dir, push, clean).await;
         }
         Command::Sitemap => {
             log::debug!(
