@@ -131,6 +131,11 @@ async fn fetch_pages_data(titles: &[String]) -> Vec<(u32, String)> {
         .iter()
         .map(|(_, page)| page)
         .filter_map(|page| {
+            log::debug!("evaluating page: {}", page.to_string());
+            // Pages that are marked as "missing" have {"missing":""}
+            if page.get("missing").is_some() {
+                return None;
+            }
             page["ns"].as_i64().and_then(|ns| match ns {
                 0 => {
                     let pageid_raw = page["pageid"].as_i64().expect("find pageid");
