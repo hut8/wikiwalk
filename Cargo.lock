@@ -1774,7 +1774,7 @@ dependencies = [
  "gix-chunk",
  "gix-features",
  "gix-hash",
- "memmap2 0.9.3",
+ "memmap2 0.9.4",
  "thiserror",
 ]
 
@@ -1930,7 +1930,7 @@ dependencies = [
  "gix-traverse",
  "itoa",
  "libc",
- "memmap2 0.9.3",
+ "memmap2 0.9.4",
  "rustix 0.38.21",
  "smallvec",
  "thiserror",
@@ -2010,7 +2010,7 @@ dependencies = [
  "gix-object",
  "gix-path",
  "gix-tempfile",
- "memmap2 0.9.3",
+ "memmap2 0.9.4",
  "parking_lot 0.12.1",
  "smallvec",
  "thiserror",
@@ -2056,7 +2056,7 @@ dependencies = [
  "gix-path",
  "gix-tempfile",
  "gix-validate",
- "memmap2 0.9.3",
+ "memmap2 0.9.4",
  "thiserror",
  "winnow",
 ]
@@ -2693,9 +2693,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.149"
+version = "0.2.153"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a08173bc88b7955d1b3145aa561539096c421ac8debde8cbc3612ec635fee29b"
+checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
 name = "libloading"
@@ -2810,9 +2810,9 @@ dependencies = [
 
 [[package]]
 name = "memmap2"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45fd3a57831bf88bc63f8cebc0cf956116276e97fef3966103e96416209f7c92"
+checksum = "fe751422e4a8caa417e13c3ea66452215d7d63e19e604f4980461212f3ae1322"
 dependencies = [
  "libc",
 ]
@@ -4876,7 +4876,7 @@ dependencies = [
  "itertools 0.12.1",
  "log",
  "lrumap",
- "memmap2 0.9.3",
+ "memmap2 0.9.4",
  "num_cpus",
  "parse-mediawiki-sql 0.10.0",
  "rayon",
@@ -5313,7 +5313,7 @@ dependencies = [
  "futures",
  "itertools 0.12.1",
  "log",
- "memmap2 0.9.3",
+ "memmap2 0.9.4",
  "num_cpus",
  "parse-mediawiki-sql 0.9.0",
  "sea-orm",
