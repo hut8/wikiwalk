@@ -3793,9 +3793,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.1"
+version = "0.23.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e153fc89608e0515660ca656fd7f2fa05ca6690f3fd6ad1b0a46e24a8130d838"
+checksum = "1b3818d6051afeb6f88412bc8693cf8219799b2f2c2365f15e7534f0e198a16c"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -4309,7 +4309,7 @@ dependencies = [
  "futures-util",
  "log",
  "mime",
- "rustls 0.23.1",
+ "rustls 0.23.3",
  "rustls-pemfile 2.1.1",
  "sea-orm",
  "sentry",
