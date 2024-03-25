@@ -20,7 +20,7 @@ serde = "*"
 serde_json = "1.0"
 sqlx = { version = "*", features = ["sqlite"] }
 tokio = { version = "1", features = ["full"] }
-chrono = "0.4.34"
+chrono = "0.4.35"
 dirs = "5.0.1"
 thiserror = "1.0.57"
 anyhow = "1.0.81"
