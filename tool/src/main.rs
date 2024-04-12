@@ -38,8 +38,6 @@ mod edge_db_builder;
 mod fetch;
 mod page_source;
 mod pagelink_source;
-#[cfg(feature = "google-cloud-storage")]
-mod push;
 mod sitemap;
 mod top_graph;
 
@@ -698,8 +696,6 @@ enum Command {
         /// Dump date to import
         #[clap(long)]
         dump_date: String,
-        /// Push files to Google Cloud after build
-        push: bool,
     },
     /// Find the shortest path
     Run {
@@ -732,8 +728,6 @@ enum Command {
     },
     /// Fetch latest dump and import it
     Pull {
-        #[clap(long)]
-        push: bool,
         #[clap(long)]
         clean: bool,
     },
@@ -888,7 +882,7 @@ async fn run_find_latest(urls: bool, relative: bool, date: bool) {
     }
 }
 
-async fn run_pull(dump_dir: &Path, push: bool, clean: bool) {
+async fn run_pull(dump_dir: &Path, clean: bool) {
     let latest_dump = {
         match fetch::find_latest().await {
             None => {
@@ -929,15 +923,6 @@ async fn run_pull(dump_dir: &Path, push: bool, clean: bool) {
     run_sitemap().await;
     log::info!("building top graph");
     run_build_top_graph().await;
-
-    #[cfg(feature = "google-cloud-storage")]
-    if push {
-        log::info!("pushing built files");
-        if let Err(err) = push::push_built_files(current_path).await {
-            log::error!("push failed: {:#?}", err);
-            process::exit(1);
-        }
-    }
 }
 
 async fn run_build_top_graph() {
@@ -963,7 +948,6 @@ async fn main() {
         .module("wikiwalk::graphdb")
         .module("wikiwalk::fetch")
         .module("wikiwalk::redirect")
-        .module("wikiwalk::push")
         .module("wikiwalk::sitemap")
         .module("wikiwalk::page_source")
         .module("wikiwalk::pagelink_source")
@@ -997,17 +981,9 @@ async fn main() {
     std::env::set_current_dir(data_dir.as_path()).expect("change to data directory");
 
     match cli.command {
-        Command::Build { dump_date, push } => {
+        Command::Build { dump_date } => {
             log::debug!("running build");
             run_build(&dump_date).await.unwrap();
-            #[cfg(feature = "google-cloud-storage")]
-            if push {
-                log::info!("pushing built files");
-                if let Err(err) = push::push_built_files(Paths::new().db_paths("current")).await {
-                    log::error!("push failed: {:#?}", err);
-                    process::exit(1);
-                }
-            }
         }
         Command::Run {
             source,
@@ -1047,9 +1023,9 @@ async fn main() {
         } => {
             run_find_latest(urls, relative, date).await;
         }
-        Command::Pull { push, clean } => {
+        Command::Pull { clean } => {
             log::debug!("running pull using data directory: {}", data_dir.display());
-            run_pull(&dump_dir, push, clean).await;
+            run_pull(&dump_dir, clean).await;
         }
         Command::Sitemap => {
             log::debug!(
