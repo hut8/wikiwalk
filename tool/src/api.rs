@@ -3,6 +3,7 @@ const WIKIPEDIA_API_URL: &str = "https://en.wikipedia.org/w/api.php";
 use chrono::Months;
 use futures::stream::futures_unordered::FuturesUnordered;
 use futures::stream::StreamExt;
+use itertools::Itertools;
 use serde::Deserialize;
 
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
@@ -80,16 +81,23 @@ pub async fn top_pages() -> Vec<Article> {
                 .iter()
                 .find(|(_id, title)| title == &article.article)
                 .map(|(id, _)| *id);
-              id.map(|article_id| {
+            id.map(|article_id| {
                 article.id = Some(article_id);
                 article
-              })
+            })
         })
         .collect::<Vec<_>>();
 
     articles.sort_by(|a, b| a.rank.cmp(&b.rank));
 
     articles
+        .iter_mut()
+        .enumerate()
+        .map(|(i, article)| {
+            article.rank = i as i64 + 1;
+            article.to_owned()
+        })
+        .collect_vec()
 }
 
 pub async fn top_page_ids(count: Option<usize>) -> Vec<u32> {
