@@ -27,7 +27,7 @@ sentry = { version = "0.32.3", features = [
   "debug-images",
   "ureq",
 ], default-features = false }
-actix-web = { version = "4.5.1", features = ["rustls"] }
+actix-web = { version = "4.6.0", features = ["rustls"] }
 actix-web-lab = { version = "0.20.2" }
 rustls = "0.23.5"
 rustls-pemfile = "2"
