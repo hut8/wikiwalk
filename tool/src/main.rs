@@ -18,7 +18,7 @@ use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DatabaseBackend, DbBackend, DbConn, DeriveColumn, EntityTrait,
-    EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
+    FromQueryResult, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
@@ -68,9 +68,15 @@ struct GraphDBBuilder {
     pub al_path: PathBuf,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
+#[derive(Copy, Clone, Debug, DeriveColumn)]
 enum QueryAs {
-    MaxVertexId,
+    Id,
+}
+
+#[derive(FromQueryResult)]
+struct MaxVertexId {
+    #[sea_orm(column("id"))]
+    max: u32,
 }
 
 struct BatchLookup {
@@ -155,14 +161,16 @@ impl GraphDBBuilder {
 
         log::debug!("finding max index");
 
-        let max_page_id: u32 = schema::vertex::Entity::find()
+        let max_page_model: MaxVertexId = schema::vertex::Entity::find()
             .select_only()
-            .column_as(schema::vertex::Column::Id.max(), QueryAs::MaxVertexId)
-            .into_values::<_, QueryAs>()
+            .column_as(schema::vertex::Column::Id.max(), QueryAs::Id)
+            .into_model()
             .one(&db)
             .await
             .expect("query max id")
             .unwrap();
+
+        let max_page_id = max_page_model.max;
 
         log::info!("max page id: {}", max_page_id);
         log::debug!("building edge map");
