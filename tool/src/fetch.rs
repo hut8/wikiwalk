@@ -1,4 +1,4 @@
-use chrono::{Utc, NaiveDate};
+use chrono::{NaiveDate, Utc};
 use futures::StreamExt;
 use itertools::Itertools;
 // use indicatif::{ProgressBar, ProgressStyle};
@@ -30,14 +30,13 @@ pub async fn find_latest() -> Option<DumpStatus> {
     .and_then(|ix| match ix.jobs.done() {
         true => Some(ix),
         false => None,
-    }).and_then(|mut ix| {
-      match ix.jobs.dump_date() {
+    })
+    .and_then(|mut ix| match ix.jobs.dump_date() {
         Some(date) => {
-          ix.dump_date = date;
-          Some(ix)
-        },
-        None => None
-      }
+            ix.dump_date = date;
+            Some(ix)
+        }
+        None => None,
     });
 
     if dump_index.is_some() {
@@ -93,6 +92,7 @@ pub async fn fetch_dump(dump_dir: &Path, status: DumpStatus) -> Result<(), anyho
         status.jobs.page_table,
         status.jobs.pageprops_table,
         status.jobs.pagelinks_table,
+        status.jobs.linktarget_table,
     ];
 
     let job_futures = jobs.into_iter().map(|j| fetch_job(dump_dir, &client, j));
@@ -281,17 +281,28 @@ impl Jobs {
     }
 
     pub fn dump_date(&self) -> Option<String> {
-      let dates = self.all().iter().map(|f| {
-        NaiveDate::parse_from_str(&f.updated, "%Y-%m-%d %H:%M:%S").unwrap().format("%Y%m%d").to_string()
-      }).unique().collect_vec();
-      match dates.len() {
-        0 => None,
-        1 => Some(dates[0].clone()),
-        _ => {
-          log::warn!("dump appears to contain data from multiple dates: {:?}", dates);
-          None
+        let dates = self
+            .all()
+            .iter()
+            .map(|f| {
+                NaiveDate::parse_from_str(&f.updated, "%Y-%m-%d %H:%M:%S")
+                    .unwrap()
+                    .format("%Y%m%d")
+                    .to_string()
+            })
+            .unique()
+            .collect_vec();
+        match dates.len() {
+            0 => None,
+            1 => Some(dates[0].clone()),
+            _ => {
+                log::warn!(
+                    "dump appears to contain data from multiple dates: {:?}",
+                    dates
+                );
+                None
+            }
         }
-      }
     }
 
     pub fn all(&self) -> Vec<&JobStatus> {
