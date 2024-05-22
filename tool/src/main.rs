@@ -567,6 +567,7 @@ impl GraphDBBuilder {
             .to_owned();
         let _ = db.execute(db.get_database_backend().build(&stmt)).await;
         self.create_vertex_table(&db).await;
+        self.create_link_target_table(&db).await;
         self.create_paths_table(&db).await;
 
         db.execute(Statement::from_string(
@@ -625,6 +626,15 @@ impl GraphDBBuilder {
         let schema = Schema::new(DbBackend::Sqlite);
         let create_stmt: TableCreateStatement =
             schema.create_table_from_entity(schema::vertex::Entity);
+        db.execute(db.get_database_backend().build(&create_stmt))
+            .await
+            .expect("create table");
+    }
+
+    pub async fn create_link_target_table(&self, db: &DbConn) {
+        let schema = Schema::new(DbBackend::Sqlite);
+        let create_stmt: TableCreateStatement =
+            schema.create_table_from_entity(schema::link_target::Entity);
         db.execute(db.get_database_backend().build(&create_stmt))
             .await
             .expect("create table");

@@ -3,3 +3,4 @@
 pub use super::path::Entity as Path;
 pub use super::search::Entity as Search;
 pub use super::vertex::Entity as Vertex;
+pub use super::link_target::Entity as LinkTarget;

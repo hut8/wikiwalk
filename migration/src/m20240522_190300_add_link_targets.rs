@@ -9,15 +9,15 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(LinkTarget::Table)
+                    .table(LinkTargets::Table)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(LinkTarget::Id)
+                        ColumnDef::new(LinkTargets::Id)
                             .integer()
                             .not_null()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(LinkTarget::Title).string().not_null())
+                    .col(ColumnDef::new(LinkTargets::Title).string().not_null())
                     .to_owned(),
             )
             .await
@@ -25,13 +25,13 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(LinkTarget::Table).to_owned())
+            .drop_table(Table::drop().table(LinkTargets::Table).to_owned())
             .await
     }
 }
 
 #[derive(DeriveIden)]
-enum LinkTarget {
+enum LinkTargets {
     Table,
     Id,
     Title,
