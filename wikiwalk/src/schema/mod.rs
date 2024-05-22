@@ -5,3 +5,4 @@ pub mod prelude;
 pub mod path;
 pub mod search;
 pub mod vertex;
+pub mod link_target;
