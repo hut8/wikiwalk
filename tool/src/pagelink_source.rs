@@ -45,12 +45,7 @@ impl WPPageLinkSource {
 
     pub async fn run(self) -> u32 {
         let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
-        //let total_bytes = pagelinks_sql_file.metadata().expect("get metadata").len() as usize;
-        // let pagelinks_lock = Arc::new(pagelinks_sql_file);
 
-        // let pagelinks_byte_counter = Arc::new(ByteReadCounter::new(pagelinks_lock));
-
-        // let pagelinks_sql = flate2::read::GzDecoder::new(pagelinks_byte_counter.as_ref());
         let pagelinks_sql_buf = BufReader::new(pagelinks_sql_file);
         let pagelinks_sql = flate2::bufread::GzDecoder::new(pagelinks_sql_buf);
         let reader = BufReader::new(pagelinks_sql);

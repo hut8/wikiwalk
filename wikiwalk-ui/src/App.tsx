@@ -110,7 +110,7 @@ export default function App() {
           sx={{ flexGrow: 1, display: "flex", flexDirection: "column" }}
           maxWidth={false}
         >
-          <Grid container spacing={2} my={4}>
+          <Grid container spacing={2} my={1}>
             <Grid xs={12} md={5}>
               <PageInput
                 label="Source page"

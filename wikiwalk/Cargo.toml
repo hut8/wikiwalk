@@ -20,10 +20,10 @@ serde = "*"
 serde_json = "1.0"
 sqlx = { version = "*", features = ["sqlite"] }
 tokio = { version = "1", features = ["full"] }
-chrono = "0.4.23"
+chrono = "0.4.38"
 dirs = "5.0.1"
-thiserror = "1.0.53"
-anyhow = "1.0.75"
+thiserror = "1.0.61"
+anyhow = "1.0.86"
 
 [build-dependencies]
-vergen = { version = "8.2.4", features=["gitoxide", "git"] }
+vergen = { version = "8.3.1", features=["gitoxide", "git"] }

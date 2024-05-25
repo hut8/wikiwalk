@@ -28,11 +28,9 @@ fix:
 build-release: build-release-server build-release-tool
 
 build-release-server:
-    rm -f target/release/server
     cargo build --release --bin server
 
 build-release-tool:
-    rm -f target/release/tool
     cargo build --release --bin tool
 
 # Build for development
@@ -50,14 +48,18 @@ issue-tls-cert: install-lego
   sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
 
 # Provision server
-provision-server:
+provision-server-debian:
   sudo adduser --home /home/wikiwalk --shell /bin/bash --gecos 'WikiWalk' --disabled-password wikiwalk
   sudo mkdir -p /var/wikiwalk/data
   sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
   sudo apt-get install -y pkg-config libssl-dev
 
+provision-server-freebsd:
+  sudo pw user add -n wikiwalk -m
+
+
 # Deploy web server (must be run on server)
-deploy-web: build-release-server
+deploy-web-linux: build-release-server
   sudo mkdir -p /var/wikiwalk/ /var/wikiwalk/data /var/wikiwalk/webroot/.well-known
   sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
   sudo rm -f /usr/local/bin/wikiwalk
@@ -83,7 +85,7 @@ deploy-web: build-release-server
   sudo systemctl restart wikiwalk-watchdog.service
 
 # Deploy wikiwalk tool and periodic builds
-deploy-tool: build-release-tool
+deploy-tool-linux: build-release-tool
   sudo mkdir -p /var/wikiwalk/ /var/wikiwalk/data /var/wikiwalk/webroot/.well-known
   sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
   sudo rm -f /usr/local/bin/wikiwalk-tool /usr/local/bin/wikiwalk-build-sentry-watchdog-ping /usr/local/bin/wikiwalk-build-sentry-watchdog-commit
@@ -98,11 +100,48 @@ deploy-tool: build-release-tool
   sudo systemctl start wikiwalk-build.service
   sudo systemctl start wikiwalk-build.timer
 
+deploy-web-freebsd: build-release-server
+  sudo mkdir -p /var/wikiwalk/data
+  sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
+  sudo rm -f /usr/local/bin/wikiwalk-server
+  sudo rm -f /usr/local/bin/wikiwalk-watchdog
+  sudo rm -f /usr/local/bin/wikiwalk-monitor
+  sudo cp target/release/server /usr/local/bin/wikiwalk-server
+  sudo cp wikiwalk-watchdog /usr/local/bin/wikiwalk-watchdog
+  sudo cp wikiwalk-monitor /usr/local/bin/wikiwalk-monitor
+  sudo cp wikiwalk-server.rc /usr/local/etc/rc.d/wikiwalk-server
+  sudo cp wikiwalk.conf.freebsd /usr/local/etc/wikiwalk.conf
+  sudo service wikiwalk-server enable
+  sudo service wikiwalk-server stop || true
+  sudo service wikiwalk-server start
+
+deploy-tool-freebsd: build-release-tool
+  sudo mkdir -p /var/wikiwalk/data
+  sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
+  sudo rm -f /usr/local/bin/wikiwalk-tool
+  sudo rm -f /usr/local/bin/wikiwalk-build-sentry-watchdog-ping
+  sudo rm -f /usr/local/bin/wikiwalk-build-sentry-watchdog-commit
+  sudo cp target/release/tool /usr/local/bin/wikiwalk-tool
+  sudo cp wikiwalk-build-sentry-watchdog-ping /usr/local/bin/wikiwalk-build-sentry-watchdog-ping
+  sudo cp wikiwalk-build-sentry-watchdog-commit /usr/local/bin/wikiwalk-build-sentry-watchdog-commit
+  sudo -u wikiwalk DATA_ROOT=/var/wikiwalk /usr/local/bin/wikiwalk-tool pull
+  sudo cp wikiwalk-build-crontab /var/cron/tabs/wikiwalk
+
 # Deploy configuration file shared by tool and server
 deploy-config:
   sudo rm -f /etc/wikiwalk.conf
   sudo cp wikiwalk.conf /etc/wikiwalk.conf
   echo "Now add variables to /etc/wikiwalk.conf"
 
+deploy-tool:
+  just deploy-tool-{{os()}}
+
+deploy-web:
+  just deploy-web-{{os()}}
+
 # Deploy web server and tool
-deploy: deploy-tool deploy-web
+deploy-linux: deploy-tool-linux deploy-web-linux
+deploy-freebsd: deploy-tool-freebsd deploy-web-freebsd
+
+deploy:
+  just deploy-{{os()}}

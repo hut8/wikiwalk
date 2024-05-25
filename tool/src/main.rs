@@ -13,13 +13,12 @@ use clap::{Parser, Subcommand};
 use crossbeam::channel::{Receiver, Sender};
 use edge_db_builder::{AdjacencySet, EdgeProcDB};
 use itertools::Itertools;
-use memory_stats::memory_stats;
 use reqwest::Client;
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::{Index, Table, TableCreateStatement};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DatabaseBackend, DbBackend, DbConn, DeriveColumn, EntityTrait,
-    EnumIter, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
+    FromQueryResult, QueryFilter, QuerySelect, Schema, Set, SqlxSqliteConnector, Statement,
     TransactionTrait,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
@@ -39,8 +38,6 @@ mod edge_db_builder;
 mod fetch;
 mod page_source;
 mod pagelink_source;
-#[cfg(feature = "google-cloud-storage")]
-mod push;
 mod sitemap;
 mod top_graph;
 
@@ -71,9 +68,15 @@ struct GraphDBBuilder {
     pub al_path: PathBuf,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, DeriveColumn)]
+#[derive(Copy, Clone, Debug, DeriveColumn)]
 enum QueryAs {
-    MaxVertexId,
+    Id,
+}
+
+#[derive(FromQueryResult)]
+struct MaxVertexId {
+    #[sea_orm(column("id"))]
+    max: u32,
 }
 
 struct BatchLookup {
@@ -84,8 +87,8 @@ struct BatchLookup {
 }
 
 impl GraphDBBuilder {
-    pub fn new(dump_date: String, root_data_dir: &Path) -> GraphDBBuilder {
-        let paths = Paths::with_base(root_data_dir);
+    pub fn new(dump_date: String) -> GraphDBBuilder {
+        let paths = Paths::with_base(std::env::current_dir().unwrap().as_path());
         let dump_paths = paths.dump_paths(&dump_date);
         let page_path = dump_paths.page();
         let redirects_path = dump_paths.redirect();
@@ -158,14 +161,16 @@ impl GraphDBBuilder {
 
         log::debug!("finding max index");
 
-        let max_page_id: u32 = schema::vertex::Entity::find()
+        let max_page_model: MaxVertexId = schema::vertex::Entity::find()
             .select_only()
-            .column_as(schema::vertex::Column::Id.max(), QueryAs::MaxVertexId)
-            .into_values::<_, QueryAs>()
+            .column_as(schema::vertex::Column::Id.max(), QueryAs::Id)
+            .into_model()
             .one(&db)
             .await
             .expect("query max id")
             .unwrap();
+
+        let max_page_id = max_page_model.max;
 
         log::info!("max page id: {}", max_page_id);
         log::debug!("building edge map");
@@ -562,13 +567,6 @@ impl GraphDBBuilder {
         self.create_vertex_table(&db).await;
         self.create_paths_table(&db).await;
 
-        if let Some(usage) = memory_stats() {
-            println!("Current physical memory usage: {}", usage.physical_mem);
-            println!("Current virtual memory usage: {}", usage.virtual_mem);
-        } else {
-            println!("Couldn't get the current memory usage :(");
-        }
-
         db.execute(Statement::from_string(
             DatabaseBackend::Sqlite,
             "PRAGMA synchronous = OFF".to_owned(),
@@ -706,8 +704,6 @@ enum Command {
         /// Dump date to import
         #[clap(long)]
         dump_date: String,
-        /// Push files to Google Cloud after build
-        push: bool,
     },
     /// Find the shortest path
     Run {
@@ -741,8 +737,6 @@ enum Command {
     /// Fetch latest dump and import it
     Pull {
         #[clap(long)]
-        push: bool,
-        #[clap(long)]
         clean: bool,
     },
     /// Build Sitemap
@@ -760,8 +754,8 @@ enum Command {
     },
 }
 
-async fn run_build(data_dir: &Path, dump_date: &str) -> anyhow::Result<()> {
-    let mut gddb = GraphDBBuilder::new(dump_date.to_owned(), data_dir);
+async fn run_build(dump_date: &str) -> anyhow::Result<()> {
+    let mut gddb = GraphDBBuilder::new(dump_date.to_owned());
     log::info!("cleaning old databases");
     gddb.clean_old_databases();
     log::info!("building database");
@@ -896,7 +890,7 @@ async fn run_find_latest(urls: bool, relative: bool, date: bool) {
     }
 }
 
-async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
+async fn run_pull(dump_dir: &Path, clean: bool) {
     let latest_dump = {
         match fetch::find_latest().await {
             None => {
@@ -924,7 +918,7 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
         .await
         .expect("fetch dump");
     log::info!("fetched data from {latest_dump_date}",);
-    if let Err(err) = run_build(data_dir, latest_dump_date).await {
+    if let Err(err) = run_build(latest_dump_date).await {
         log::error!("build failed: {:#?}", err);
         process::exit(1);
     }
@@ -937,15 +931,6 @@ async fn run_pull(dump_dir: &Path, data_dir: &Path, push: bool, clean: bool) {
     run_sitemap().await;
     log::info!("building top graph");
     run_build_top_graph().await;
-
-    #[cfg(feature = "google-cloud-storage")]
-    if push {
-        log::info!("pushing built files");
-        if let Err(err) = push::push_built_files(current_path).await {
-            log::error!("push failed: {:#?}", err);
-            process::exit(1);
-        }
-    }
 }
 
 async fn run_build_top_graph() {
@@ -971,7 +956,6 @@ async fn main() {
         .module("wikiwalk::graphdb")
         .module("wikiwalk::fetch")
         .module("wikiwalk::redirect")
-        .module("wikiwalk::push")
         .module("wikiwalk::sitemap")
         .module("wikiwalk::page_source")
         .module("wikiwalk::pagelink_source")
@@ -1002,19 +986,12 @@ async fn main() {
     let data_dir = cli.data_path.or(env_data_dir).unwrap_or(default_data_dir);
     let dump_dir = data_dir.join("dumps");
     std::fs::create_dir_all(&data_dir).unwrap();
+    std::env::set_current_dir(data_dir.as_path()).expect("change to data directory");
 
     match cli.command {
-        Command::Build { dump_date, push } => {
-            log::debug!("running build using data directory: {}", data_dir.display());
-            run_build(&data_dir, &dump_date).await.unwrap();
-            #[cfg(feature = "google-cloud-storage")]
-            if push {
-                log::info!("pushing built files");
-                if let Err(err) = push::push_built_files(Paths::new().db_paths("current")).await {
-                    log::error!("push failed: {:#?}", err);
-                    process::exit(1);
-                }
-            }
+        Command::Build { dump_date } => {
+            log::debug!("running build");
+            run_build(&dump_date).await.unwrap();
         }
         Command::Run {
             source,
@@ -1054,9 +1031,9 @@ async fn main() {
         } => {
             run_find_latest(urls, relative, date).await;
         }
-        Command::Pull { push, clean } => {
+        Command::Pull { clean } => {
             log::debug!("running pull using data directory: {}", data_dir.display());
-            run_pull(&dump_dir, &data_dir, push, clean).await;
+            run_pull(&dump_dir, clean).await;
         }
         Command::Sitemap => {
             log::debug!(
