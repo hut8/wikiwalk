@@ -704,6 +704,9 @@ enum Command {
         /// Dump date to import
         #[clap(long)]
         dump_date: String,
+        /// Clean old databases
+        #[clap(long)]
+        clean: bool,
     },
     /// Find the shortest path
     Run {
@@ -754,10 +757,12 @@ enum Command {
     },
 }
 
-async fn run_build(dump_date: &str) -> anyhow::Result<()> {
+async fn run_build(dump_date: &str, clean: bool) -> anyhow::Result<()> {
     let mut gddb = GraphDBBuilder::new(dump_date.to_owned());
-    log::info!("cleaning old databases");
-    gddb.clean_old_databases();
+    if clean {
+        log::info!("cleaning old databases: current dump date: {}", dump_date);
+        gddb.clean_old_databases();
+    }
     log::info!("building database");
     gddb.build_database().await
 }
@@ -918,7 +923,7 @@ async fn run_pull(dump_dir: &Path, clean: bool) {
         .await
         .expect("fetch dump");
     log::info!("fetched data from {latest_dump_date}",);
-    if let Err(err) = run_build(latest_dump_date).await {
+    if let Err(err) = run_build(latest_dump_date, clean).await {
         log::error!("build failed: {:#?}", err);
         process::exit(1);
     }
@@ -989,9 +994,9 @@ async fn main() {
     std::env::set_current_dir(data_dir.as_path()).expect("change to data directory");
 
     match cli.command {
-        Command::Build { dump_date } => {
+        Command::Build { dump_date, clean } => {
             log::debug!("running build");
-            run_build(&dump_date).await.unwrap();
+            run_build(&dump_date, clean).await.unwrap();
         }
         Command::Run {
             source,
@@ -1033,6 +1038,7 @@ async fn main() {
         }
         Command::Pull { clean } => {
             log::debug!("running pull using data directory: {}", data_dir.display());
+            log::debug!("pull will also clean: {}", clean);
             run_pull(&dump_dir, clean).await;
         }
         Command::Sitemap => {
