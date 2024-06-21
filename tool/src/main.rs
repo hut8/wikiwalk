@@ -75,8 +75,7 @@ enum QueryAs {
 
 #[derive(FromQueryResult)]
 struct MaxVertexId {
-    #[sea_orm(column("id"))]
-    max: u32,
+    id: u32,
 }
 
 struct BatchLookup {
@@ -170,7 +169,7 @@ impl GraphDBBuilder {
             .expect("query max id")
             .unwrap();
 
-        let max_page_id = max_page_model.max;
+        let max_page_id = max_page_model.id;
 
         log::info!("max page id: {}", max_page_id);
         log::debug!("building edge map");
