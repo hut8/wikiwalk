@@ -59,6 +59,7 @@ struct GraphDBBuilder {
     pub page_path: PathBuf,
     pub pagelinks_path: PathBuf,
     pub redirects_path: PathBuf,
+    pub link_targets_path: PathBuf,
 
     pub paths: Paths,
     pub db_paths: DBPaths,
@@ -92,6 +93,7 @@ impl GraphDBBuilder {
         let page_path = dump_paths.page();
         let redirects_path = dump_paths.redirect();
         let pagelinks_path = dump_paths.pagelinks();
+        let link_targets_path = dump_paths.link_targets();
 
         let db_paths = paths.db_paths(&dump_date);
         let ix_path = db_paths.vertex_al_ix_path();
@@ -103,6 +105,7 @@ impl GraphDBBuilder {
             ix_path,
             al_path,
             redirects_path,
+            link_targets_path,
             dump_date,
             paths,
             db_paths,

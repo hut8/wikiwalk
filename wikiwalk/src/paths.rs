@@ -71,6 +71,10 @@ impl DumpPaths {
     pub fn redirect(&self) -> PathBuf {
         self.dump_path("redirect")
     }
+
+    pub fn link_targets(&self) -> PathBuf {
+        self.dump_path("linktarget")
+    }
 }
 
 /// Tracks paths for files built by tool and consumed by tool and server
