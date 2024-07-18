@@ -3136,9 +3136,8 @@ dependencies = [
 
 [[package]]
 name = "parse-mediawiki-sql"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa304484e95def9520d2ecf455956886a14371935fb2fb8b55adc0e4e561d9b3"
+version = "0.10.0"
+source = "git+https://github.com/hut8/parse-mediawiki-sql?branch=hut8/fix-pagelinks-definition#6e08f0d876f70c7deafbd82bf239eba9ee26ec0a"
 dependencies = [
  "bstr 0.2.17",
  "chrono",
@@ -3155,7 +3154,7 @@ dependencies = [
 [[package]]
 name = "parse-mediawiki-sql"
 version = "0.10.0"
-source = "git+https://github.com/hut8/parse-mediawiki-sql?branch=hut8/fix-pagelinks-definition#441b2a8ae0bdf5af44def87352ea79b455f91572"
+source = "git+https://github.com/hut8/parse-mediawiki-sql?rev=6e08f0d#6e08f0d876f70c7deafbd82bf239eba9ee26ec0a"
 dependencies = [
  "bstr 0.2.17",
  "chrono",
@@ -5049,7 +5048,7 @@ dependencies = [
  "lrumap",
  "memmap2 0.9.4",
  "num_cpus",
- "parse-mediawiki-sql 0.10.0",
+ "parse-mediawiki-sql 0.10.0 (git+https://github.com/hut8/parse-mediawiki-sql?branch=hut8/fix-pagelinks-definition)",
  "rayon",
  "reqwest",
  "sea-orm",
@@ -5533,7 +5532,7 @@ dependencies = [
  "log",
  "memmap2 0.9.4",
  "num_cpus",
- "parse-mediawiki-sql 0.9.0",
+ "parse-mediawiki-sql 0.10.0 (git+https://github.com/hut8/parse-mediawiki-sql?rev=6e08f0d)",
  "sea-orm",
  "serde",
  "serde_json",
