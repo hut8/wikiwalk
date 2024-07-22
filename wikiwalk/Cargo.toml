@@ -28,4 +28,4 @@ thiserror = "1.0.61"
 anyhow = "1.0.86"
 
 [build-dependencies]
-vergen = { version = "8.3.1", features = ["gitoxide", "git"] }
+vergen = { version = "8.3.2", features = ["gitoxide", "git"] }
