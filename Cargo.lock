@@ -632,9 +632,9 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.6.2"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df33e4a55b03f8780ba55041bc7be91a2a8ec8c03517b0379d2d6c96d2c30d95"
+checksum = "4ae74d9bd0a7530e8afd1770739ad34b36838829d6ad61818f9230f683f5ad77"
 dependencies = [
  "aws-lc-sys",
  "mirai-annotations",
@@ -644,11 +644,12 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.13.2"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5f269b176dc4aeb593910fa56ed6f956cde19542e496bb0bfc1ad9a6ce18815"
+checksum = "2e89b6941c2d1a7045538884d6e760ccfffdf8e1ffc2613d8efa74305e1f3752"
 dependencies = [
  "bindgen",
+ "cc",
  "cmake",
  "dunce",
  "fs_extra",
@@ -2401,7 +2402,7 @@ dependencies = [
  "http 1.1.0",
  "hyper",
  "hyper-util",
- "rustls 0.23.10",
+ "rustls 0.23.12",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls 0.26.0",
@@ -3389,7 +3390,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.23.10",
+ "rustls 0.23.12",
  "thiserror",
  "tokio",
  "tracing",
@@ -3405,7 +3406,7 @@ dependencies = [
  "rand",
  "ring 0.17.3",
  "rustc-hash",
- "rustls 0.23.10",
+ "rustls 0.23.12",
  "slab",
  "thiserror",
  "tinyvec",
@@ -3614,7 +3615,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "quinn",
- "rustls 0.23.10",
+ "rustls 0.23.12",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
  "serde",
@@ -3802,16 +3803,16 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.10"
+version = "0.23.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05cff451f60db80f490f3c182b77c35260baace73209e9cdbbe526bfe3a4d402"
+checksum = "c58f8c84392efc0a126acce10fa59ff7b3d2ac06ab451a33f2741989b806b044"
 dependencies = [
  "aws-lc-rs",
  "log",
  "once_cell",
  "ring 0.17.3",
  "rustls-pki-types",
- "rustls-webpki 0.102.4",
+ "rustls-webpki 0.102.6",
  "subtle",
  "zeroize",
 ]
@@ -3853,9 +3854,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.4"
+version = "0.102.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff448f7e92e913c4b7d4c6d8e4540a1724b319b4152b8aef6d4cf8339712b33e"
+checksum = "8e6b52d4fda176fd835fdc55a835d4a89b8499cad995885a21149d5ad62f852e"
 dependencies = [
  "aws-lc-rs",
  "ring 0.17.3",
@@ -4349,7 +4350,7 @@ dependencies = [
  "futures-util",
  "log",
  "mime",
- "rustls 0.23.10",
+ "rustls 0.23.12",
  "rustls-pemfile 2.1.2",
  "sea-orm",
  "sentry",
@@ -4988,7 +4989,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.10",
+ "rustls 0.23.12",
  "rustls-pki-types",
  "tokio",
 ]
@@ -5855,6 +5856,20 @@ name = "zeroize"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "525b4ec142c6b68a2d10f01f7bbf6755599ca3f81ea53b8431b7dd348f5fdb2d"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+]
 
 [[package]]
 name = "zstd"
