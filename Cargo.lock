@@ -3617,7 +3617,7 @@ dependencies = [
  "pin-project-lite",
  "quinn",
  "rustls 0.23.14",
- "rustls-pemfile 2.1.2",
+ "rustls-pemfile 2.2.0",
  "rustls-pki-types",
  "serde",
  "serde_json",
@@ -3835,11 +3835,10 @@ dependencies = [
 
 [[package]]
 name = "rustls-pemfile"
-version = "2.1.2"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29993a25686778eb88d4189742cd713c9bce943bc54251a33509dc63cbacf73d"
+checksum = "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50"
 dependencies = [
- "base64 0.22.0",
  "rustls-pki-types",
 ]
 
@@ -4358,7 +4357,7 @@ dependencies = [
  "log",
  "mime",
  "rustls 0.23.14",
- "rustls-pemfile 2.1.2",
+ "rustls-pemfile 2.2.0",
  "sea-orm",
  "sentry",
  "sentry-actix",
