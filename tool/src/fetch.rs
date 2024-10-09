@@ -280,8 +280,15 @@ impl Jobs {
         self.all().iter().all(|job| job.done())
     }
 
+    /// The dumps appear not to have a canonical "this dump is for this date" field. Instead, there are a couple of sources
+    /// of truth for dump date:
+    /// 1. The "updated" field in the job status objects - this is the date the job was last updated. It is unknown whether this ever changes
+    ///    once that particular job reaches the "done" state for a particular date mentioned in #2.
+    /// 2. The second part of the URL - this is, for example, "20240601" in "/enwiki/20240601/enwiki-20240601-redirect.sql.gz".
+    /// We are going to use the second method, as it appears to be the date that the dump was started.
+    /// Generally it looks like those are either the first of the month, or the 20th, but there's no guarantee of that.
     pub fn dump_date(&self) -> Option<String> {
-        let dates = self
+        let updated_dates = self
             .all()
             .iter()
             .map(|f| {
@@ -292,13 +299,39 @@ impl Jobs {
             })
             .unique()
             .collect_vec();
-        match dates.len() {
+        if updated_dates.len() > 1 {
+            log::warn!(
+                "dump appears to contain data from multiple dates: {:?}",
+                updated_dates
+            );
+        }
+
+
+        let file_urls = self
+            .all()
+            .iter()
+            .flat_map(|f| f.files.values().map(|x| x.url.clone()))
+            .collect_vec();
+        // "enwiki-20240601-redirect.sql.gz": {
+        //     "size": 167307929,
+        //     "url": "/enwiki/20240601/enwiki-20240601-redirect.sql.gz",
+        //     "md5": "394075f6eb3ff05fbab7f6ffd9aa5128",
+        //     "sha1": "41daa467c6c2e00515579035580d271f37f5e622"
+        //   }
+        let dump_date_strs = file_urls
+            .iter()
+            .map(|url| {
+                url.split('/').nth(2).expect("extract date from url").to_string()
+            })
+            .unique()
+            .collect_vec();
+        match dump_date_strs.len() {
             0 => None,
-            1 => Some(dates[0].clone()),
+            1 => Some(dump_date_strs[0].clone()),
             _ => {
-                log::warn!(
+                log::error!(
                     "dump appears to contain data from multiple dates: {:?}",
-                    dates
+                    updated_dates
                 );
                 None
             }

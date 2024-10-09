@@ -43,10 +43,8 @@ If you want to spot-check some data from MySQL, it's faster to import the dumps 
 ```sql
 CREATE TABLE `pagelinks` (
   `pl_from` int(8) unsigned NOT NULL DEFAULT 0,
-  `pl_namespace` int(11) NOT NULL DEFAULT 0,
-  `pl_title` varbinary(255) NOT NULL DEFAULT '',
   `pl_from_namespace` int(11) NOT NULL DEFAULT 0,
-  `pl_target_id` bigint(20) unsigned DEFAULT NULL
+  `pl_target_id` bigint(20) unsigned NOT NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=binary;
 
  CREATE TABLE `redirect` (
@@ -71,14 +69,21 @@ CREATE TABLE `pagelinks` (
   `page_content_model` varbinary(32) DEFAULT NULL,
   `page_lang` varbinary(35) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=binary;
+
+CREATE TABLE `linktarget` (
+  `lt_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `lt_namespace` int(11) NOT NULL,
+  `lt_title` varbinary(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=binary;
 ```
 
 Then read in dumps, skipping DDL
 
 ```sh
-pv enwiki-*-pagelinks.sql | tail +39 | mysql wiki
+pv enwiki-*-pagelinks.sql | tail +34 | mysql wiki
 pv enwiki-*-page.sql | tail +45 | mysql wiki
 pv enwiki-*-redirect.sql | tail +38 | mysql wiki
+pv enwiki-*-linktarget.sql | tail +34 | mysql wiki
 ```
 
 Then build indexes
@@ -95,6 +100,7 @@ To export for later:
 select * from page into outfile '/tmp/wiki-page-dump';
 select * from pagelinks into outfile '/tmp/wiki-pagelinks-dump';
 select * from redirect into outfile '/tmp/wiki-redirect-dump';
+select * from linktarget into outfile '/tmp/wiki-linktarget-dump';
 ```
 
 Then compress and such:
@@ -111,6 +117,7 @@ Then to import (assuming wiki-page-dump is on the server at some location):
 LOAD DATA INFILE 'wiki-page-dump' INTO TABLE page;
 LOAD DATA INFILE 'wiki-pagelinks-dump' INTO TABLE pagelinks;
 LOAD DATA INFILE 'wiki-redirect-dump' INTO TABLE redirect;
+LOAD DATA INFILE 'wiki-linktarget-dump' INTO TABLE linktarget;
 ```
 
 ## SQLite Databases

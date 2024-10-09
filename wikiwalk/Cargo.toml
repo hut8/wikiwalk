@@ -7,15 +7,17 @@ edition = "2021"
 flate2 = "1.0"
 futures = "*"
 sea-orm = { version = "^0", features = [
-  "sqlx-sqlite",
-  "runtime-tokio-rustls",
-  "macros",
+    "sqlx-sqlite",
+    "runtime-tokio-rustls",
+    "macros",
 ] }
 itertools = { version = "*" }
 log = "*"
 memmap2 = "*"
 num_cpus = "1.13.1"
-parse-mediawiki-sql = { version = "=0.9.0", features = ["utils"] }
+parse-mediawiki-sql = { git = "https://github.com/hut8/parse-mediawiki-sql", rev = "6e08f0d", features = [
+    "utils",
+] }
 serde = "*"
 serde_json = "1.0"
 sqlx = { version = "*", features = ["sqlite"] }
@@ -26,4 +28,4 @@ thiserror = "1.0.61"
 anyhow = "1.0.86"
 
 [build-dependencies]
-vergen = { version = "8.3.1", features=["gitoxide", "git"] }
+vergen = { version = "8.3.1", features = ["gitoxide", "git"] }

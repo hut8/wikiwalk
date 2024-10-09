@@ -30,11 +30,11 @@ impl WPPageSource {
     }
 
     pub fn run(self) -> u32 {
-        let page_sql_file = File::open(&self.source_path).expect("open page file");
+        log::info!("loading page file from {:?}", &self.source_path);
+        let page_sql_file = File::open(&self.source_path).unwrap();
         let page_sql = flate2::read::GzDecoder::new(page_sql_file);
         let page_sql = BufReader::new(page_sql);
         let page_line_iter = page_sql.lines();
-        log::info!("loading page file");
         page_line_iter.par_bridge().for_each(|chunk| {
             let line = chunk.expect("read line");
             if !line.starts_with("INSERT ") {

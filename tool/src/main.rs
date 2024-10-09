@@ -60,6 +60,7 @@ struct GraphDBBuilder {
     pub page_path: PathBuf,
     pub pagelinks_path: PathBuf,
     pub redirects_path: PathBuf,
+    pub link_targets_path: PathBuf,
 
     pub paths: Paths,
     pub db_paths: DBPaths,
@@ -76,8 +77,7 @@ enum QueryAs {
 
 #[derive(FromQueryResult)]
 struct MaxVertexId {
-    #[sea_orm(column("id"))]
-    max: u32,
+    id: u32,
 }
 
 struct BatchLookup {
@@ -94,6 +94,7 @@ impl GraphDBBuilder {
         let page_path = dump_paths.page();
         let redirects_path = dump_paths.redirect();
         let pagelinks_path = dump_paths.pagelinks();
+        let link_targets_path = dump_paths.link_targets();
 
         let db_paths = paths.db_paths(&dump_date);
         let ix_path = db_paths.vertex_al_ix_path();
@@ -105,6 +106,7 @@ impl GraphDBBuilder {
             ix_path,
             al_path,
             redirects_path,
+            link_targets_path,
             dump_date,
             paths,
             db_paths,
@@ -171,7 +173,7 @@ impl GraphDBBuilder {
             .expect("query max id")
             .unwrap();
 
-        let max_page_id = max_page_model.max;
+        let max_page_id = max_page_model.id;
 
         log::info!("max page id: {}", max_page_id);
         log::debug!("building edge map");
@@ -715,6 +717,9 @@ enum Command {
         /// Dump date to import
         #[clap(long)]
         dump_date: String,
+        /// Clean old databases
+        #[clap(long)]
+        clean: bool,
     },
     /// Find the shortest path
     Run {
@@ -765,10 +770,12 @@ enum Command {
     },
 }
 
-async fn run_build(dump_date: &str) -> anyhow::Result<()> {
+async fn run_build(dump_date: &str, clean: bool) -> anyhow::Result<()> {
     let mut gddb = GraphDBBuilder::new(dump_date.to_owned());
-    log::info!("cleaning old databases");
-    gddb.clean_old_databases();
+    if clean {
+        log::info!("cleaning old databases: current dump date: {}", dump_date);
+        gddb.clean_old_databases();
+    }
     log::info!("building database");
     gddb.build_database().await
 }
@@ -929,7 +936,7 @@ async fn run_pull(dump_dir: &Path, clean: bool) {
         .await
         .expect("fetch dump");
     log::info!("fetched data from {latest_dump_date}",);
-    if let Err(err) = run_build(latest_dump_date).await {
+    if let Err(err) = run_build(latest_dump_date, clean).await {
         log::error!("build failed: {:#?}", err);
         process::exit(1);
     }
@@ -1000,9 +1007,9 @@ async fn main() {
     std::env::set_current_dir(data_dir.as_path()).expect("change to data directory");
 
     match cli.command {
-        Command::Build { dump_date } => {
+        Command::Build { dump_date, clean } => {
             log::debug!("running build");
-            run_build(&dump_date).await.unwrap();
+            run_build(&dump_date, clean).await.unwrap();
         }
         Command::Run {
             source,
@@ -1044,6 +1051,7 @@ async fn main() {
         }
         Command::Pull { clean } => {
             log::debug!("running pull using data directory: {}", data_dir.display());
+            log::debug!("pull will also clean: {}", clean);
             run_pull(&dump_dir, clean).await;
         }
         Command::Sitemap => {
