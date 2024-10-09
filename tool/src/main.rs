@@ -986,11 +986,11 @@ async fn main() {
         .init()
         .unwrap();
 
-    let _sentry = sentry::init(sentry::ClientOptions {
-        release: sentry::release_name!(),
-        traces_sample_rate: 1.0,
-        ..Default::default()
-    });
+    // let _sentry = sentry::init(sentry::ClientOptions {
+    //     release: sentry::release_name!(),
+    //     traces_sample_rate: 1.0,
+    //     ..Default::default()
+    // });
 
     // tracing_subscriber::Registry::default()
     //     .with(sentry::integrations::tracing::layer())

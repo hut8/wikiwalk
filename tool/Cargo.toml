@@ -15,12 +15,12 @@ symlink = "0.1.0"
 flate2 = "1.0"
 futures = "*"
 sha3 = "0.10.6"
-reqwest = { version = "0.12.5", features = [
+reqwest = { version = "0.12.8", features = [
     "json",
     "stream",
     "rustls-tls",
 ], default-features = false }
-sea-orm = { version = "^0", features = [
+sea-orm = { version = "1.0.1", features = [
     "sqlx-sqlite",
     "runtime-tokio-rustls",
     "macros",
@@ -42,11 +42,5 @@ url = "2.5.2"
 tokio-util = "0.7.11"
 human_bytes = "0.4.3"
 lrumap = "0.1.0"
-sentry = { version = "0.32.3", features = [
-    "sentry-anyhow",
-    "sentry-log",
-    "serde_json",
-    "tracing",
-] }
 tracing = "0.1"
 tracing-subscriber = "0.3"

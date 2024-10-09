@@ -173,17 +173,17 @@ impl Environment {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let sentry_dsn = match Environment::current() {
-      Environment::Development => "",
-      Environment::Production => "https://2377de2b8f109351d1d4d349e0f152e0@o4506004333199360.ingest.sentry.io/4506004334510080",
-    };
-    let _guard = sentry::init((
-        sentry_dsn,
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            ..Default::default()
-        },
-    ));
+    // let sentry_dsn = match Environment::current() {
+    //   Environment::Development => "",
+    //   Environment::Production => "https://2377de2b8f109351d1d4d349e0f152e0@o4506004333199360.ingest.sentry.io/4506004334510080",
+    // };
+    // let _guard = sentry::init((
+    //     sentry_dsn,
+    //     sentry::ClientOptions {
+    //         release: sentry::release_name!(),
+    //         ..Default::default()
+    //     },
+    // ));
 
     let colors_line = ColoredLevelConfig::new()
         .error(Color::Red)
@@ -255,7 +255,7 @@ async fn main() -> std::io::Result<()> {
             .allow_any_header()
             .max_age(3600);
         let app = App::new()
-            .wrap(sentry_actix::Sentry::new())
+            //.wrap(sentry_actix::Sentry::new())
             .wrap(Logger::default())
             .wrap(cors)
             .wrap(actix_web::middleware::Condition::new(
