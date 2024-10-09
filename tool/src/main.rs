@@ -38,6 +38,7 @@ mod edge_db_builder;
 mod fetch;
 mod page_source;
 mod pagelink_source;
+mod link_target_source;
 mod sitemap;
 mod top_graph;
 
