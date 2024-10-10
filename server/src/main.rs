@@ -156,7 +156,7 @@ async fn serve_paths(
     }))
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 enum Environment {
     Development,
     Production,
@@ -220,8 +220,13 @@ async fn main() -> std::io::Result<()> {
     let default_data_dir = home_dir.join("data").join("wikiwalk");
     let data_dir = match std::env::var("DATA_ROOT").ok() {
         Some(data_dir_str) => PathBuf::from(data_dir_str),
-        None => default_data_dir,
+        None => default_data_dir.clone(),
     };
+
+    if default_data_dir == data_dir && Environment::current() == Environment::Production {
+        panic!("production environment detected but using default data directory: {}", data_dir.display());
+    }
+
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
 
