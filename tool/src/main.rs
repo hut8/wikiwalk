@@ -38,13 +38,12 @@ mod edge_db_builder;
 mod fetch;
 mod page_source;
 mod pagelink_source;
-mod link_target_source;
 mod sitemap;
 mod top_graph;
 
-/// Intermediate type of only fields necessary to create an Edge
+/// Page link, with resolved destination title from link_targets (connected by the link_target_id)
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
-pub struct WPPageLink {
+pub struct DirectLink {
     pub source_page_id: u32,
     pub dest_page_title: String,
 }
@@ -179,7 +178,13 @@ impl GraphDBBuilder {
         log::debug!("building edge map");
 
         let mut edge_proc_db = self
-            .load_edges_dump(self.pagelinks_path.clone(), db, max_page_id, &mut db_status)
+            .load_edges_dump(
+                self.pagelinks_path.clone(),
+                self.link_targets_path.clone(),
+                db,
+                max_page_id,
+                &mut db_status,
+            )
             .await;
 
         if !db_status.edges_sorted {
@@ -338,13 +343,13 @@ impl GraphDBBuilder {
     }
 
     async fn resolve_edges(
-        rx: Receiver<WPPageLink>,
+        rx: Receiver<DirectLink>,
         tx: Sender<Edge>,
         redirects: Arc<RwLock<RedirectMapFile>>,
         db: DbConn,
     ) {
         let mut cache: lrumap::LruHashMap<String, Option<u32>> = lrumap::LruHashMap::new(100000);
-        let mut lookup_q: Vec<WPPageLink> = Vec::new();
+        let mut lookup_q: Vec<DirectLink> = Vec::new();
 
         // looping over every relevant entry in the pagelinks table,
         // we want to send as many edges as we possibly can resolve. Not all pagelink table entries
@@ -404,7 +409,7 @@ impl GraphDBBuilder {
     }
 
     async fn lookup_batch(
-        q: Vec<WPPageLink>,
+        q: Vec<DirectLink>,
         db: DbConn,
         redirects: Arc<RwLock<RedirectMapFile>>,
     ) -> BatchLookup {
@@ -471,7 +476,8 @@ impl GraphDBBuilder {
     // load edges from the pagelinks.sql dump
     async fn load_edges_dump(
         &self,
-        path: PathBuf,
+        pagelinks_path: PathBuf,
+        link_targets_path: PathBuf,
         db: DbConn,
         max_page_id: u32,
         db_status: &mut DBStatus,
@@ -512,7 +518,8 @@ impl GraphDBBuilder {
 
         log::debug!("loading edges dump");
         let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(4096);
-        let pagelink_source = pagelink_source::WPPageLinkSource::new(path, pagelink_tx);
+        let pagelink_source =
+            pagelink_source::WPPageLinkSource::new(pagelinks_path, link_targets_path, pagelink_tx);
 
         log::debug!("truncating edge db");
         let mut edge_db = edge_db_build.truncate();
