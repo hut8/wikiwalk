@@ -11,6 +11,7 @@ use std::{
 
 use crossbeam::channel::{Receiver, Sender};
 use parse_mediawiki_sql::schemas::LinkTarget;
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
 use crate::DirectLink;
 
@@ -52,9 +53,12 @@ impl WPPageLinkSource {
     // }
 
     pub async fn run(self) -> u32 {
-        log::info!("pagelinks load complete");
+        log::info!("loading link target map");
         let link_targets = Arc::new(Self::load_link_targets(self.linktarget_source_path.clone()));
+        log::info!("link target map load complete.");
+        log::info!("loading pagelinks");
         self.load_pagelinks(link_targets);
+        log::info!("pagelinks load complete");
         self.edge_count.load(Ordering::Relaxed)
     }
 
@@ -123,43 +127,19 @@ impl WPPageLinkSource {
         let linktargets_sql_buf = BufReader::new(linktargets_sql_file);
         let linktargets_sql = flate2::bufread::GzDecoder::new(linktargets_sql_buf);
         let linktargets_reader = BufReader::new(linktargets_sql);
-
-        let linktargets_line_iter = linktargets_reader.lines();
-
-        let (chunk_tx, chunk_rx): (Sender<String>, Receiver<String>) =
-            crossbeam::channel::bounded(1024);
-
-        let (linktarget_tx, linktarget_rx): (Sender<(u64, String)>, Receiver<(u64, String)>) =
-            crossbeam::channel::bounded(1024);
-
-        let num_cpus = num_cpus::get() * 2;
-        for _ in 0..num_cpus {
-            let chunk_rx = chunk_rx.clone();
-            let linktarget_tx = linktarget_tx.clone();
-            std::thread::spawn(move || {
-                for chunk in chunk_rx {
-                    Self::load_link_target_dump_chunk(chunk, linktarget_tx.clone());
-                }
-            });
-        }
-
-        linktargets_line_iter
+        let linktargets_line_iter = linktargets_reader
+            .lines()
             .map(|l| l.expect("read line"))
-            .filter(|line| line.starts_with("INSERT "))
-            .for_each(|line| {
-                chunk_tx.send(line).expect("send chunk");
-            });
-        drop(chunk_tx);
+            .filter(|line| line.starts_with("INSERT "));
 
-        let mut linktargets = HashMap::new();
-        for link in linktarget_rx {
-            linktargets.insert(link.0, link.1);
-        }
-        log::info!("linktargets load complete");
+        let linktargets: HashMap<u64, String> = linktargets_line_iter
+            .par_bridge() // Converts the iterator into a parallel iterator
+            .flat_map(|line| Self::load_link_target_dump_chunk(line).into_par_iter())
+            .collect();
         linktargets
     }
 
-    fn load_link_target_dump_chunk(chunk: String, sender: Sender<(u64, String)>) {
+    fn load_link_target_dump_chunk(chunk: String) -> Vec<(u64, String)> {
         use parse_mediawiki_sql::{field_types::PageNamespace, iterate_sql_insertions};
         let chunk = chunk.as_bytes();
         let mut sql_iterator = iterate_sql_insertions(chunk);
@@ -176,9 +156,7 @@ impl WPPageLinkSource {
                 }
             },
         );
-        for link in links {
-            sender.send(link.clone()).expect("send link target");
-        }
+        links.collect()
     }
 
     fn load_pagelinks_dump_chunk(

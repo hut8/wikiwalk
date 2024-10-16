@@ -351,6 +351,7 @@ impl GraphDBBuilder {
         let mut cache: lrumap::LruHashMap<String, Option<u32>> = lrumap::LruHashMap::new(100000);
         let mut lookup_q: Vec<DirectLink> = Vec::new();
 
+        log::debug!("resolving edges");
         // looping over every relevant entry in the pagelinks table,
         // we want to send as many edges as we possibly can resolve. Not all pagelink table entries
         // will be resolved, because:
@@ -379,6 +380,7 @@ impl GraphDBBuilder {
             // batch our lookups until we hit that point.
             lookup_q.push(pl);
             if lookup_q.len() > 32000 {
+                log::debug!("batch lookup for edges");
                 let pending_q = lookup_q.clone();
                 lookup_q.clear();
                 let batch_lookup =
@@ -465,11 +467,13 @@ impl GraphDBBuilder {
 
     async fn write_edges(rx: Receiver<Edge>, edge_db: &mut EdgeProcDB) -> u32 {
         let mut count = 0;
+        log::debug!("write_edges");
         // look up and write in chunks
         for link in rx {
             edge_db.write_edge(&link);
             count += 1;
         }
+        log::debug!("write_edges: done");
         count
     }
 
@@ -517,9 +521,9 @@ impl GraphDBBuilder {
         }
 
         log::debug!("loading edges dump");
-        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(4096);
+        let (directlink_tx, directlink_rx) = crossbeam::channel::bounded(4096);
         let pagelink_source =
-            pagelink_source::WPPageLinkSource::new(pagelinks_path, link_targets_path, pagelink_tx);
+            pagelink_source::WPPageLinkSource::new(pagelinks_path, link_targets_path, directlink_tx);
 
         log::debug!("truncating edge db");
         let mut edge_db = edge_db_build.truncate();
@@ -531,7 +535,7 @@ impl GraphDBBuilder {
         let (edge_tx, edge_rx) = crossbeam::channel::bounded(2048);
         for _ in 0..num_cpus::get() {
             let redirects_map_file = redirects_map_file.clone();
-            let pagelink_rx = pagelink_rx.clone();
+            let directlink_rx = directlink_rx.clone();
             let edge_tx = edge_tx.clone();
             let db = db.clone();
             thread::spawn(move || {
@@ -540,7 +544,7 @@ impl GraphDBBuilder {
                     .build()
                     .unwrap();
                 rt.block_on(Self::resolve_edges(
-                    pagelink_rx,
+                    directlink_rx,
                     edge_tx,
                     redirects_map_file,
                     db,
@@ -868,6 +872,7 @@ async fn run_query(data_dir: &Path, target: String) {
 
 async fn run_sitemap() {
     let current_db_paths = Paths::new().db_paths("current");
+    log::debug!("current db paths: {:#?}", current_db_paths.base);
     let db_path = current_db_paths.graph_db();
     let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
     log::debug!("building sitemap using database: {}", conn_str);
