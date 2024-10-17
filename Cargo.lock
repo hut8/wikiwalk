@@ -225,9 +225,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web-lab"
-version = "0.22.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a965e3e826aa4737af33666aa09ed949aa1837706fda2adee07039347be50d6"
+checksum = "ee75923689132fc5fb57ccc5bb98d25bb214796a29cd505844eb3b42daf11df0"
 dependencies = [
  "actix-http",
  "actix-router",
@@ -250,7 +250,6 @@ dependencies = [
  "local-channel",
  "mediatype",
  "mime",
- "once_cell",
  "pin-project-lite",
  "regex",
  "serde",
@@ -264,9 +263,9 @@ dependencies = [
 
 [[package]]
 name = "actix-web-lab-derive"
-version = "0.22.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "008f98f5a68eeacf5e6d44ed74ce03c1b906baa53eabfb41faf0f5f40bd685f8"
+checksum = "4c221da13534b9352f3f79fcbbd6095f6d8aee63bdf1da8a73d36f9eeea17d5a"
 dependencies = [
  "proc-macro2",
  "quote",
