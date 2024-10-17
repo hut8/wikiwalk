@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use actix_cors::Cors;
 use actix_files as fs;
-use actix_web::middleware::Logger;
+use actix_web::middleware::{self, Logger};
 use actix_web::{get, guard, web, App, Error, HttpResponse, HttpServer, Responder};
 use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 
@@ -156,7 +156,7 @@ async fn serve_paths(
     }))
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 enum Environment {
     Development,
     Production,
@@ -224,7 +224,10 @@ async fn main() -> std::io::Result<()> {
     };
 
     if default_data_dir == data_dir && Environment::current() == Environment::Production {
-        panic!("production environment detected but using default data directory: {}", data_dir.display());
+        panic!(
+            "production environment detected but using default data directory: {}",
+            data_dir.display()
+        );
     }
 
     log::debug!("using data directory: {}", data_dir.display());
@@ -263,6 +266,10 @@ async fn main() -> std::io::Result<()> {
             //.wrap(sentry_actix::Sentry::new())
             .wrap(Logger::default())
             .wrap(cors)
+            .wrap(middleware::DefaultHeaders::new().add((
+                actix_web::http::header::VARY,
+                actix_web::http::header::ACCEPT.as_str(),
+            )))
             .wrap(actix_web::middleware::Condition::new(
                 enable_https,
                 RedirectHttps::with_hsts(StrictTransportSecurity::default()),
