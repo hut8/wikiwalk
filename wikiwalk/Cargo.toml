@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 flate2 = "1.0"
 futures = "*"
-sea-orm = { version = "^0", features = [
+sea-orm = { version = "1.0.1", features = [
     "sqlx-sqlite",
     "runtime-tokio-rustls",
     "macros",

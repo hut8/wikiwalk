@@ -156,7 +156,7 @@ async fn serve_paths(
     }))
 }
 
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 enum Environment {
     Development,
     Production,
@@ -173,17 +173,17 @@ impl Environment {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let sentry_dsn = match Environment::current() {
-      Environment::Development => "",
-      Environment::Production => "https://2377de2b8f109351d1d4d349e0f152e0@o4506004333199360.ingest.sentry.io/4506004334510080",
-    };
-    let _guard = sentry::init((
-        sentry_dsn,
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            ..Default::default()
-        },
-    ));
+    // let sentry_dsn = match Environment::current() {
+    //   Environment::Development => "",
+    //   Environment::Production => "https://2377de2b8f109351d1d4d349e0f152e0@o4506004333199360.ingest.sentry.io/4506004334510080",
+    // };
+    // let _guard = sentry::init((
+    //     sentry_dsn,
+    //     sentry::ClientOptions {
+    //         release: sentry::release_name!(),
+    //         ..Default::default()
+    //     },
+    // ));
 
     let colors_line = ColoredLevelConfig::new()
         .error(Color::Red)
@@ -220,8 +220,13 @@ async fn main() -> std::io::Result<()> {
     let default_data_dir = home_dir.join("data").join("wikiwalk");
     let data_dir = match std::env::var("DATA_ROOT").ok() {
         Some(data_dir_str) => PathBuf::from(data_dir_str),
-        None => default_data_dir,
+        None => default_data_dir.clone(),
     };
+
+    if default_data_dir == data_dir && Environment::current() == Environment::Production {
+        panic!("production environment detected but using default data directory: {}", data_dir.display());
+    }
+
     log::debug!("using data directory: {}", data_dir.display());
     std::fs::create_dir_all(&data_dir).unwrap();
 
@@ -255,7 +260,7 @@ async fn main() -> std::io::Result<()> {
             .allow_any_header()
             .max_age(3600);
         let app = App::new()
-            .wrap(sentry_actix::Sentry::new())
+            //.wrap(sentry_actix::Sentry::new())
             .wrap(Logger::default())
             .wrap(cors)
             .wrap(actix_web::middleware::Condition::new(

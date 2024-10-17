@@ -147,24 +147,31 @@ SELECT
   LIMIT 20;
 ```
 
-### Deployment on Google Cloud Run
+## Database build process
 
-Each time a new commit is pushed to `main`, Google Cloud Build will automatically build a container containing the both the server and tool, which are tagged with the commit hash. However, this will be without the local graph data files, and therefore cannot be deployed directly to Cloud Run. The container will need the data files baked into it. The container for the Cloud Run service will also need to be updated every time Wikipedia releases a new database dump.
+The build process is a bit involved, so here's a high-level overview of how it's done in code.
 
-Wikipedia's dump server seems to throttle dump requests, so it's advantageous to download the dumps and then upload them to GCS. They are currently pushed to GCS but not used during the service-image build process.
+- "tool" downloads the latest Wikipedia dump from [here](https://dumps.wikimedia.org/enwiki/latest/). Specifically, the files are:
+  - `enwiki-[date]-pagelinks.sql.gz`
+  - `enwiki-[date]-page_props.sql.gz` (not currently used)
+  - `enwiki-[date]-page.sql.gz`
+  - `enwiki-[date]-redirect.sql.gz`
+  - `enwiki-[date]-linktarget.sql.gz`
 
-#### cloudbuild-service.yaml
+- Read the `page` table, decompressing it and parsing on the fly. Filter out irrelevant namespaces (anything except 0). Each record contains a page ID and a page title. In batches, write these records to SQLite. They go in the the `vertexes` table.
+- Read `pagelinks`, decompressing it and parsing on the fly. Filter out irrelevant namespaces (anything except 0). Each record contains a source page ID and a "link target" ID.
+- Because `pagelinks` only specifies a target page _title_ (but a source page _ID_), we want to resolve the target pages to IDs. We do this by iterating over the channel from the above step, combining the titles to look up into chunks in order to reduce the number of queries, then looking up the IDs in SQLite. We the write the source and destination IDs to a very simple flat-file adjacency list made in "edge_db.rs".
+- This edge list is then duplicated: one for the incoming edges, and one for the outgoing edges. This is because the algorithm is bi-directional, and the `vertex_al` file (see "Graph Database" above and last step below) contains both incoming and outgoing edges.
+- Both of these edge data files are then sorted by their respective page IDs.
+- We then read the sorted edge data files, and write them to the `vertex_al` file. We also write an index file, `vertex_al_ix`, which is an array of offsets into the `vertex_al` file based on the page ID. This is used to quickly look up the edges for a given page ID.
 
-Invoking this build will:
-
-* Find the latest dump date from the Wikipedia database dumps
-* Find the container that is running the Cloud Run service, and extract the dump date from its tag
-* If the Wikipedia dump date is newer than the Cloud Run container's dump date, it will start a new Cloud Build job to build a new `wikiwalk-service` image (see `Dockerfile.service`) - This will find the latest date that the Wikipedia database dumps were updated, and if that date is newer than the date of the latest graph database, it will download the new dumps, build a new graph database, and upload all the artifacts to Google Cloud Storage.
 
 
-#### Triggers:
+Prior to July 1, 2024, linktarget was unnecessary, and the way to generate the list of links (from Page ID to Page ID) was:
 
-* A new commit is pushed to `main`
-  * Google Cloud Build will build a new "app" container (containing `/server` and `/tool`) and push it to the container registry
-  * A new Cloud Run Job will run `tool sync-cloud-data`
-* Every day the cloudbuild-service.yaml should be run
+- Read the `page` table, decompressing it and parsing on the fly. Filter out irrelevant namespaces (anything except 0). Each record contains a page ID and a page title. In batches, write these records to SQLite. They go in the the `vertexes` table.
+- Read `pagelinks`, decompressing it and parsing on the fly. Filter out irrelevant namespaces (anything except 0). Each record contained a source page ID and a target page title. Send each record down a channel.
+- Because `pagelinks` only specifies a target page _title_ (but a source page _ID_), we want to resolve the target pages to IDs. We do this by iterating over the channel from the above step, combining the titles to look up into chunks in order to reduce the number of queries, then looking up the IDs in SQLite. We the write the source and destination IDs to a very simple flat-file adjacency list made in "edge_db.rs".
+- This edge list is then duplicated: one for the incoming edges, and one for the outgoing edges. This is because the algorithm is bi-directional, and the `vertex_al` file (see "Graph Database" above and last step below) contains both incoming and outgoing edges.
+- Both of these edge data files are then sorted by their respective page IDs.
+- We then read the sorted edge data files, and write them to the `vertex_al` file. We also write an index file, `vertex_al_ix`, which is an array of offsets into the `vertex_al` file based on the page ID. This is used to quickly look up the edges for a given page ID.

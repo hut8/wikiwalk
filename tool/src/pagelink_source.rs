@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
     path::PathBuf,
@@ -9,20 +10,28 @@ use std::{
 };
 
 use crossbeam::channel::{Receiver, Sender};
+use parse_mediawiki_sql::schemas::LinkTarget;
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
-use crate::WPPageLink;
+use crate::DirectLink;
 
 // WPPageLinkSource is an iterator of edges
 pub struct WPPageLinkSource {
-    sender: Sender<WPPageLink>,
-    source_path: PathBuf,
+    sender: Sender<DirectLink>,
+    pagelink_source_path: PathBuf,
+    linktarget_source_path: PathBuf,
     pub edge_count: Arc<AtomicU32>,
 }
 
 impl WPPageLinkSource {
-    pub fn new(source_path: PathBuf, sender: Sender<WPPageLink>) -> WPPageLinkSource {
+    pub fn new(
+        pagelink_source_path: PathBuf,
+        linktarget_source_path: PathBuf,
+        sender: Sender<DirectLink>,
+    ) -> WPPageLinkSource {
         WPPageLinkSource {
-            source_path,
+            pagelink_source_path,
+            linktarget_source_path,
             sender,
             edge_count: Arc::new(AtomicU32::default()),
         }
@@ -44,25 +53,42 @@ impl WPPageLinkSource {
     // }
 
     pub async fn run(self) -> u32 {
-        let pagelinks_sql_file = File::open(&self.source_path).expect("open pagelinks file");
+        log::info!("loading link target map");
+        let link_targets = Arc::new(Self::load_link_targets(self.linktarget_source_path.clone()));
+        log::info!("link target map load complete.");
+        log::info!("loading pagelinks");
+        self.load_pagelinks(link_targets);
+        log::info!("pagelinks load complete");
+        self.edge_count.load(Ordering::Relaxed)
+    }
+
+    fn load_pagelinks(&self, link_targets: Arc<HashMap<u64, String>>) {
+        let pagelinks_sql_file =
+            File::open(&self.pagelink_source_path).expect("open pagelinks file");
 
         let pagelinks_sql_buf = BufReader::new(pagelinks_sql_file);
         let pagelinks_sql = flate2::bufread::GzDecoder::new(pagelinks_sql_buf);
-        let reader = BufReader::new(pagelinks_sql);
+        let pagelinks_reader = BufReader::new(pagelinks_sql);
 
-        let pagelinks_line_iter = reader.lines();
+        let pagelinks_line_iter = pagelinks_reader.lines();
 
-        let (chunk_tx, chunk_rx): (Sender<String>, Receiver<String>) =
+        let (pagelink_chunk_tx, pagelink_chunk_rx): (Sender<String>, Receiver<String>) =
             crossbeam::channel::bounded(1024);
 
         let num_cpus = num_cpus::get() * 2;
         for _ in 0..num_cpus {
-            let chunk_rx = chunk_rx.clone();
-            let sender = self.sender.clone();
+            let chunk_rx = pagelink_chunk_rx.clone();
+            let pagelink_sender = self.sender.clone();
             let edge_count = self.edge_count.clone();
+            let link_targets = link_targets.clone();
             std::thread::spawn(move || {
                 for chunk in chunk_rx {
-                    Self::load_edges_dump_chunk(chunk, sender.clone(), edge_count.clone());
+                    Self::load_pagelinks_dump_chunk(
+                        chunk,
+                        pagelink_sender.clone(),
+                        link_targets.clone(),
+                        edge_count.clone(),
+                    );
                 }
             });
         }
@@ -90,15 +116,55 @@ impl WPPageLinkSource {
             //     line
             // })
             .for_each(|line| {
-                chunk_tx.send(line).expect("send chunk");
+                pagelink_chunk_tx.send(line).expect("send chunk");
             });
-        drop(chunk_tx);
-
-        log::info!("pagelinks load complete");
-        self.edge_count.load(Ordering::Relaxed)
+        drop(pagelink_chunk_tx);
     }
 
-    fn load_edges_dump_chunk(chunk: String, sender: Sender<WPPageLink>, count: Arc<AtomicU32>) {
+    fn load_link_targets(linktarget_source_path: PathBuf) -> HashMap<u64, String> {
+        let linktargets_sql_file =
+            File::open(linktarget_source_path).expect("open linktargets file");
+        let linktargets_sql_buf = BufReader::new(linktargets_sql_file);
+        let linktargets_sql = flate2::bufread::GzDecoder::new(linktargets_sql_buf);
+        let linktargets_reader = BufReader::new(linktargets_sql);
+        let linktargets_line_iter = linktargets_reader
+            .lines()
+            .map(|l| l.expect("read line"))
+            .filter(|line| line.starts_with("INSERT "));
+
+        let linktargets: HashMap<u64, String> = linktargets_line_iter
+            .par_bridge() // Converts the iterator into a parallel iterator
+            .flat_map(|line| Self::load_link_target_dump_chunk(line).into_par_iter())
+            .collect();
+        linktargets
+    }
+
+    fn load_link_target_dump_chunk(chunk: String) -> Vec<(u64, String)> {
+        use parse_mediawiki_sql::{field_types::PageNamespace, iterate_sql_insertions};
+        let chunk = chunk.as_bytes();
+        let mut sql_iterator = iterate_sql_insertions(chunk);
+        let links = sql_iterator.filter_map(
+            |LinkTarget {
+                 id,
+                 namespace,
+                 title,
+             }| {
+                if namespace == PageNamespace(0) {
+                    Some((id.0, title.0.replace('_', " ")))
+                } else {
+                    None
+                }
+            },
+        );
+        links.collect()
+    }
+
+    fn load_pagelinks_dump_chunk(
+        chunk: String,
+        sender: Sender<DirectLink>,
+        link_targets: Arc<HashMap<u64, String>>,
+        count: Arc<AtomicU32>,
+    ) {
         use parse_mediawiki_sql::{
             field_types::PageNamespace, iterate_sql_insertions, schemas::PageLink,
         };
@@ -108,14 +174,13 @@ impl WPPageLinkSource {
             |PageLink {
                  from,
                  from_namespace,
-                 namespace,
-                 title,
-                 target: _, // Note: target is always None in current dump as of 20231001
+                 target,
              }| {
-                if from_namespace == PageNamespace(0) && namespace == PageNamespace(0) {
-                    Some(WPPageLink {
+                if from_namespace == PageNamespace(0) {
+                    let title = link_targets.get(&(target.0)).cloned()?;
+                    Some(DirectLink {
                         source_page_id: from.0,
-                        dest_page_title: title.0.replace('_', " "),
+                        dest_page_title: title,
                     })
                 } else {
                     None

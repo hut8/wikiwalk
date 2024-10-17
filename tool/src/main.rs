@@ -41,9 +41,9 @@ mod pagelink_source;
 mod sitemap;
 mod top_graph;
 
-/// Intermediate type of only fields necessary to create an Edge
+/// Page link, with resolved destination title from link_targets (connected by the link_target_id)
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
-pub struct WPPageLink {
+pub struct DirectLink {
     pub source_page_id: u32,
     pub dest_page_title: String,
 }
@@ -178,7 +178,13 @@ impl GraphDBBuilder {
         log::debug!("building edge map");
 
         let mut edge_proc_db = self
-            .load_edges_dump(self.pagelinks_path.clone(), db, max_page_id, &mut db_status)
+            .load_edges_dump(
+                self.pagelinks_path.clone(),
+                self.link_targets_path.clone(),
+                db,
+                max_page_id,
+                &mut db_status,
+            )
             .await;
 
         if !db_status.edges_sorted {
@@ -337,14 +343,15 @@ impl GraphDBBuilder {
     }
 
     async fn resolve_edges(
-        rx: Receiver<WPPageLink>,
+        rx: Receiver<DirectLink>,
         tx: Sender<Edge>,
         redirects: Arc<RwLock<RedirectMapFile>>,
         db: DbConn,
     ) {
         let mut cache: lrumap::LruHashMap<String, Option<u32>> = lrumap::LruHashMap::new(100000);
-        let mut lookup_q: Vec<WPPageLink> = Vec::new();
+        let mut lookup_q: Vec<DirectLink> = Vec::new();
 
+        log::debug!("resolving edges");
         // looping over every relevant entry in the pagelinks table,
         // we want to send as many edges as we possibly can resolve. Not all pagelink table entries
         // will be resolved, because:
@@ -373,6 +380,7 @@ impl GraphDBBuilder {
             // batch our lookups until we hit that point.
             lookup_q.push(pl);
             if lookup_q.len() > 32000 {
+                log::debug!("batch lookup for edges");
                 let pending_q = lookup_q.clone();
                 lookup_q.clear();
                 let batch_lookup =
@@ -403,7 +411,7 @@ impl GraphDBBuilder {
     }
 
     async fn lookup_batch(
-        q: Vec<WPPageLink>,
+        q: Vec<DirectLink>,
         db: DbConn,
         redirects: Arc<RwLock<RedirectMapFile>>,
     ) -> BatchLookup {
@@ -459,18 +467,21 @@ impl GraphDBBuilder {
 
     async fn write_edges(rx: Receiver<Edge>, edge_db: &mut EdgeProcDB) -> u32 {
         let mut count = 0;
+        log::debug!("write_edges");
         // look up and write in chunks
         for link in rx {
             edge_db.write_edge(&link);
             count += 1;
         }
+        log::debug!("write_edges: done");
         count
     }
 
     // load edges from the pagelinks.sql dump
     async fn load_edges_dump(
         &self,
-        path: PathBuf,
+        pagelinks_path: PathBuf,
+        link_targets_path: PathBuf,
         db: DbConn,
         max_page_id: u32,
         db_status: &mut DBStatus,
@@ -510,8 +521,9 @@ impl GraphDBBuilder {
         }
 
         log::debug!("loading edges dump");
-        let (pagelink_tx, pagelink_rx) = crossbeam::channel::bounded(4096);
-        let pagelink_source = pagelink_source::WPPageLinkSource::new(path, pagelink_tx);
+        let (directlink_tx, directlink_rx) = crossbeam::channel::bounded(4096);
+        let pagelink_source =
+            pagelink_source::WPPageLinkSource::new(pagelinks_path, link_targets_path, directlink_tx);
 
         log::debug!("truncating edge db");
         let mut edge_db = edge_db_build.truncate();
@@ -523,7 +535,7 @@ impl GraphDBBuilder {
         let (edge_tx, edge_rx) = crossbeam::channel::bounded(2048);
         for _ in 0..num_cpus::get() {
             let redirects_map_file = redirects_map_file.clone();
-            let pagelink_rx = pagelink_rx.clone();
+            let directlink_rx = directlink_rx.clone();
             let edge_tx = edge_tx.clone();
             let db = db.clone();
             thread::spawn(move || {
@@ -532,7 +544,7 @@ impl GraphDBBuilder {
                     .build()
                     .unwrap();
                 rt.block_on(Self::resolve_edges(
-                    pagelink_rx,
+                    directlink_rx,
                     edge_tx,
                     redirects_map_file,
                     db,
@@ -567,6 +579,7 @@ impl GraphDBBuilder {
             .to_owned();
         let _ = db.execute(db.get_database_backend().build(&stmt)).await;
         self.create_vertex_table(&db).await;
+        self.create_link_target_table(&db).await;
         self.create_paths_table(&db).await;
 
         db.execute(Statement::from_string(
@@ -625,6 +638,15 @@ impl GraphDBBuilder {
         let schema = Schema::new(DbBackend::Sqlite);
         let create_stmt: TableCreateStatement =
             schema.create_table_from_entity(schema::vertex::Entity);
+        db.execute(db.get_database_backend().build(&create_stmt))
+            .await
+            .expect("create table");
+    }
+
+    pub async fn create_link_target_table(&self, db: &DbConn) {
+        let schema = Schema::new(DbBackend::Sqlite);
+        let create_stmt: TableCreateStatement =
+            schema.create_table_from_entity(schema::link_target::Entity);
         db.execute(db.get_database_backend().build(&create_stmt))
             .await
             .expect("create table");
@@ -850,6 +872,7 @@ async fn run_query(data_dir: &Path, target: String) {
 
 async fn run_sitemap() {
     let current_db_paths = Paths::new().db_paths("current");
+    log::debug!("current db paths: {:#?}", current_db_paths.base);
     let db_path = current_db_paths.graph_db();
     let conn_str = format!("sqlite:///{}?mode=rwc", db_path.to_string_lossy());
     log::debug!("building sitemap using database: {}", conn_str);
@@ -975,11 +998,11 @@ async fn main() {
         .init()
         .unwrap();
 
-    let _sentry = sentry::init(sentry::ClientOptions {
-        release: sentry::release_name!(),
-        traces_sample_rate: 1.0,
-        ..Default::default()
-    });
+    // let _sentry = sentry::init(sentry::ClientOptions {
+    //     release: sentry::release_name!(),
+    //     traces_sample_rate: 1.0,
+    //     ..Default::default()
+    // });
 
     // tracing_subscriber::Registry::default()
     //     .with(sentry::integrations::tracing::layer())
