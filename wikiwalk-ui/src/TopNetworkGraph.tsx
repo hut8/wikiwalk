@@ -6,7 +6,7 @@ import { Box } from "@mui/material";
 const randomColor = (top: boolean) =>
     `#${Math.floor(Math.random() * 16777215).toString(16)}${top ? "ff" : "80"}`;
 
-const fetchGraph = async (
+const fetchTopGraph = async (
     setVertexes: React.Dispatch<React.SetStateAction<Vertex[]>>,
     setEdges: React.Dispatch<React.SetStateAction<Edge[]>>
 ) => {
@@ -26,12 +26,12 @@ const fetchGraph = async (
     setEdges(graph.edges);
 };
 
-export function TopGraph() {
+export function TopNetworkGraph() {
     const [vertexes, setVertexes] = React.useState<Vertex[]>([]);
     const [edges, setEdges] = React.useState<Edge[]>([]);
 
     React.useEffect(() => {
-        fetchGraph(setVertexes, setEdges);
+        fetchTopGraph(setVertexes, setEdges);
     }, []);
 
     return (
