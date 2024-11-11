@@ -38,7 +38,7 @@ sqlx = { version = "*", features = ["sqlite"] }
 stderrlog = "*"
 tokio = { version = "1", features = ["full"] }
 xml-rs = "0.8.20"
-url = "2.5.2"
+url = "2.5.3"
 tokio-util = "0.7.11"
 human_bytes = "0.4.3"
 lrumap = "0.1.0"
