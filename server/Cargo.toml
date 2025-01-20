@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 wikiwalk = { path = "../wikiwalk" }
 log = "*"
-dirs = "5.0"
+dirs = "6.0"
 sea-orm = { version = "1.0.1", features = [
   "sqlx-sqlite",
   "runtime-tokio-rustls",
