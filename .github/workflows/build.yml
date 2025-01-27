@@ -14,6 +14,18 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Install OS dependencies
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
       - name: Run tests
@@ -28,6 +40,14 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache build artifacts
+        uses: actions/cache@v3
+        with:
+          path: target/release
+          key: ${{ runner.os }}-build-artifacts-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-build-artifacts-
       - name: List files
         run: ls -l target/release && which scp
       - name: Set up SSH
@@ -35,6 +55,6 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
       - name: Deploy tool
-        run: scp -vv target/release/tool ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-tool
+        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/tool ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-tool
       - name: Deploy server
-        run: scp -vv target/release/server ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-server
+        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/server ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-server
