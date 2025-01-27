@@ -14,10 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install just
-        run: cargo install just
       - name: Build
-        run: cargo build --verbose
+        run: cargo build
       - name: Run tests
         run: cargo test --verbose
   deploy:
@@ -25,15 +23,15 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
-      - name: Install just
-        run: cargo install just
       - name: Build
-        run: cargo build --release --verbose
+        run: cargo build --release
+      - name: List files
+        run: ls -l target/release && which scp
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
       - name: Deploy tool
-        run: scp target/release/tool ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-tool
+        run: scp -vv target/release/tool ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-tool
       - name: Deploy server
-        run: scp target/release/server ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-server
+        run: scp -vv target/release/server ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-server
