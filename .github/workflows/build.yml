@@ -34,13 +34,25 @@ jobs:
         run: cargo build --release --bin server
       - name: Build tool
         run: cargo build --release --bin tool
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: |
+            target/release/server
+            target/release/tool
+
 
   deploy:
     runs-on: ubuntu-24.04
     needs: build
     steps:
       - uses: actions/checkout@v4
-
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+          path: ./
       - name: Cache build artifacts
         uses: actions/cache@v3
         with:
@@ -49,7 +61,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-build-artifacts-
       - name: List files
-        run: ls -l target/release && which scp
+        run: find . -type f && which scp
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
