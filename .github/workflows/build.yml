@@ -54,6 +54,8 @@ jobs:
         with:
           name: build-artifacts
           path: target/release
+      - name: Restore permissions
+        run: chmod +x target/release/*
       - name: Cache build artifacts
         uses: actions/cache@v3
         with:
