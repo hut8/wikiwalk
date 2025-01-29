@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for changes to wikiwalk server
+
+[Path]
+PathChanged=/var/wikiwalk/bin/wikiwalk-server
+Unit=wikiwalk.service
+
+[Install]
+WantedBy=multi-user.target
