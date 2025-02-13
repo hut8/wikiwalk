@@ -70,7 +70,12 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Deploy tool
-        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/tool ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-tool
-      - name: Deploy server
-        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/server ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-server
+      - name: Transfer tool
+        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/tool ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-tool.tmp
+      - name: Transfer server
+        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/server ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-server.tmp
+      - name: Replace tool
+        run: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.DEPLOY_SERVER }} mv /var/wikiwalk/bin/wikiwalk-tool.tmp /var/wikiwalk/bin/wikiwalk-tool
+      - name: Replace server
+        run: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.DEPLOY_SERVER }} mv /var/wikiwalk/bin/wikiwalk-server.tmp /var/wikiwalk/bin/wikiwalk-server
+                
