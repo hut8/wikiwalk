@@ -24,7 +24,7 @@ sqlx = { version = "*", features = ["sqlite"] }
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4.40"
 dirs = "6.0.0"
-thiserror = "2.0.11"
+thiserror = "2.0.12"
 anyhow = "1.0.97"
 
 [build-dependencies]
