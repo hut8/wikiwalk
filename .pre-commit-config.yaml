@@ -1,0 +1,56 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        name: Rust format
+      - id: clippy
+        name: Rust clippy
+        args: ['--all-targets', '--all-features', '--', '-D', 'warnings']
+
+  - repo: local
+    hooks:
+      - id: cargo-test
+        name: Cargo test
+        entry: cargo test --verbose
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-build-server
+        name: Cargo build server
+        entry: cargo build --release --bin server
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-build-tool
+        name: Cargo build tool
+        entry: cargo build --release --bin tool
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: ui-lint
+        name: UI lint
+        entry: bash -c 'cd wikiwalk-ui && npm run lint'
+        language: system
+        files: ^wikiwalk-ui/
+        types_or: [javascript, jsx, ts, tsx]
+        pass_filenames: false
+
+      - id: ui-build
+        name: UI build
+        entry: bash -c 'cd wikiwalk-ui && npm run build'
+        language: system
+        files: ^wikiwalk-ui/
+        types_or: [javascript, jsx, ts, tsx]
+        pass_filenames: false

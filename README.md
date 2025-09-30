@@ -147,6 +147,10 @@ SELECT
   LIMIT 20;
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup instructions, including how to set up pre-commit hooks that run the same checks as our CI pipeline.
+
 ## Database build process
 
 The build process is a bit involved, so here's a high-level overview of how it's done in code.
