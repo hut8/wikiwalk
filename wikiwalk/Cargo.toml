@@ -22,10 +22,10 @@ serde = "*"
 serde_json = "1.0"
 sqlx = { version = "*", features = ["sqlite"] }
 tokio = { version = "1", features = ["full"] }
-chrono = "0.4.39"
+chrono = "0.4.41"
 dirs = "6.0.0"
-thiserror = "2.0.11"
-anyhow = "1.0.95"
+thiserror = "2.0.12"
+anyhow = "1.0.97"
 
 [build-dependencies]
 vergen = { version = "8.3.2", features = ["gitoxide", "git"] }

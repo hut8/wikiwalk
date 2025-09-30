@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 wikiwalk = { path = "../wikiwalk" }
-anyhow = "1.0.95"
-chrono = "0.4.39"
+anyhow = "1.0.97"
+chrono = "0.4.41"
 clap = { version = "4.5", features = ["derive"] }
 crossbeam = "*"
 hex = "*"
@@ -25,7 +25,7 @@ sea-orm = { version = "1.0.1", features = [
     "runtime-tokio-rustls",
     "macros",
 ] }
-indicatif = { version = "0.17.9" }
+indicatif = { version = "0.18.0" }
 itertools = { version = "*" }
 log = "*"
 memmap2 = "*"
@@ -38,7 +38,7 @@ sqlx = { version = "*", features = ["sqlite"] }
 stderrlog = "*"
 tokio = { version = "1", features = ["full"] }
 xml-rs = "0.8.25"
-url = "2.5.4"
+url = "2.5.7"
 tokio-util = "0.7.13"
 human_bytes = "0.4.3"
 lrumap = "0.1.0"
