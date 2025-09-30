@@ -284,8 +284,8 @@ impl Jobs {
     /// 1. The "updated" field in the job status objects - this is the date the job was last updated. It is unknown whether this ever changes
     ///    once that particular job reaches the "done" state for a particular date mentioned in #2.
     /// 2. The second part of the URL - this is, for example, "20240601" in "/enwiki/20240601/enwiki-20240601-redirect.sql.gz".
-    /// We are going to use the second method, as it appears to be the date that the dump was started.
-    /// Generally it looks like those are either the first of the month, or the 20th, but there's no guarantee of that.
+    ///    We are going to use the second method, as it appears to be the date that the dump was started.
+    ///    Generally it looks like those are either the first of the month, or the 20th, but there's no guarantee of that.
     pub fn dump_date(&self) -> Option<String> {
         let updated_dates = self
             .all()

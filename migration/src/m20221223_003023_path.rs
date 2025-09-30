@@ -22,7 +22,7 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(Path::TargetPageId).integer().not_null())
                     .col(ColumnDef::new(Path::Timestamp).timestamp().not_null())
                     .col(ColumnDef::new(Path::Duration).float().not_null())
-                    .col(ColumnDef::new(Path::PathData).json().not_null())
+                    .col(ColumnDef::new(Path::Data).json().not_null())
                     .to_owned(),
             )
             .await
@@ -44,5 +44,5 @@ enum Path {
     TargetPageId,
     Timestamp,
     Duration,
-    PathData,
+    Data,
 }

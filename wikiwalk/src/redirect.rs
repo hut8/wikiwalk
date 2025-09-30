@@ -130,6 +130,7 @@ impl RedirectMapFile {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(path)
             .expect("open edge proc db file");
         let file_size: u64 = max_page_id as u64 * 4;

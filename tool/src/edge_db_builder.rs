@@ -27,12 +27,14 @@ impl EdgeProcDB {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(path.join("edges"))
             .expect("open edge proc db file");
         let fail_log = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(path.join("edges_fail.csv"))
             .expect("open edge proc db fail file");
         EdgeProcDB {
