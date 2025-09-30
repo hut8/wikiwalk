@@ -1,4 +1,7 @@
-use std::{path::{PathBuf, Path}, io};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 #[derive(Clone)]
 pub struct Paths {
@@ -18,7 +21,9 @@ impl Paths {
     }
 
     pub fn with_base(base: &Path) -> Self {
-        Paths { base: base.to_path_buf() }
+        Paths {
+            base: base.to_path_buf(),
+        }
     }
 
     pub fn path_master_database(&self) -> PathBuf {
@@ -88,8 +93,8 @@ impl DBPaths {
     pub fn new(base: PathBuf, date: &str) -> Self {
         let base = base.join(date);
         if date != "current" {
-          // current is a symlink to a real path
-          std::fs::create_dir_all(&base).unwrap();
+            // current is a symlink to a real path
+            std::fs::create_dir_all(&base).unwrap();
         }
         DBPaths {
             base,

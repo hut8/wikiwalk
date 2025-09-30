@@ -58,7 +58,7 @@ pub async fn make_sitemap(db: &sea_orm::DatabaseConnection, sitemaps_path: &std:
     let chunk_count = pair_chunks
         .enumerate()
         .map(|(i, chunk)| {
-            let urls  = chunk.collect::<Vec<String>>();
+            let urls = chunk.collect::<Vec<String>>();
             std::fs::create_dir_all(sitemaps_path).expect("create sitemap directory");
             write_chunk(i, sitemaps_path, &urls).expect("write sitemap chunk");
         })

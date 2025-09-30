@@ -46,12 +46,12 @@ impl EdgeDB {
                 "check_sizes: vertex_al_ix size is 0".to_owned(),
             ));
         }
-        if al_size % 4 != 0 {
+        if !al_size.is_multiple_of(4) {
             return Err(WikiwalkError::DatabaseError(
                 "check_sizes: vertex_al size is not a multiple of 4".to_owned(),
             ));
         }
-        if al_ix_size % 8 != 0 {
+        if !al_ix_size.is_multiple_of(8) {
             return Err(WikiwalkError::DatabaseError(
                 "check_sizes: vertex_al_ix size is not a multiple of 8".to_owned(),
             ));

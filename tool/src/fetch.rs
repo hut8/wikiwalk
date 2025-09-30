@@ -213,7 +213,6 @@ pub async fn fetch_file(
     // download chunks
     let mut file = File::options()
         .append(true)
-        .write(true)
         .read(true)
         .create(true)
         .open(&sink_path)?;
@@ -306,7 +305,6 @@ impl Jobs {
             );
         }
 
-
         let file_urls = self
             .all()
             .iter()
@@ -321,7 +319,10 @@ impl Jobs {
         let dump_date_strs = file_urls
             .iter()
             .map(|url| {
-                url.split('/').nth(2).expect("extract date from url").to_string()
+                url.split('/')
+                    .nth(2)
+                    .expect("extract date from url")
+                    .to_string()
             })
             .unique()
             .collect_vec();

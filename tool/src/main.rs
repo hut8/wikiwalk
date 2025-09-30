@@ -522,8 +522,11 @@ impl GraphDBBuilder {
 
         log::debug!("loading edges dump");
         let (directlink_tx, directlink_rx) = crossbeam::channel::bounded(4096);
-        let pagelink_source =
-            pagelink_source::WPPageLinkSource::new(pagelinks_path, link_targets_path, directlink_tx);
+        let pagelink_source = pagelink_source::WPPageLinkSource::new(
+            pagelinks_path,
+            link_targets_path,
+            directlink_tx,
+        );
 
         log::debug!("truncating edge db");
         let mut edge_db = edge_db_build.truncate();

@@ -189,7 +189,6 @@ async fn resolve_pages(page_ids: &[u32], db: &sea_orm::DatabaseConnection) -> Ha
         .await
         .expect("query vertexes")
         .into_iter()
-        .map(|(id, title)| (id, title))
         .collect();
     vertex_data
 }

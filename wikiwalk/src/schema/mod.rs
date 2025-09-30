@@ -2,7 +2,7 @@
 
 pub mod prelude;
 
+pub mod link_target;
 pub mod path;
 pub mod search;
 pub mod vertex;
-pub mod link_target;
