@@ -17,7 +17,6 @@ serde_json = "1.0"
 tokio = "1.47.1"
 chrono = "0.4.40"
 actix-web = { version = "4.10.2" }
-actix-web-lab = { version = "0.23.0" }
 futures-util = { version = "0.3.30", default-features = false, features = [
   "std",
 ] }

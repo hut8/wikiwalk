@@ -6,7 +6,6 @@ use actix_cors::Cors;
 use actix_files as fs;
 use actix_web::middleware::{self, Logger};
 use actix_web::{get, guard, web, App, Error, HttpResponse, HttpServer, Responder};
-use actix_web_lab::{header::StrictTransportSecurity, middleware::RedirectHttps};
 
 use fern::colors::{Color, ColoredLevelConfig};
 
@@ -237,10 +236,7 @@ async fn main() -> std::io::Result<()> {
     let port = port.parse::<u16>().expect("parse port");
     let bind_addr = std::env::var("ADDRESS").unwrap_or_else(|_| "localhost".to_string());
     log::info!("binding to {}:{}", bind_addr, port);
-    let cert_path = std::env::var("TLS_CERT").ok();
-    let key_path = std::env::var("TLS_KEY").ok();
     let well_known_path = std::env::var("WELL_KNOWN_ROOT").ok();
-    let enable_https = matches!((&cert_path, &key_path), (Some(_), Some(_)));
 
     let db_paths = Paths::new().db_paths("current");
     let db_status = DBStatus::load(db_paths.db_status_path());
@@ -270,10 +266,6 @@ async fn main() -> std::io::Result<()> {
                 actix_web::http::header::VARY,
                 actix_web::http::header::ACCEPT.as_str(),
             )))
-            .wrap(actix_web::middleware::Condition::new(
-                enable_https,
-                RedirectHttps::with_hsts(StrictTransportSecurity::default()),
-            ))
             .app_data(gdb_data.clone())
             .app_data(db_status_data.clone())
             .app_data(generated_data.clone())
