@@ -41,7 +41,9 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary fallback={<div>An error has occurred. Please refresh the page.</div>}>
-      <RouterProvider router={router} />
+      <React.Suspense fallback={<div>Loading...</div>}>
+        <RouterProvider router={router} />
+      </React.Suspense>
     </Sentry.ErrorBoundary>
   </React.StrictMode>,
 )
