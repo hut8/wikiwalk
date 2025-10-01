@@ -6,6 +6,7 @@ import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
 import Grid from "@mui/material/Unstable_Grid2";
 import ForwardIcon from "@mui/icons-material/Forward";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import GitHubIcon from "@mui/icons-material/GitHub";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -129,8 +130,11 @@ export default function App() {
                                 setPage={setSourcePage}
                             />
                         </Grid>
-                        <Grid xs={0} md={1} justifyContent={"center"} display={"flex"}>
+                        <Grid xs={0} md={1} justifyContent={"center"} display={{ xs: "none", md: "flex" }}>
                             <ForwardIcon sx={{ fontSize: 48 }} />
+                        </Grid>
+                        <Grid xs={12} md={0} display={{ xs: "flex", md: "none" }} justifyContent={"center"} alignItems={"center"} sx={{ py: 1 }}>
+                            <ArrowDownwardIcon sx={{ fontSize: 32, opacity: 0.6 }} />
                         </Grid>
                         <Grid xs={12} md={5}>
                             <PageInput
@@ -142,7 +146,7 @@ export default function App() {
                         <Grid xs={12} md={1} display={"flex"} alignItems={"center"} justifyContent={"center"}>
                             <Button
                                 variant="contained"
-                                sx={{ flexShrink: 1 }}
+                                sx={{ flexShrink: 1, width: { xs: '100%', md: 'auto' } }}
                                 onClick={triggerSearch}
                             >
                                 {t('goButton')}
