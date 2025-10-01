@@ -99,6 +99,7 @@ export default function App() {
                                                                 color={"#ffffff"}
                                                                 href="https://dumps.wikimedia.org/backup-index.html"
                                                                 target="_blank"
+                                                                rel="noopener noreferrer"
                                                             >
                                                                 {t('dataFrom', { date: status.date })}
                                                             </Link>

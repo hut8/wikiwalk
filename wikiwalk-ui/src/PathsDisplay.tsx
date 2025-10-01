@@ -16,7 +16,7 @@ function PagePathDisplay({ page }: { page: Page }) {
         {page.iconUrl && <Avatar src={page.iconUrl} sx={{ borderRadius: 0 }} />}
       </ListItemAvatar>
       <ListItemText primary={
-        <Link href={page.link}>{page.title}</Link>
+        <Link href={page.link} target="_blank" rel="noopener noreferrer">{page.title}</Link>
       }
         secondary={page.description} />
     </ListItem>

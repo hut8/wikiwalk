@@ -12,7 +12,7 @@ export function StatusPanel({ dbStatus }: { dbStatus: DBStatus }) {
                 <>
                     <Box>
                         <Warning sx={{ fontSize: 48 }} />
-                        <p>Dump from {' '}<Link href="https://dumps.wikimedia.org/backup-index.html">Wikipedia dumps</Link>{' '}not found</p>
+                        <p>Dump from {' '}<Link href="https://dumps.wikimedia.org/backup-index.html" target="_blank" rel="noopener noreferrer">Wikipedia dumps</Link>{' '}not found</p>
                     </Box>
                 </>
             )}
