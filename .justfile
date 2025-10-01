@@ -47,8 +47,20 @@ issue-tls-cert: install-lego
   sudo /usr/local/bin/lego --path /var/wikiwalk/certs --email="LiamBowen@gmail.com" --domains="wikiwalk.app" --key-type ec256 --http run
   sudo chown -R wikiwalk:wikiwalk /var/wikiwalk
 
+# Install sudoers file for wikiwalk user deployment permissions
+install-sudoers:
+  #!/usr/bin/env bash
+  echo "Installing deployment script..."
+  sudo cp deploy-binaries.sh /usr/local/bin/deploy-wikiwalk-binaries
+  sudo chmod 755 /usr/local/bin/deploy-wikiwalk-binaries
+  sudo chown root:root /usr/local/bin/deploy-wikiwalk-binaries
+  echo "Installing sudoers file for wikiwalk user..."
+  echo "wikiwalk ALL=(ALL) NOPASSWD: /usr/local/bin/deploy-wikiwalk-binaries" | sudo tee /etc/sudoers.d/wikiwalk > /dev/null
+  sudo chmod 0440 /etc/sudoers.d/wikiwalk
+  echo "Sudoers file installed successfully!"
+
 # Provision server
-provision-server-debian:
+provision-server-debian: install-sudoers
   sudo adduser --home /home/wikiwalk --shell /bin/bash --gecos 'WikiWalk' --disabled-password wikiwalk
   sudo mkdir -p /var/wikiwalk/data
   sudo chown -R wikiwalk:wikiwalk /var/wikiwalk

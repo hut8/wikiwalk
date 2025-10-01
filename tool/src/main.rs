@@ -380,7 +380,6 @@ impl GraphDBBuilder {
             // batch our lookups until we hit that point.
             lookup_q.push(pl);
             if lookup_q.len() > 32000 {
-                log::debug!("batch lookup for edges");
                 let pending_q = lookup_q.clone();
                 lookup_q.clear();
                 let batch_lookup =
