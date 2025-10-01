@@ -71,11 +71,10 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
       - name: Transfer tool
-        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/tool ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-tool.tmp
+        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/tool ${{ secrets.DEPLOY_SERVER }}:/tmp/wikiwalk-tool.tmp
       - name: Transfer server
-        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/server ${{ secrets.DEPLOY_SERVER }}:/var/wikiwalk/bin/wikiwalk-server.tmp
+        run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/server ${{ secrets.DEPLOY_SERVER }}:/tmp/wikiwalk.tmp
       - name: Replace tool
-        run: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.DEPLOY_SERVER }} mv /var/wikiwalk/bin/wikiwalk-tool.tmp /var/wikiwalk/bin/wikiwalk-tool
+        run: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.DEPLOY_SERVER }} 'sudo mv /tmp/wikiwalk-tool.tmp /usr/local/bin/wikiwalk-tool && sudo chown root:root /usr/local/bin/wikiwalk-tool'
       - name: Replace server
-        run: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.DEPLOY_SERVER }} mv /var/wikiwalk/bin/wikiwalk-server.tmp /var/wikiwalk/bin/wikiwalk-server
-                
+        run: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.DEPLOY_SERVER }} 'sudo mv /tmp/wikiwalk.tmp /usr/local/bin/wikiwalk && sudo chown root:root /usr/local/bin/wikiwalk && sudo setcap cap_net_bind_service+eip /usr/local/bin/wikiwalk'

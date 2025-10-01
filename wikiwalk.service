@@ -3,7 +3,7 @@ Description=WikiWalk
 After=network.target
 
 [Service]
-ExecStart=/var/wikiwalk/bin/wikiwalk-server
+ExecStart=/usr/local/bin/wikiwalk
 ExecStopPost=/usr/local/bin/wikiwalk-monitor
 EnvironmentFile=/etc/wikiwalk.conf
 Type=simple

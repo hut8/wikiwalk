@@ -71,10 +71,10 @@ deploy-web-linux: build-release-server
   sudo cp wikiwalk-monitor /usr/local/bin/wikiwalk-monitor
   sudo cp wikiwalk-certs /usr/local/bin/wikiwalk-certs
   sudo setcap cap_net_bind_service+eip /usr/local/bin/wikiwalk
-  sudo cp ./wikiwalk.service /lib/systemd/system/wikiwalk.service
-  # sudo cp ./wikiwalk-certs.service /lib/systemd/system/wikiwalk-certs.service
-  # sudo cp ./wikiwalk-certs.timer /lib/systemd/system/wikiwalk-certs.timer
-  sudo cp ./wikiwalk-watchdog.service /lib/systemd/system/wikiwalk-watchdog.service
+  sudo cp ./wikiwalk.service /etc/systemd/system/wikiwalk.service
+  # sudo cp ./wikiwalk-certs.service /etc/systemd/system/wikiwalk-certs.service
+  # sudo cp ./wikiwalk-certs.timer /etc/systemd/system/wikiwalk-certs.timer
+  sudo cp ./wikiwalk-watchdog.service /etc/systemd/system/wikiwalk-watchdog.service
   sudo systemctl daemon-reload
   sudo systemctl enable wikiwalk.service
   # sudo systemctl enable wikiwalk-certs.service
@@ -92,8 +92,8 @@ deploy-tool-linux: build-release-tool
   sudo cp target/release/tool /usr/local/bin/wikiwalk-tool
   sudo cp wikiwalk-build-sentry-watchdog-ping /usr/local/bin/wikiwalk-build-sentry-watchdog-ping
   sudo cp wikiwalk-build-sentry-watchdog-commit /usr/local/bin/wikiwalk-build-sentry-watchdog-commit
-  sudo cp ./wikiwalk-build.timer /lib/systemd/system/wikiwalk-build.timer
-  sudo cp ./wikiwalk-build.service /lib/systemd/system/wikiwalk-build.service
+  sudo cp ./wikiwalk-build.timer /etc/systemd/system/wikiwalk-build.timer
+  sudo cp ./wikiwalk-build.service /etc/systemd/system/wikiwalk-build.service
   sudo systemctl daemon-reload
   sudo systemctl enable wikiwalk-build.service
   sudo systemctl enable wikiwalk-build.timer

@@ -2,7 +2,7 @@
 Description=Watch for changes to wikiwalk server
 
 [Path]
-PathChanged=/var/wikiwalk/bin/wikiwalk-server
+PathChanged=/usr/local/bin/wikiwalk
 Unit=wikiwalk.service
 
 [Install]
