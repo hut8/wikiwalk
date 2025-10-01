@@ -4,6 +4,7 @@
   "sourcePageLabel": "Page source",
   "targetPageLabel": "Page cible",
   "goButton": "Aller",
+  "randomArticle": "Article aléatoire",
   "noOptionsText": "Aucune page trouvée",
   "errorMessage": "Quelque chose s'est mal passé",
   "dataFrom": "Données du {{date}}",

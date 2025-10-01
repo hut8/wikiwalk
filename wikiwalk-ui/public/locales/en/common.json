@@ -4,6 +4,7 @@
   "sourcePageLabel": "Source page",
   "targetPageLabel": "Target page",
   "goButton": "Go",
+  "randomArticle": "Random article",
   "noOptionsText": "No pages found",
   "errorMessage": "Something went wrong",
   "dataFrom": "Data from {{date}}",
