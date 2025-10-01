@@ -108,8 +108,8 @@ async fn serve_ui_paths(
 #[get("/top-graph")]
 async fn serve_top_graph() -> actix_web::Result<impl Responder> {
     let top_graph_path = Paths::new().db_paths("current").topgraph_path();
-    let source = fs::NamedFile::open(top_graph_path).map_err(|e| {
-        log::error!("failed to open top graph: {:?}", e);
+    let source = fs::NamedFile::open(&top_graph_path).map_err(|e| {
+        log::error!("failed to open top graph at {:?}: {:?}", top_graph_path, e);
         e
     })?;
     Ok(source)
