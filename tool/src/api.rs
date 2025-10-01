@@ -6,6 +6,13 @@ use futures::stream::StreamExt;
 use itertools::Itertools;
 use serde::Deserialize;
 
+fn create_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent("wikiwalk/0.1.0 (https://wikiwalk.app; liambowen@gmail.com) reqwest/0.12.12")
+        .build()
+        .expect("build http client")
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TopPagesRoot {
@@ -39,14 +46,29 @@ pub async fn top_pages() -> Vec<Article> {
         .expect("subtract month");
     let date_component = last_month.format("%Y/%m").to_string();
     log::info!("sitemap: fetching top pages for {}", date_component);
-    let top_pages_url = format!("https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia.org/all-access/{}/all-days", date_component);
-    let top_pages_response = reqwest::get(top_pages_url)
+    let top_pages_url = format!("https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/{}/all-days", date_component);
+    log::info!("sitemap: top pages url: {}", top_pages_url);
+    let client = create_http_client();
+    let top_pages_response = client
+        .get(top_pages_url)
+        .send()
         .await
         .expect("get top pages from api");
-    let top_pages_root: TopPagesRoot = top_pages_response
-        .json()
+    // Save the response for debugging
+    let top_pages_response_text = top_pages_response
+        .text()
         .await
-        .expect("parse top pages json");
+        .expect("get top pages response text");
+
+    let top_pages_root: TopPagesRoot = serde_json::from_str(&top_pages_response_text)
+        .unwrap_or_else(|_| {
+            log::error!(
+                "sitemap: failed to parse top pages response: {}",
+                top_pages_response_text
+            );
+            panic!("failed to parse top pages response");
+        });
+    log::info!("sitemap: parsed top pages json");
     let articles: Vec<Article> = top_pages_root
         .items
         .into_iter()
@@ -126,7 +148,12 @@ async fn fetch_pages_data(titles: &[String]) -> Vec<(u32, String)> {
         "sitemap: fetch page data chunk: api_url = {}",
         api_url.as_str()
     );
-    let response = reqwest::get(api_url).await.expect("get page ids from api");
+    let client = create_http_client();
+    let response = client
+        .get(api_url)
+        .send()
+        .await
+        .expect("get page ids from api");
     let response_json: serde_json::Value = response.json().await.expect("parse page ids json");
     let pages = response_json["query"]["pages"]
         .as_object()
