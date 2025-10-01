@@ -11,33 +11,36 @@ import GitHubIcon from "@mui/icons-material/GitHub";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { PageInput } from "./PageInput";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { Page } from "./service";
 import { Await, useLoaderData, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { PathsDisplay } from "./PathsDisplay";
 import { PathLoaderData } from "./loaders";
 import { Activity } from "./Activity";
 import { StatusPanel } from "./StatusPanel";
 import { IconButton, Link } from "@mui/material";
 import DeviceSwitch from "./DeviceSwitch";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 const queryClient = new QueryClient();
 
 export default function App() {
+    const { t } = useTranslation();
     const [sourcePage, setSourcePage] = useState<Page | null>(null);
     const [targetPage, setTargetPage] = useState<Page | null>(null);
     const { pagePaths, source, target, dbStatus } =
         useLoaderData() as PathLoaderData;
     const navigate = useNavigate();
 
-    const setTitle = (sourcePage: Page, targetPage: Page) => {
+    const setTitle = useCallback((sourcePage: Page, targetPage: Page) => {
         document.title = (() => {
             if (sourcePage && targetPage) {
-                return `WikiWalk - ${sourcePage.title} ➔ ${targetPage.title}`;
+                return `${t('appName')} - ${sourcePage.title} ➔ ${targetPage.title}`;
             }
-            return "WikiWalk.app";
+            return t('appName');
         })();
-    };
+    }, [t]);
 
     useEffect(() => {
         (async () => {
@@ -46,7 +49,7 @@ export default function App() {
             t && setTargetPage(t);
             s && t && setTitle(s, t);
         })();
-    }, [source, target]);
+    }, [source, target, setTitle]);
 
     const triggerSearch = () => {
         if (!(sourcePage && targetPage)) {
@@ -69,7 +72,7 @@ export default function App() {
                     <Toolbar>
                         <Box sx={{ flexGrow: 1 }}>
                             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                                WikiWalk.app
+                                {t('appName')}
                             </Typography>
                         </Box>
                         <DeviceSwitch
@@ -77,7 +80,7 @@ export default function App() {
                                 <>
                                     <Box sx={{ flexGrow: 1 }}>
                                         <Typography variant="caption">
-                                            Find the shortest paths between two Wikipedia pages
+                                            {t('tagline')}
                                         </Typography>
                                     </Box>
                                     <Box>
@@ -87,15 +90,16 @@ export default function App() {
                                                 children={(status) => (
                                                     <Typography variant="caption">
                                                         <Box>
-                                                            Searching {status.edgeCount.toLocaleString()}{" "}
-                                                            connections between{" "}
-                                                            {status.vertexCount.toLocaleString()} pages.{" "}
+                                                            {t('searchingConnections', {
+                                                                edgeCount: status.edgeCount.toLocaleString(),
+                                                                vertexCount: status.vertexCount.toLocaleString()
+                                                            })}{" "}
                                                             <Link
                                                                 color={"#ffffff"}
                                                                 href="https://dumps.wikimedia.org/backup-index.html"
                                                                 target="_blank"
                                                             >
-                                                                Data from {status.date}
+                                                                {t('dataFrom', { date: status.date })}
                                                             </Link>
                                                         </Box>
                                                     </Typography>
@@ -106,6 +110,7 @@ export default function App() {
                                 </>
                             } />
                         <Box sx={{ flexGrow: 0, marginLeft: 3 }}>
+                            <LanguageSwitcher />
                             <IconButton onClick={() => openGitHub()} sx={{ p: 0 }}>
                                 <GitHubIcon sx={{ color: "white" }} />
                             </IconButton>
@@ -119,7 +124,7 @@ export default function App() {
                     <Grid container spacing={2} my={1}>
                         <Grid xs={12} md={5}>
                             <PageInput
-                                label="Source page"
+                                label={t('sourcePageLabel')}
                                 page={sourcePage}
                                 setPage={setSourcePage}
                             />
@@ -129,7 +134,7 @@ export default function App() {
                         </Grid>
                         <Grid xs={12} md={5}>
                             <PageInput
-                                label="Target page"
+                                label={t('targetPageLabel')}
                                 page={targetPage}
                                 setPage={setTargetPage}
                             />
@@ -140,7 +145,7 @@ export default function App() {
                                 sx={{ flexShrink: 1 }}
                                 onClick={triggerSearch}
                             >
-                                Go
+                                {t('goButton')}
                             </Button>
                         </Grid>
                     </Grid>
@@ -162,7 +167,7 @@ export default function App() {
                                 if (!paths) return null;
                                 return <PathsDisplay paths={paths} />;
                             }}
-                            errorElement={<div>Something went wrong</div>}
+                            errorElement={<div>{t('errorMessage')}</div>}
                         />
                     </Suspense>
                 </Container>

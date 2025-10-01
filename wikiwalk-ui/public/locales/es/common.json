@@ -1,0 +1,12 @@
+{
+  "appName": "WikiWalk.app",
+  "tagline": "Encuentra los caminos más cortos entre dos páginas de Wikipedia",
+  "sourcePageLabel": "Página de origen",
+  "targetPageLabel": "Página de destino",
+  "goButton": "Ir",
+  "noOptionsText": "No se encontraron páginas",
+  "errorMessage": "Algo salió mal",
+  "dataFrom": "Datos del {{date}}",
+  "searchingConnections": "Buscando {{edgeCount}} conexiones entre {{vertexCount}} páginas.",
+  "languageSelector": "Idioma"
+}

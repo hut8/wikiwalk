@@ -6,6 +6,7 @@ import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 import { Page, runSearch } from './service';
 import { PageSummary } from './PageSummary';
+import { useTranslation } from 'react-i18next';
 
 type PageInputParams = {
   page: Page | null;
@@ -14,6 +15,7 @@ type PageInputParams = {
 };
 
 export const PageInput = ({ page, setPage, label }: PageInputParams) => {
+  const { t } = useTranslation();
   const [inputValue, setInputValue] = React.useState('');
   const [options, setOptions] = React.useState<Page[]>([]);
 
@@ -46,7 +48,7 @@ export const PageInput = ({ page, setPage, label }: PageInputParams) => {
         filterOptions={(x) => x}
         options={options}
         value={page}
-        noOptionsText={"No pages found"}
+        noOptionsText={t('noOptionsText')}
         isOptionEqualToValue={(option, value) => option.id === value.id}
         onChange={(_event, newValue) => {
           setOptions(newValue ? [newValue, ...options] : options);
