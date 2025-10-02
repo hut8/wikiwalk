@@ -143,9 +143,9 @@ export function pathsGraph(pd: PagePaths): GraphPayload {
   const makeEdges = (path: Page[]) =>
     path
       .slice(0, -1)
-      .map((currentPage, ix, pages) => {
+      .map((currentPage, ix) => {
         const source = currentPage.id.toString();
-        const target = pages[ix + 1].id.toString();
+        const target = path[ix + 1].id.toString();
         return {source, target};
       });
 
