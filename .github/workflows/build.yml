@@ -70,9 +70,23 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Transfer tool
+      - name: Transfer tool binary
         run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/tool ${{ secrets.DEPLOY_SERVER }}:/tmp/wikiwalk-tool.tmp
-      - name: Transfer server
+      - name: Transfer server binary
         run: scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v target/release/server ${{ secrets.DEPLOY_SERVER }}:/tmp/wikiwalk.tmp
-      - name: Deploy binaries
-        run: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.DEPLOY_SERVER }} 'sudo /usr/local/bin/deploy-wikiwalk-binaries'
+      - name: Transfer systemd service files
+        run: |
+          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v \
+            wikiwalk.service \
+            wikiwalk-build.service \
+            wikiwalk-watchdog.service \
+            wikiwalk-certs.service \
+            ${{ secrets.DEPLOY_SERVER }}:/tmp/
+      - name: Transfer watchdog scripts
+        run: |
+          scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -v \
+            wikiwalk-build-sentry-watchdog-ping \
+            wikiwalk-build-sentry-watchdog-commit \
+            ${{ secrets.DEPLOY_SERVER }}:/tmp/
+      - name: Deploy
+        run: ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.DEPLOY_SERVER }} 'sudo /usr/local/bin/wikiwalk-deploy'

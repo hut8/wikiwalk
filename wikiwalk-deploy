@@ -1,0 +1,82 @@
+#!/bin/bash
+set -euo pipefail
+
+# wikiwalk-deploy
+# Deployment script for WikiWalk server and tool binaries, systemd services, and watchdog scripts
+# This script should be installed at /usr/local/bin/wikiwalk-deploy with root ownership and executable permissions
+
+echo "Starting WikiWalk deployment..."
+
+# Define paths
+BINARIES_TMP="/tmp"
+BINARIES_DEST="/usr/local/bin"
+SYSTEMD_TMP="/tmp"
+SYSTEMD_DEST="/etc/systemd/system"
+
+# Function to verify file exists
+check_file() {
+    if [[ ! -f "$1" ]]; then
+        echo "ERROR: Required file not found: $1"
+        exit 1
+    fi
+}
+
+# Verify all required files are present
+echo "Verifying required files..."
+check_file "$BINARIES_TMP/wikiwalk.tmp"
+check_file "$BINARIES_TMP/wikiwalk-tool.tmp"
+check_file "$SYSTEMD_TMP/wikiwalk.service"
+check_file "$SYSTEMD_TMP/wikiwalk-build.service"
+check_file "$SYSTEMD_TMP/wikiwalk-watchdog.service"
+check_file "$SYSTEMD_TMP/wikiwalk-certs.service"
+check_file "$BINARIES_TMP/wikiwalk-build-sentry-watchdog-ping"
+check_file "$BINARIES_TMP/wikiwalk-build-sentry-watchdog-commit"
+
+# Deploy binaries
+echo "Deploying binaries..."
+mv "$BINARIES_TMP/wikiwalk.tmp" "$BINARIES_DEST/wikiwalk"
+mv "$BINARIES_TMP/wikiwalk-tool.tmp" "$BINARIES_DEST/wikiwalk-tool"
+chmod 755 "$BINARIES_DEST/wikiwalk"
+chmod 755 "$BINARIES_DEST/wikiwalk-tool"
+
+# Deploy watchdog scripts
+echo "Deploying watchdog scripts..."
+mv "$BINARIES_TMP/wikiwalk-build-sentry-watchdog-ping" "$BINARIES_DEST/wikiwalk-build-sentry-watchdog-ping"
+mv "$BINARIES_TMP/wikiwalk-build-sentry-watchdog-commit" "$BINARIES_DEST/wikiwalk-build-sentry-watchdog-commit"
+chmod 755 "$BINARIES_DEST/wikiwalk-build-sentry-watchdog-ping"
+chmod 755 "$BINARIES_DEST/wikiwalk-build-sentry-watchdog-commit"
+
+# Deploy systemd service files
+echo "Deploying systemd service files..."
+mv "$SYSTEMD_TMP/wikiwalk.service" "$SYSTEMD_DEST/wikiwalk.service"
+mv "$SYSTEMD_TMP/wikiwalk-build.service" "$SYSTEMD_DEST/wikiwalk-build.service"
+mv "$SYSTEMD_TMP/wikiwalk-watchdog.service" "$SYSTEMD_DEST/wikiwalk-watchdog.service"
+mv "$SYSTEMD_TMP/wikiwalk-certs.service" "$SYSTEMD_DEST/wikiwalk-certs.service"
+chmod 644 "$SYSTEMD_DEST/wikiwalk.service"
+chmod 644 "$SYSTEMD_DEST/wikiwalk-build.service"
+chmod 644 "$SYSTEMD_DEST/wikiwalk-watchdog.service"
+chmod 644 "$SYSTEMD_DEST/wikiwalk-certs.service"
+
+# Reload systemd daemon
+echo "Reloading systemd daemon..."
+systemctl daemon-reload
+
+# Restart services
+echo "Restarting wikiwalk service..."
+systemctl restart wikiwalk.service
+
+# Wait a moment for service to start
+sleep 2
+
+# Verify deployment succeeded
+echo "Verifying deployment..."
+if ! systemctl is-active --quiet wikiwalk.service; then
+    echo "ERROR: wikiwalk.service failed to start"
+    systemctl status wikiwalk.service
+    exit 1
+fi
+
+echo "Checking service status..."
+systemctl status wikiwalk.service --no-pager
+
+echo "WikiWalk deployment completed successfully!"
