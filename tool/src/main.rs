@@ -89,7 +89,7 @@ struct BatchLookup {
 impl GraphDBBuilder {
     pub fn new(dump_date: String) -> GraphDBBuilder {
         let paths = Paths::with_base(std::env::current_dir().unwrap().as_path());
-        let dump_paths = paths.dump_paths(&dump_date);
+        let dump_paths = paths.dump_paths("en", &dump_date);
         let page_path = dump_paths.page();
         let redirects_path = dump_paths.redirect();
         let pagelinks_path = dump_paths.pagelinks();
@@ -805,7 +805,8 @@ async fn run_fetch(dump_dir: &Path, dump_date: Option<DumpStatus>) -> anyhow::Re
             Some(x) => x,
         },
     };
-    fetch::fetch_dump(dump_dir, latest_dump).await?;
+    let dump_dir_with_date = dump_dir.join("en").join(&latest_dump.dump_date);
+    fetch::fetch_dump(&dump_dir_with_date, latest_dump).await?;
     Ok(())
 }
 
@@ -958,7 +959,8 @@ async fn run_pull(dump_dir: &Path, clean: bool) {
     log::info!("built database from {latest_dump_date}.");
     if clean {
         log::info!("cleaning dump directory");
-        fetch::clean_dump_dir(dump_dir);
+        let dump_dir_with_date = dump_dir.join("en").join(latest_dump_date);
+        fetch::clean_dump_dir(&dump_dir_with_date);
     }
     log::info!("building sitemap");
     run_sitemap().await;

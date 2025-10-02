@@ -29,6 +29,68 @@ pub mod redirect;
 pub mod schema;
 pub mod version;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WikiLanguage {
+    English,
+    Cebuano,
+    German,
+    French,
+    Swedish,
+    Dutch,
+    Russian,
+    Spanish,
+    Italian,
+    Polish,
+    EgyptianArabic,
+    Chinese,
+    Japanese,
+    Ukrainian,
+    Vietnamese,
+}
+
+impl WikiLanguage {
+    pub fn from_wp_code(code: &str) -> Option<Self> {
+        match code {
+            "en" => Some(WikiLanguage::English),
+            "ceb" => Some(WikiLanguage::Cebuano),
+            "de" => Some(WikiLanguage::German),
+            "fr" => Some(WikiLanguage::French),
+            "sv" => Some(WikiLanguage::Swedish),
+            "nl" => Some(WikiLanguage::Dutch),
+            "ru" => Some(WikiLanguage::Russian),
+            "es" => Some(WikiLanguage::Spanish),
+            "it" => Some(WikiLanguage::Italian),
+            "pl" => Some(WikiLanguage::Polish),
+            "arz" => Some(WikiLanguage::EgyptianArabic),
+            "zh" => Some(WikiLanguage::Chinese),
+            "ja" => Some(WikiLanguage::Japanese),
+            "uk" => Some(WikiLanguage::Ukrainian),
+            "vi" => Some(WikiLanguage::Vietnamese),
+            _ => None,
+        }
+    }
+
+    pub fn wp_code(&self) -> &'static str {
+        match self {
+            WikiLanguage::English => "en",
+            WikiLanguage::Cebuano => "ceb",
+            WikiLanguage::German => "de",
+            WikiLanguage::French => "fr",
+            WikiLanguage::Swedish => "sv",
+            WikiLanguage::Dutch => "nl",
+            WikiLanguage::Russian => "ru",
+            WikiLanguage::Spanish => "es",
+            WikiLanguage::Italian => "it",
+            WikiLanguage::Polish => "pl",
+            WikiLanguage::EgyptianArabic => "arz",
+            WikiLanguage::Chinese => "zh",
+            WikiLanguage::Japanese => "ja",
+            WikiLanguage::Ukrainian => "uk",
+            WikiLanguage::Vietnamese => "vi",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct Vertex {
     pub id: u32,

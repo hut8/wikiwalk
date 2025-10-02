@@ -30,8 +30,8 @@ impl Paths {
         self.base.join("master.db")
     }
 
-    pub fn dump_paths(&self, date: &str) -> DumpPaths {
-        DumpPaths::new(self.base.clone(), date)
+    pub fn dump_paths(&self, language: &str, date: &str) -> DumpPaths {
+        DumpPaths::new(self.base.clone(), language, date)
     }
 
     pub fn db_paths(&self, date: &str) -> DBPaths {
@@ -48,14 +48,16 @@ impl Default for Paths {
 #[derive(Clone)]
 pub struct DumpPaths {
     pub base: PathBuf,
+    pub language: String,
     pub date: String,
 }
 
 impl DumpPaths {
-    pub fn new(base: PathBuf, date: &str) -> Self {
-        let base = base.join("dumps");
+    pub fn new(base: PathBuf, language: &str, date: &str) -> Self {
+        let base = base.join("dumps").join(language).join(date);
         DumpPaths {
             base,
+            language: language.to_owned(),
             date: date.to_owned(),
         }
     }
