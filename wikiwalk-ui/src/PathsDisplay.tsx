@@ -8,6 +8,7 @@ import ListItemText from '@mui/material/ListItemText';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
 
 import { Page, PagePaths } from "./service";
+import { PathNetworkGraph } from "./PathNetworkGraph";
 
 function PagePathDisplay({ page }: { page: Page }) {
   return (
@@ -51,6 +52,11 @@ export function PathsDisplay({ paths }: { paths: PagePaths }) {
           <Paper sx={{ p: 2, mb: 2 }}>
             Found {paths.count} paths of degree {paths.degrees} in {paths.duration} milliseconds
           </Paper>
+        </Grid>
+      </Grid>
+      <Grid container justifyContent={"center"}>
+        <Grid xs={12}>
+          <PathNetworkGraph paths={paths} />
         </Grid>
       </Grid>
       <Grid container direction={"row"} gap={4} justifyContent={"space-between"} alignItems={"stretch"} wrap="wrap">
