@@ -63,3 +63,4 @@ The project uses two main storage systems:
 ## Dependencies
 - System: libssl-dev, pkg-config
 - Runtime: Node.js 22 for UI development
+- After changing rust code, before always run "cargo fmt"

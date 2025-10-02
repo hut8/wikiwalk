@@ -87,9 +87,9 @@ struct BatchLookup {
 }
 
 impl GraphDBBuilder {
-    pub fn new(dump_date: String) -> GraphDBBuilder {
+    pub fn new(language: String, dump_date: String) -> GraphDBBuilder {
         let paths = Paths::with_base(std::env::current_dir().unwrap().as_path());
-        let dump_paths = paths.dump_paths("en", &dump_date);
+        let dump_paths = paths.dump_paths(&language, &dump_date);
         let page_path = dump_paths.page();
         let redirects_path = dump_paths.redirect();
         let pagelinks_path = dump_paths.pagelinks();
@@ -737,6 +737,9 @@ enum Command {
         /// Clean old databases
         #[clap(long)]
         clean: bool,
+        /// Wikipedia language code (e.g., en, de, fr)
+        #[clap(long, default_value = "en")]
+        language: String,
     },
     /// Find the shortest path
     Run {
@@ -766,12 +769,18 @@ enum Command {
     Fetch {
         #[clap(long)]
         dump_date: Option<String>,
+        /// Wikipedia language code (e.g., en, de, fr)
+        #[clap(long, default_value = "en")]
+        language: String,
     },
     /// Fetch latest dump and import it
     Pull {
         /// Clean old databases after building
         #[clap(long)]
         clean: bool,
+        /// Wikipedia language code (e.g., en, de, fr)
+        #[clap(long, default_value = "en")]
+        language: String,
     },
     /// Build Sitemap
     Sitemap,
@@ -788,13 +797,17 @@ enum Command {
     },
 }
 
-async fn run_build(dump_date: &str, clean: bool) -> anyhow::Result<()> {
-    let mut gddb = GraphDBBuilder::new(dump_date.to_owned());
+async fn run_build(language: &str, dump_date: &str, clean: bool) -> anyhow::Result<()> {
+    let mut gddb = GraphDBBuilder::new(language.to_owned(), dump_date.to_owned());
     log::info!("building database");
     gddb.build_database(clean).await
 }
 
-async fn run_fetch(dump_dir: &Path, dump_date: Option<DumpStatus>) -> anyhow::Result<()> {
+async fn run_fetch(
+    dump_dir: &Path,
+    language: &str,
+    dump_date: Option<DumpStatus>,
+) -> anyhow::Result<()> {
     let latest_dump = match dump_date {
         Some(dump_status) => dump_status,
         None => match fetch::find_latest().await {
@@ -805,7 +818,7 @@ async fn run_fetch(dump_dir: &Path, dump_date: Option<DumpStatus>) -> anyhow::Re
             Some(x) => x,
         },
     };
-    let dump_dir_with_date = dump_dir.join("en").join(&latest_dump.dump_date);
+    let dump_dir_with_date = dump_dir.join(language).join(&latest_dump.dump_date);
     fetch::fetch_dump(&dump_dir_with_date, latest_dump).await?;
     Ok(())
 }
@@ -924,7 +937,7 @@ async fn run_find_latest(urls: bool, relative: bool, date: bool) {
     }
 }
 
-async fn run_pull(dump_dir: &Path, clean: bool) {
+async fn run_pull(dump_dir: &Path, language: &str, clean: bool) {
     let latest_dump = {
         match fetch::find_latest().await {
             None => {
@@ -948,18 +961,18 @@ async fn run_pull(dump_dir: &Path, clean: bool) {
       "[pull] database dump date {db_dump_date} is older than latest dump date: {latest_dump_date} - will fetch and build"
     );
 
-    run_fetch(dump_dir, Some(latest_dump.clone()))
+    run_fetch(dump_dir, language, Some(latest_dump.clone()))
         .await
         .expect("fetch dump");
     log::info!("fetched data from {latest_dump_date}",);
-    if let Err(err) = run_build(latest_dump_date, clean).await {
+    if let Err(err) = run_build(language, latest_dump_date, clean).await {
         log::error!("build failed: {:#?}", err);
         process::exit(1);
     }
     log::info!("built database from {latest_dump_date}.");
     if clean {
         log::info!("cleaning dump directory");
-        let dump_dir_with_date = dump_dir.join("en").join(latest_dump_date);
+        let dump_dir_with_date = dump_dir.join(language).join(latest_dump_date);
         fetch::clean_dump_dir(&dump_dir_with_date);
     }
     log::info!("building sitemap");
@@ -1024,9 +1037,13 @@ async fn main() {
     std::env::set_current_dir(data_dir.as_path()).expect("change to data directory");
 
     match cli.command {
-        Command::Build { dump_date, clean } => {
+        Command::Build {
+            dump_date,
+            clean,
+            language,
+        } => {
             log::debug!("running build");
-            run_build(&dump_date, clean).await.unwrap();
+            run_build(&language, &dump_date, clean).await.unwrap();
         }
         Command::Run {
             source,
@@ -1042,7 +1059,10 @@ async fn main() {
             );
             run_query(&data_dir, target).await;
         }
-        Command::Fetch { dump_date } => {
+        Command::Fetch {
+            dump_date,
+            language,
+        } => {
             let dump_status = match dump_date {
                 Some(date) => fetch::fetch_dump_status_for_date(&Client::default(), &date)
                     .await
@@ -1055,7 +1075,7 @@ async fn main() {
                     ),
                 None => None,
             };
-            run_fetch(&dump_dir, dump_status)
+            run_fetch(&dump_dir, &language, dump_status)
                 .await
                 .expect("fetch failed");
         }
@@ -1066,10 +1086,10 @@ async fn main() {
         } => {
             run_find_latest(urls, relative, date).await;
         }
-        Command::Pull { clean } => {
+        Command::Pull { clean, language } => {
             log::debug!("running pull using data directory: {}", data_dir.display());
             log::debug!("pull will also clean: {}", clean);
-            run_pull(&dump_dir, clean).await;
+            run_pull(&dump_dir, &language, clean).await;
         }
         Command::Sitemap => {
             log::debug!(
