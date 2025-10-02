@@ -15,17 +15,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
       - name: Install OS dependencies
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
       - name: Run tests
@@ -57,13 +46,6 @@ jobs:
           path: target/release
       - name: Restore permissions
         run: chmod +x target/release/*
-      - name: Cache build artifacts
-        uses: actions/cache@v3
-        with:
-          path: target/release
-          key: ${{ runner.os }}-build-artifacts-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-build-artifacts-
       - name: List files
         run: find . -type f && which scp
       - name: Set up SSH
