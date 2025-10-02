@@ -161,7 +161,53 @@ async fn serve_ui_paths(
     );
     let canonical_url = format!("https://wikiwalk.app/paths/{}/{}", source_id, dest_id);
 
-    // Inject meta tags into HTML
+    // Compute path for JSON-LD structured data
+    let paths = gdb.bfs(source_id, dest_id, false).await;
+    let mut json_ld = String::new();
+
+    if let Some(first_path) = paths.first() {
+        // Build ItemList with all pages in the path
+        let mut items = Vec::new();
+        for (position, page_id) in first_path.iter().enumerate() {
+            if let Some(page) = gdb.find_vertex_by_id(*page_id).await {
+                // Escape quotes in page titles for JSON
+                let escaped_title = page.title.replace('"', "\\\"");
+                items.push(format!(
+                    r#"{{
+      "@type": "ListItem",
+      "position": {},
+      "name": "{}",
+      "url": "https://en.wikipedia.org/wiki/{}"
+    }}"#,
+                    position + 1,
+                    escaped_title,
+                    page.title.replace(' ', "_")
+                ));
+            }
+        }
+
+        if !items.is_empty() {
+            let escaped_source = source.title.replace('"', "\\\"");
+            let escaped_dest = dest.title.replace('"', "\\\"");
+            json_ld = format!(
+                r#"<script type="application/ld+json">
+{{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "WikiWalk from {} to {}",
+  "itemListElement": [
+    {}
+  ]
+}}
+</script>"#,
+                escaped_source,
+                escaped_dest,
+                items.join(",\n    ")
+            );
+        }
+    }
+
+    // Inject meta tags and JSON-LD into HTML
     let modified_html = html
         .replace("<title>WikiWalk</title>", &format!("<title>{}</title>", title))
         .replace(
@@ -171,7 +217,8 @@ async fn serve_ui_paths(
         .replace(
             "</head>",
             &format!(r#"<link rel="canonical" href="{}" />
-</head>"#, canonical_url)
+{}
+</head>"#, canonical_url, json_ld)
         );
 
     Ok(HttpResponse::Ok()
