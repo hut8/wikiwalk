@@ -3,8 +3,13 @@ import React from "react";
 import { Edge, Vertex, PagePaths, pathsGraph } from "./service";
 import { Box } from "@mui/material";
 
-const randomColor = () =>
-    `#${Math.floor(Math.random() * 16777215).toString(16)}ff`;
+const randomColor = () => {
+    // Generate bright colors with good contrast against dark gray background
+    const hue = Math.floor(Math.random() * 360);
+    const saturation = 70 + Math.floor(Math.random() * 30); // 70-100%
+    const lightness = 60 + Math.floor(Math.random() * 20); // 60-80% for brightness
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+};
 
 export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
     const [vertexes, setVertexes] = React.useState<Vertex[]>([]);
@@ -53,18 +58,20 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
                 <Cosmograph<Vertex, Edge>
                 nodeColor={(d) => d.color || null}
                 nodeLabelAccessor={(d) => d.title}
-                nodeSize={2}
+                nodeSize={12}
                 nodeLabelColor={() => "white"}
                 hoveredNodeLabelColor={() => "white"}
-                showTopLabels={false}
+                showTopLabels={true}
+                showTopLabelsLimit={20}
+                showTopLabelsValueKey="rank"
                 showDynamicLabels={true}
                 fitViewOnInit={true}
                 fitViewDelay={100}
                 disableSimulation={true}
-                spaceSize={4096}
+                spaceSize={8192}
                 curvedLinks={true}
                 linkColor={(d) => d.color || null}
-                linkWidth={2}
+                linkWidth={3}
             />
             </CosmographProvider>
         </Box>

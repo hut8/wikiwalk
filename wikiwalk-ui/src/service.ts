@@ -130,10 +130,14 @@ export async function topGraph(): Promise<GraphPayload> {
 }
 
 export function pathsGraph(pd: PagePaths): GraphPayload {
-  const SPACE_SIZE = 4096;
-  const LEFT_MARGIN = 200;
-  const RIGHT_MARGIN = 200;
-  const VERTICAL_PADDING = 200;
+  const SPACE_SIZE = 8192; // Increased for more space
+  const LEFT_MARGIN = 100; // Reduced margin to use more space
+  const RIGHT_MARGIN = 100;
+  const VERTICAL_PADDING = 400;
+
+  // Find source and target nodes (first and last in any path)
+  const sourceIds = new Set(pd.paths.map(p => p[0].id.toString()));
+  const targetIds = new Set(pd.paths.map(p => p[p.length - 1].id.toString()));
 
   // Track node positions: map from node id to {depth, pathIndices}
   const nodeInfo = new Map<string, {depth: number, pathIndices: Set<number>}>();
@@ -174,12 +178,18 @@ export function pathsGraph(pd: PagePaths): GraphPayload {
     const avgPathIndex = Array.from(info.pathIndices).reduce((a, b) => a + b, 0) / info.pathIndices.size;
     const y = VERTICAL_PADDING + (avgPathIndex / Math.max(1, numPaths - 1)) * verticalSpan;
 
+    // Mark source and target nodes with top=true and rank for label visibility
+    const isSource = sourceIds.has(id);
+    const isTarget = targetIds.has(id);
+    const rank = isSource ? 2 : isTarget ? 1 : 0;
+
     vertexMap[page.id] = {
       id,
-      top: false,
+      top: isSource || isTarget,
       title: page.title,
       x,
       y,
+      rank,
     };
   });
 
