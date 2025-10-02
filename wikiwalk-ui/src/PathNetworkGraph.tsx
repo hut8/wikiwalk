@@ -9,6 +9,8 @@ const randomColor = () =>
 export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
     const [vertexes, setVertexes] = React.useState<Vertex[]>([]);
     const [edges, setEdges] = React.useState<Edge[]>([]);
+    const [graphHeight, setGraphHeight] = React.useState<number>(600);
+    const containerRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
         const graph = pathsGraph(paths);
@@ -28,8 +30,22 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
         setEdges(graph.edges);
     }, [paths]);
 
+    React.useEffect(() => {
+        const calculateHeight = () => {
+            if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const availableHeight = window.innerHeight - rect.top;
+                setGraphHeight(Math.max(400, availableHeight - 20)); // Minimum 400px, with 20px padding
+            }
+        };
+
+        calculateHeight();
+        window.addEventListener('resize', calculateHeight);
+        return () => window.removeEventListener('resize', calculateHeight);
+    }, []);
+
     return (
-        <Box sx={{ height: '80vh', maxHeight: '80vh', width: '100%' }}>
+        <Box ref={containerRef} sx={{ height: `${graphHeight}px`, width: '100%' }}>
             <CosmographProvider nodes={vertexes} links={edges}>
                 <Box sx={{ paddingTop: 1, paddingBottom: 1 }}>
                     Graph visualization of the path connections
