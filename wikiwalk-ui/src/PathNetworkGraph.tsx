@@ -29,11 +29,12 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
     }, [paths]);
 
     return (
-        <CosmographProvider nodes={vertexes} links={edges}>
-            <Box sx={{ paddingTop: 1, paddingBottom: 1 }}>
-                Graph visualization of the path connections
-            </Box>
-            <Cosmograph<Vertex, Edge>
+        <Box sx={{ height: '80vh', maxHeight: '80vh', width: '100%' }}>
+            <CosmographProvider nodes={vertexes} links={edges}>
+                <Box sx={{ paddingTop: 1, paddingBottom: 1 }}>
+                    Graph visualization of the path connections
+                </Box>
+                <Cosmograph<Vertex, Edge>
                 nodeColor={(d) => d.color || null}
                 nodeLabelAccessor={(d) => d.title}
                 nodeSize={1}
@@ -49,6 +50,7 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
                 linkWidth={2}
                 initialZoomLevel={2}
             />
-        </CosmographProvider>
+            </CosmographProvider>
+        </Box>
     );
 }
