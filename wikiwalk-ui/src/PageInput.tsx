@@ -60,7 +60,7 @@ export const PageInput = ({ page, setPage, label }: PageInputParams) => {
     } catch (error) {
       console.error('Failed to fetch random page:', error);
     } finally {
-      setTimeout(() => setIsRotating(false), 600);
+      setIsRotating(false);
     }
   };
 
@@ -112,8 +112,15 @@ export const PageInput = ({ page, setPage, label }: PageInputParams) => {
               '&:hover': {
                 bgcolor: 'primary.dark',
               },
-              transition: 'transform 0.6s',
-              transform: isRotating ? 'rotate(360deg)' : 'rotate(0deg)',
+              animation: isRotating ? 'spin 1s linear infinite' : 'none',
+              '@keyframes spin': {
+                '0%': {
+                  transform: 'rotate(0deg)',
+                },
+                '100%': {
+                  transform: 'rotate(360deg)',
+                },
+              },
             }}
           >
             <DiceIcon />
