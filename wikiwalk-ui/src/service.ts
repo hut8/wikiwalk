@@ -130,9 +130,9 @@ export async function topGraph(): Promise<GraphPayload> {
 }
 
 export function pathsGraph(pd: PagePaths): GraphPayload {
-  const SPACE_SIZE = 8192; // Increased for more space
-  const LEFT_MARGIN = 100; // Reduced margin to use more space
-  const RIGHT_MARGIN = 100;
+  const SPACE_SIZE = 8192;
+  const LEFT_MARGIN = 50; // Minimal margin to push source to far left
+  const RIGHT_MARGIN = 50; // Minimal margin to push target to far right
   const VERTICAL_PADDING = 400;
 
   // Find source and target nodes (first and last in any path)
