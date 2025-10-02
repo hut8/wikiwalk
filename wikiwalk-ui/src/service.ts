@@ -57,6 +57,8 @@ export type Vertex = {
   color?: string;
   top: boolean;
   rank?: number;
+  x?: number;
+  y?: number;
 };
 
 export type Edge = {
@@ -128,16 +130,59 @@ export async function topGraph(): Promise<GraphPayload> {
 }
 
 export function pathsGraph(pd: PagePaths): GraphPayload {
-  const vertexMap = pd.paths
-    .flatMap((x) => x)
-    .reduce((agg, val) => {
-      agg[val.id] = {
-        id: val.id.toString(),
-        top: false,
-        title: val.title,
-      };
-      return agg;
-    }, {} as Record<number, Vertex>);
+  const SPACE_SIZE = 4096;
+  const LEFT_MARGIN = 200;
+  const RIGHT_MARGIN = 200;
+  const VERTICAL_PADDING = 200;
+
+  // Track node positions: map from node id to {depth, pathIndices}
+  const nodeInfo = new Map<string, {depth: number, pathIndices: Set<number>}>();
+
+  // Calculate depth for each node
+  let maxDepth = 0;
+  pd.paths.forEach((path, pathIndex) => {
+    path.forEach((page, depth) => {
+      const id = page.id.toString();
+      maxDepth = Math.max(maxDepth, depth);
+
+      if (!nodeInfo.has(id)) {
+        nodeInfo.set(id, {depth, pathIndices: new Set([pathIndex])});
+      } else {
+        nodeInfo.get(id)!.pathIndices.add(pathIndex);
+      }
+    });
+  });
+
+  // Calculate positions
+  const horizontalSpan = SPACE_SIZE - LEFT_MARGIN - RIGHT_MARGIN;
+  const verticalSpan = SPACE_SIZE - 2 * VERTICAL_PADDING;
+  const numPaths = pd.paths.length;
+
+  const vertexMap: Record<string, Vertex> = {};
+
+  pd.paths.flatMap((x) => x).forEach((page) => {
+    const id = page.id.toString();
+    if (vertexMap[id]) return; // Already processed
+
+    const info = nodeInfo.get(id)!;
+    const depth = info.depth;
+
+    // X position based on depth
+    const x = LEFT_MARGIN + (depth / maxDepth) * horizontalSpan;
+
+    // Y position: average of all paths this node belongs to
+    const avgPathIndex = Array.from(info.pathIndices).reduce((a, b) => a + b, 0) / info.pathIndices.size;
+    const y = VERTICAL_PADDING + (avgPathIndex / Math.max(1, numPaths - 1)) * verticalSpan;
+
+    vertexMap[page.id] = {
+      id,
+      top: false,
+      title: page.title,
+      x,
+      y,
+    };
+  });
+
   const vertexes = Object.values(vertexMap);
 
   const makeEdges = (path: Page[]) =>

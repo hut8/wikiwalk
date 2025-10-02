@@ -53,18 +53,18 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
                 <Cosmograph<Vertex, Edge>
                 nodeColor={(d) => d.color || null}
                 nodeLabelAccessor={(d) => d.title}
-                nodeSize={1}
+                nodeSize={2}
                 nodeLabelColor={() => "white"}
                 hoveredNodeLabelColor={() => "white"}
                 showTopLabels={false}
                 showDynamicLabels={true}
-                fitViewDelay={1000}
-                disableSimulation={false}
+                fitViewOnInit={true}
+                fitViewDelay={100}
+                disableSimulation={true}
                 spaceSize={4096}
                 curvedLinks={true}
                 linkColor={(d) => d.color || null}
                 linkWidth={2}
-                initialZoomLevel={2}
             />
             </CosmographProvider>
         </Box>
