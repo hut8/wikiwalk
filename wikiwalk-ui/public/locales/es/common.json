@@ -4,6 +4,7 @@
   "sourcePageLabel": "Página de origen",
   "targetPageLabel": "Página de destino",
   "goButton": "Ir",
+  "randomArticle": "Artículo aleatorio",
   "noOptionsText": "No se encontraron páginas",
   "errorMessage": "Algo salió mal",
   "dataFrom": "Datos del {{date}}",

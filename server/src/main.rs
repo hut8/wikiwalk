@@ -9,7 +9,10 @@ use actix_web::{get, guard, web, App, Error, HttpResponse, HttpServer, Responder
 
 use fern::colors::{Color, ColoredLevelConfig};
 
-use sea_orm::{ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
+    Set,
+};
 use serde::{Deserialize, Serialize};
 use static_files::Resource;
 use wikiwalk::paths::Paths;
@@ -69,6 +72,36 @@ async fn status(db_status: web::Data<DBStatus>) -> actix_web::Result<impl Respon
         edge_count: db_status.edge_count,
         vertex_count: db_status.vertex_count,
     }))
+}
+
+#[derive(Serialize)]
+struct RandomPage {
+    id: u32,
+    title: String,
+}
+
+#[get("/random")]
+async fn random_page(gdb: web::Data<GraphDB>) -> actix_web::Result<impl Responder> {
+    use sea_orm::sea_query::SimpleExpr;
+
+    let random_vertex = schema::vertex::Entity::find()
+        .filter(schema::vertex::Column::IsRedirect.eq(false))
+        .order_by(
+            SimpleExpr::FunctionCall(sea_orm::sea_query::Func::random()),
+            sea_orm::Order::Asc,
+        )
+        .limit(1)
+        .one(&gdb.graph_db)
+        .await
+        .expect("query random vertex");
+
+    match random_vertex {
+        Some(vertex) => Ok(web::Json(RandomPage {
+            id: vertex.id,
+            title: vertex.title,
+        })),
+        None => Err(actix_web::error::ErrorNotFound("No page found")),
+    }
 }
 
 #[get("/sitemaps/{filename}")]
@@ -285,6 +318,7 @@ async fn main() -> std::io::Result<()> {
             )
             .service(serve_top_graph)
             .service(status)
+            .service(random_page)
             .service(sitemap);
         match &well_known_path {
             Some(well_known_path) => {

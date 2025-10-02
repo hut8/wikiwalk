@@ -311,3 +311,18 @@ export async function fetchDatabaseStatus(): Promise<DBStatus> {
   const data = (await response.json()) as DBStatus;
   return data;
 }
+
+export async function fetchRandomPage(): Promise<Page> {
+  const endpoint = new URL("/random", serviceEndpointBase);
+  const response = await fetch(endpoint, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error("bad response code from server");
+  }
+  const data = await response.json();
+  const pageData = await fetchPageData(data.id);
+  return pageData;
+}
