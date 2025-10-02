@@ -25,7 +25,7 @@ function PagePathDisplay({ page }: { page: Page }) {
 
 function PathDisplay({ path }: { path: Page[] }) {
   return (
-    <Grid width={"30vw"} minWidth={"300px"}>
+    <Grid xs={12} md="auto" width={{ xs: "100%", md: "30vw" }} minWidth={{ xs: "100%", md: "300px" }}>
       <Paper elevation={8} sx={{ p: 2, mb: 2, height: "90%" }}>
         <List>
           {path.map((page, i) => (
