@@ -145,8 +145,38 @@ async fn serve_ui_paths(
         // TODO: Make a real 404 page
         return Ok(HttpResponse::NotFound().body("404 Source or destination page not found"));
     }
+
+    let source = source_vertex.unwrap();
+    let dest = dest_vertex.unwrap();
+
+    // Get the base HTML content
     let content = statics.get("index.html").expect("index.html resource");
-    Ok(HttpResponse::Ok().body(content.data))
+    let html = std::str::from_utf8(content.data).expect("valid utf8");
+
+    // Create dynamic meta tags
+    let title = format!("WikiWalk | Walk from {} to {}", source.title, dest.title);
+    let description = format!(
+        "Find the shortest path from {} to {} on Wikipedia using WikiWalk",
+        source.title, dest.title
+    );
+    let canonical_url = format!("https://wikiwalk.app/paths/{}/{}", source_id, dest_id);
+
+    // Inject meta tags into HTML
+    let modified_html = html
+        .replace("<title>WikiWalk</title>", &format!("<title>{}</title>", title))
+        .replace(
+            r#"<meta name="description" content="WikiWalk - Find the shortest paths between two pages on Wikipedia" />"#,
+            &format!(r#"<meta name="description" content="{}" />"#, description)
+        )
+        .replace(
+            "</head>",
+            &format!(r#"<link rel="canonical" href="{}" />
+</head>"#, canonical_url)
+        );
+
+    Ok(HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(modified_html))
 }
 
 #[get("/top-graph")]
