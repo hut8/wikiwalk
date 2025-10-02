@@ -114,7 +114,7 @@ impl GraphDBBuilder {
 
     /// load vertexes from page.sql and put them in a sqlite file
     /// then process edges into memory-mapped flat-file database
-    pub async fn build_database(&mut self) -> anyhow::Result<()> {
+    pub async fn build_database(&mut self, clean: bool) -> anyhow::Result<()> {
         let db_status_path = self.db_paths.db_status_path();
         let mut db_status = DBStatus::load(db_status_path.clone());
 
@@ -128,7 +128,9 @@ impl GraphDBBuilder {
 
         if db_status.build_complete {
             self.create_current_symlink();
-            self.clean_old_databases();
+            if clean {
+                self.clean_old_databases();
+            }
             log::info!("skipping build: db status file indicates complete");
             return Ok(());
         }
@@ -232,7 +234,9 @@ impl GraphDBBuilder {
         db_status.save();
 
         self.create_current_symlink();
-        self.clean_old_databases();
+        if clean {
+            self.clean_old_databases();
+        }
 
         log::info!("database build complete");
         Ok(())
@@ -765,6 +769,7 @@ enum Command {
     },
     /// Fetch latest dump and import it
     Pull {
+        /// Clean old databases after building
         #[clap(long)]
         clean: bool,
     },
@@ -785,12 +790,8 @@ enum Command {
 
 async fn run_build(dump_date: &str, clean: bool) -> anyhow::Result<()> {
     let mut gddb = GraphDBBuilder::new(dump_date.to_owned());
-    if clean {
-        log::info!("cleaning old databases: current dump date: {}", dump_date);
-        gddb.clean_old_databases();
-    }
     log::info!("building database");
-    gddb.build_database().await
+    gddb.build_database(clean).await
 }
 
 async fn run_fetch(dump_dir: &Path, dump_date: Option<DumpStatus>) -> anyhow::Result<()> {
