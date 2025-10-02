@@ -10,8 +10,7 @@ use actix_web::{get, guard, web, App, Error, HttpResponse, HttpServer, Responder
 use fern::colors::{Color, ColoredLevelConfig};
 
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect,
-    Set,
+    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QuerySelect, Set,
 };
 use serde::{Deserialize, Serialize};
 use static_files::Resource;
@@ -82,14 +81,26 @@ struct RandomPage {
 
 #[get("/random")]
 async fn random_page(gdb: web::Data<GraphDB>) -> actix_web::Result<impl Responder> {
-    use sea_orm::sea_query::SimpleExpr;
+    use sea_orm::PaginatorTrait;
 
+    // Count total non-redirect pages
+    let count = schema::vertex::Entity::find()
+        .filter(schema::vertex::Column::IsRedirect.eq(false))
+        .count(&gdb.graph_db)
+        .await
+        .expect("count non-redirect vertices");
+
+    if count == 0 {
+        return Err(actix_web::error::ErrorNotFound("No page found"));
+    }
+
+    // Generate random offset
+    let random_offset = rand::random::<u64>() % count;
+
+    // Fetch page at random offset
     let random_vertex = schema::vertex::Entity::find()
         .filter(schema::vertex::Column::IsRedirect.eq(false))
-        .order_by(
-            SimpleExpr::FunctionCall(sea_orm::sea_query::Func::random()),
-            sea_orm::Order::Asc,
-        )
+        .offset(random_offset)
         .limit(1)
         .one(&gdb.graph_db)
         .await
