@@ -50,29 +50,26 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
     }, []);
 
     return (
-        <Box ref={containerRef} sx={{ height: `${graphHeight}px`, width: '100%', padding: '40px 20px' }}>
+        <Box ref={containerRef} sx={{ height: `${graphHeight}px`, width: '100%', marginBottom: '20px' }}>
             <CosmographProvider nodes={vertexes} links={edges}>
-                <Box sx={{ paddingTop: 1, paddingBottom: 1 }}>
-                    Graph visualization of the path connections
-                </Box>
                 <Cosmograph<Vertex, Edge>
-                nodeColor={(d) => d.color || null}
-                nodeLabelAccessor={(d) => d.title}
-                nodeSize={15}
-                nodeLabelColor={() => "white"}
-                hoveredNodeLabelColor={() => "white"}
-                showTopLabels={true}
-                showTopLabelsLimit={20}
-                showTopLabelsValueKey="rank"
-                showDynamicLabels={true}
-                fitViewOnInit={false}
-                initialZoomLevel={0.8}
-                disableSimulation={true}
-                spaceSize={8192}
-                curvedLinks={true}
-                linkColor={(d) => d.color || null}
-                linkWidth={4}
-            />
+                    nodeColor={(d) => d.color || null}
+                    nodeLabelAccessor={(d) => d.title}
+                    nodeSize={15}
+                    nodeLabelColor={() => "white"}
+                    hoveredNodeLabelColor={() => "white"}
+                    showTopLabels={true}
+                    showTopLabelsLimit={20}
+                    showTopLabelsValueKey="rank"
+                    showDynamicLabels={true}
+                    fitViewOnInit={false}
+                    initialZoomLevel={0.8}
+                    disableSimulation={true}
+                    spaceSize={8192}
+                    curvedLinks={true}
+                    linkColor={(d) => d.color || null}
+                    linkWidth={4}
+                />
             </CosmographProvider>
         </Box>
     );
