@@ -3937,7 +3937,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_json",
- "static-files 0.2.5",
+ "static-files 0.3.1",
  "tokio",
  "wikiwalk",
 ]
