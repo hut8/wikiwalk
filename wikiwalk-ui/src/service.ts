@@ -171,17 +171,24 @@ export function pathsGraph(pd: PagePaths): GraphPayload {
     const info = nodeInfo.get(id)!;
     const depth = info.depth;
 
-    // X position based on depth
-    const x = LEFT_MARGIN + (depth / maxDepth) * horizontalSpan;
-
-    // Y position: average of all paths this node belongs to
-    const avgPathIndex = Array.from(info.pathIndices).reduce((a, b) => a + b, 0) / info.pathIndices.size;
-    const y = VERTICAL_PADDING + (avgPathIndex / Math.max(1, numPaths - 1)) * verticalSpan;
-
     // Mark source and target nodes with top=true and rank for label visibility
     const isSource = sourceIds.has(id);
     const isTarget = targetIds.has(id);
     const rank = isSource ? 2 : isTarget ? 1 : 0;
+
+    // X position: force source to far left, target to far right, others based on depth
+    let x: number;
+    if (isSource) {
+      x = LEFT_MARGIN;
+    } else if (isTarget) {
+      x = SPACE_SIZE - RIGHT_MARGIN;
+    } else {
+      x = LEFT_MARGIN + (depth / maxDepth) * horizontalSpan;
+    }
+
+    // Y position: average of all paths this node belongs to
+    const avgPathIndex = Array.from(info.pathIndices).reduce((a, b) => a + b, 0) / info.pathIndices.size;
+    const y = VERTICAL_PADDING + (avgPathIndex / Math.max(1, numPaths - 1)) * verticalSpan;
 
     vertexMap[page.id] = {
       id,
