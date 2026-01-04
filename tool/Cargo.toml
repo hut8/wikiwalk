@@ -12,7 +12,7 @@ crossbeam = "*"
 hex = "*"
 dirs = "6.0"
 symlink = "0.1.0"
-flate2 = "1.0"
+flate2 = "1.1"
 futures = "*"
 sha3 = "0.10.6"
 reqwest = { version = "0.12.12", features = [
@@ -37,7 +37,7 @@ serde_json = "1.0"
 sqlx = { version = "*", features = ["sqlite"] }
 stderrlog = "*"
 tokio = { version = "1", features = ["full"] }
-xml-rs = "0.8.25"
+xml-rs = "1.0.0"
 url = "2.5.7"
 tokio-util = "0.7.13"
 human_bytes = "0.4.3"
