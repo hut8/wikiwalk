@@ -1,4 +1,4 @@
-import { createContext, useMemo, useState, useEffect, ReactNode } from 'react';
+import { createContext, useMemo, useState, useEffect, useCallback, ReactNode } from 'react';
 import { ThemeProvider as MuiThemeProvider, createTheme, CssBaseline } from '@mui/material';
 
 type ThemeMode = 'light' | 'dark';
@@ -26,9 +26,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         localStorage.setItem('theme-mode', mode);
     }, [mode]);
 
-    const toggleTheme = () => {
+    const toggleTheme = useCallback(() => {
         setMode(prevMode => prevMode === 'light' ? 'dark' : 'light');
-    };
+    }, []);
 
     const theme = useMemo(
         () =>
@@ -42,7 +42,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
     const contextValue = useMemo(
         () => ({ mode, toggleTheme }),
-        [mode]
+        [mode, toggleTheme]
     );
 
     return (
