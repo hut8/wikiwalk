@@ -177,7 +177,7 @@ export function pathsGraph(pd: PagePaths): GraphPayload {
     const rank = isSource ? 2 : isTarget ? 1 : 0;
 
     // X position: force source to far left, target to far right, others based on depth
-    let x: number;
+    let x = LEFT_MARGIN;
     if (isSource) {
       x = LEFT_MARGIN;
     } else if (isTarget) {
