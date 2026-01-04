@@ -48,6 +48,10 @@ const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
             if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) {
                 return; // Skip invalid edges
             }
+            // Check if edge already exists to avoid duplicates
+            if (graph.hasEdge(edge.source, edge.target)) {
+                return;
+            }
             graph.addEdge(edge.source, edge.target, {
                 color: edge.color || '#999',
                 size: 4,
