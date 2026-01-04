@@ -13,9 +13,9 @@ export default function DarkModeToggle() {
             aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
             {mode === 'dark' ? (
-                <Brightness7Icon sx={{ color: 'white' }} />
+                <Brightness7Icon />
             ) : (
-                <Brightness4Icon sx={{ color: 'white' }} />
+                <Brightness4Icon />
             )}
         </IconButton>
     );
