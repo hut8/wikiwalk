@@ -10,7 +10,8 @@ use actix_web::{get, guard, web, App, Error, HttpResponse, HttpServer, Responder
 use fern::colors::{Color, ColoredLevelConfig};
 
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, EntityTrait, QueryFilter, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, Condition, DeriveColumn, EntityTrait, FromQueryResult,
+    QueryFilter, QuerySelect, Set,
 };
 use serde::{Deserialize, Serialize};
 use static_files::Resource;
@@ -79,40 +80,67 @@ struct RandomPage {
     title: String,
 }
 
+#[derive(Copy, Clone, Debug, DeriveColumn)]
+enum QueryAs {
+    Id,
+}
+
+#[derive(FromQueryResult)]
+struct MaxVertexId {
+    id: u32,
+}
+
 #[get("/random")]
 async fn random_page(gdb: web::Data<GraphDB>) -> actix_web::Result<impl Responder> {
-    use sea_orm::PaginatorTrait;
-
-    // Count total non-redirect pages
-    let count = schema::vertex::Entity::find()
-        .filter(schema::vertex::Column::IsRedirect.eq(false))
-        .count(&gdb.graph_db)
-        .await
-        .expect("count non-redirect vertices");
-
-    if count == 0 {
-        return Err(actix_web::error::ErrorNotFound("No page found"));
-    }
-
-    // Generate random offset
-    let random_offset = rand::random::<u64>() % count;
-
-    // Fetch page at random offset
-    let random_vertex = schema::vertex::Entity::find()
-        .filter(schema::vertex::Column::IsRedirect.eq(false))
-        .offset(random_offset)
-        .limit(1)
+    // Query for MAX(id) to handle gaps in ID sequence
+    let max_id_result: Option<MaxVertexId> = schema::vertex::Entity::find()
+        .select_only()
+        .column_as(schema::vertex::Column::Id.max(), QueryAs::Id)
+        .into_model()
         .one(&gdb.graph_db)
         .await
-        .expect("query random vertex");
+        .expect("query max vertex id");
 
-    match random_vertex {
-        Some(vertex) => Ok(web::Json(RandomPage {
-            id: vertex.id,
-            title: vertex.title,
-        })),
-        None => Err(actix_web::error::ErrorNotFound("No page found")),
+    let max_id = match max_id_result {
+        Some(result) => result.id,
+        None => return Err(actix_web::error::ErrorNotFound("No pages found")),
+    };
+
+    if max_id == 0 {
+        return Err(actix_web::error::ErrorNotFound("No pages found"));
     }
+
+    // Try up to 10 times to find a random non-redirect page
+    // Query with id >= random_number to handle gaps in ID sequence
+    const MAX_ATTEMPTS: u32 = 10;
+    for _ in 0..MAX_ATTEMPTS {
+        // Generate random ID in range [1, max_id]
+        let random_id = (rand::random::<u32>() % max_id) + 1;
+
+        // Query for first non-redirect page with id >= random_id
+        let random_vertex = schema::vertex::Entity::find()
+            .filter(
+                Condition::all()
+                    .add(schema::vertex::Column::Id.gte(random_id))
+                    .add(schema::vertex::Column::IsRedirect.eq(false)),
+            )
+            .limit(1)
+            .one(&gdb.graph_db)
+            .await
+            .expect("query random vertex");
+
+        if let Some(vertex) = random_vertex {
+            return Ok(web::Json(RandomPage {
+                id: vertex.id,
+                title: vertex.title,
+            }));
+        }
+    }
+
+    // Fallback: very unlikely to reach here unless database is mostly redirects
+    Err(actix_web::error::ErrorNotFound(
+        "No non-redirect page found after multiple attempts",
+    ))
 }
 
 #[get("/sitemaps/{filename}")]
