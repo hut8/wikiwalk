@@ -34,7 +34,7 @@ jobs:
         working-directory: wikiwalk-ui
 
       - name: Run tests
-        run: cargo test --verbose
+        run: WIKIWALK_SKIP_FRONTEND_BUILD=1 cargo test --verbose
       - name: Build server
         run: WIKIWALK_SKIP_FRONTEND_BUILD=1 cargo build --release --bin server
       - name: Build tool
