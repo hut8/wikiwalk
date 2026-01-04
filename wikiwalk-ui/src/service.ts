@@ -183,7 +183,7 @@ export function pathsGraph(pd: PagePaths): GraphPayload {
     } else if (isTarget) {
       x = SPACE_SIZE - RIGHT_MARGIN;
     } else {
-      x = LEFT_MARGIN + (depth / maxDepth) * horizontalSpan;
+      x = LEFT_MARGIN + (depth / Math.max(1, maxDepth)) * horizontalSpan;
     }
 
     // Y position: average of all paths this node belongs to
