@@ -34,8 +34,8 @@ const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
             const showLabel = vertex.rank && vertex.rank > 0 && vertex.rank <= 20;
             graph.addNode(vertex.id, {
                 label: showLabel ? vertex.title : undefined,
-                x: vertex.x || 0,
-                y: vertex.y || 0,
+                x: vertex.x ?? Math.random() * 100,
+                y: vertex.y ?? Math.random() * 100,
                 size: 15,
                 color: vertex.color || '#666',
                 rank: vertex.rank || 0,
