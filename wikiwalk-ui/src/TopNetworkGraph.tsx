@@ -3,7 +3,7 @@ import { SigmaContainer, useLoadGraph, useSetSettings, useSigma } from "@react-s
 import { LayoutForceAtlas2Control } from "@react-sigma/layout-forceatlas2";
 import EdgeCurveProgram from "@sigma/edge-curve";
 import Graph from "graphology";
-import { Box } from "@mui/material";
+import { Box, useTheme } from "@mui/material";
 import { Edge, Vertex, topGraph } from "./service";
 import "@react-sigma/core/lib/style.css";
 
@@ -39,6 +39,7 @@ const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
     const loadGraph = useLoadGraph();
     const sigma = useSigma();
     const setSettings = useSetSettings();
+    const theme = useTheme();
 
     // Load graph data
     useEffect(() => {
@@ -76,15 +77,16 @@ const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
         loadGraph(graph);
     }, [loadGraph, vertexes, edges]);
 
-    // Configure Sigma settings
+    // Configure Sigma settings with theme-aware label color
     useEffect(() => {
         setSettings({
             renderEdgeLabels: false,
+            labelColor: { color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000' },
             labelSize: 14,
             labelWeight: 'normal',
             labelRenderedSizeThreshold: 0,
         });
-    }, [setSettings]);
+    }, [setSettings, theme.palette.mode]);
 
     // Set initial camera position with delay (after layout converges)
     useEffect(() => {
@@ -120,6 +122,7 @@ const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
 export function TopNetworkGraph() {
     const [vertexes, setVertexes] = useState<Vertex[]>([]);
     const [edges, setEdges] = useState<Edge[]>([]);
+    const theme = useTheme();
 
     useEffect(() => {
         fetchTopGraph(setVertexes, setEdges);
@@ -133,7 +136,11 @@ export function TopNetworkGraph() {
             <Box sx={{ height: '600px', width: '100%' }}>
                 {vertexes.length > 0 && (
                     <SigmaContainer
-                        style={{ height: '100%', width: '100%' }}
+                        style={{
+                            height: '100%',
+                            width: '100%',
+                            backgroundColor: theme.palette.background.default
+                        }}
                         settings={{
                             edgeProgramClasses: {
                                 curved: EdgeCurveProgram,
