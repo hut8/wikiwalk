@@ -1,7 +1,7 @@
 export class Timer {
   fn: () => void;
   interval: number;
-  timerHandle: NodeJS.Timeout | null;
+  timerHandle: number | null;
 
   constructor(interval: number, target?: () => void) {
     this.interval = interval;

@@ -1,7 +1,10 @@
-import { CosmographProvider, Cosmograph } from "@cosmograph/react";
-import React from "react";
-import { Edge, Vertex, PagePaths, pathsGraph } from "./service";
+import { useEffect, useState, useRef, FC } from "react";
+import { SigmaContainer, useLoadGraph, useSetSettings, useSigma } from "@react-sigma/core";
+import EdgeCurveProgram from "@sigma/edge-curve";
+import Graph from "graphology";
 import { Box } from "@mui/material";
+import { Edge, Vertex, PagePaths, pathsGraph } from "./service";
+import "@react-sigma/core/lib/style.css";
 
 const randomColor = () => {
     // Generate bright colors with good contrast against dark gray background
@@ -11,13 +14,78 @@ const randomColor = () => {
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 };
 
-export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
-    const [vertexes, setVertexes] = React.useState<Vertex[]>([]);
-    const [edges, setEdges] = React.useState<Edge[]>([]);
-    const [graphHeight, setGraphHeight] = React.useState<number>(600);
-    const containerRef = React.useRef<HTMLDivElement>(null);
+interface GraphLoaderProps {
+    vertexes: Vertex[];
+    edges: Edge[];
+}
 
-    React.useEffect(() => {
+const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
+    const loadGraph = useLoadGraph();
+    const sigma = useSigma();
+    const setSettings = useSetSettings();
+
+    // Load graph data
+    useEffect(() => {
+        const graph = new Graph();
+
+        // Add nodes with pre-calculated positions
+        // Only set label for top 20 by rank
+        vertexes.forEach(vertex => {
+            const showLabel = vertex.rank && vertex.rank > 0 && vertex.rank <= 20;
+            graph.addNode(vertex.id, {
+                label: showLabel ? vertex.title : undefined,
+                x: vertex.x || 0,
+                y: vertex.y || 0,
+                size: 15,
+                color: vertex.color || '#666',
+                rank: vertex.rank || 0,
+                top: vertex.top
+            });
+        });
+
+        // Add edges
+        edges.forEach(edge => {
+            if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) {
+                return; // Skip invalid edges
+            }
+            graph.addEdge(edge.source, edge.target, {
+                color: edge.color || '#999',
+                size: 4,
+                type: 'curved'
+            });
+        });
+
+        loadGraph(graph);
+    }, [loadGraph, vertexes, edges]);
+
+    // Configure Sigma settings
+    useEffect(() => {
+        setSettings({
+            renderEdgeLabels: false,
+            labelColor: { color: '#ffffff' },
+            labelSize: 14,
+            labelWeight: 'normal',
+            labelRenderedSizeThreshold: 0,
+        });
+    }, [setSettings]);
+
+    // Set initial camera position
+    useEffect(() => {
+        const camera = sigma.getCamera();
+        // Cosmograph initialZoomLevel of 0.8 corresponds to ratio of 1/0.8 = 1.25
+        camera.setState({ ratio: 1.25 });
+    }, [sigma]);
+
+    return null;
+};
+
+export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
+    const [vertexes, setVertexes] = useState<Vertex[]>([]);
+    const [edges, setEdges] = useState<Edge[]>([]);
+    const [graphHeight, setGraphHeight] = useState<number>(600);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
         const graph = pathsGraph(paths);
 
         // Color each vertex
@@ -35,7 +103,7 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
         setEdges(graph.edges);
     }, [paths]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const calculateHeight = () => {
             if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
@@ -50,30 +118,20 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
     }, []);
 
     return (
-        <Box ref={containerRef} sx={{ height: `${graphHeight}px`, width: '100%', padding: '40px 20px' }}>
-            <CosmographProvider nodes={vertexes} links={edges}>
-                <Box sx={{ paddingTop: 1, paddingBottom: 1 }}>
-                    Graph visualization of the path connections
-                </Box>
-                <Cosmograph<Vertex, Edge>
-                nodeColor={(d) => d.color || null}
-                nodeLabelAccessor={(d) => d.title}
-                nodeSize={15}
-                nodeLabelColor={() => "white"}
-                hoveredNodeLabelColor={() => "white"}
-                showTopLabels={true}
-                showTopLabelsLimit={20}
-                showTopLabelsValueKey="rank"
-                showDynamicLabels={true}
-                fitViewOnInit={false}
-                initialZoomLevel={0.8}
-                disableSimulation={true}
-                spaceSize={8192}
-                curvedLinks={true}
-                linkColor={(d) => d.color || null}
-                linkWidth={4}
-            />
-            </CosmographProvider>
+        <Box ref={containerRef} sx={{ height: `${graphHeight}px`, width: '100%', marginBottom: '20px' }}>
+            {vertexes.length > 0 && (
+                <SigmaContainer
+                    style={{ height: '100%', width: '100%' }}
+                    settings={{
+                        edgeProgramClasses: {
+                            curved: EdgeCurveProgram,
+                        },
+                        defaultEdgeType: 'curved',
+                    }}
+                >
+                    <GraphLoader vertexes={vertexes} edges={edges} />
+                </SigmaContainer>
+            )}
         </Box>
     );
 }

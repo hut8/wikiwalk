@@ -15,12 +15,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: wikiwalk-ui/package-lock.json
+
       - name: Install OS dependencies
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Install UI dependencies
+        run: npm install
+        working-directory: wikiwalk-ui
+
+      - name: Build UI
+        run: npm run build
+        working-directory: wikiwalk-ui
+
       - name: Run tests
-        run: cargo test --verbose
+        run: WIKIWALK_SKIP_FRONTEND_BUILD=1 cargo test --verbose
       - name: Build server
-        run: cargo build --release --bin server
+        run: WIKIWALK_SKIP_FRONTEND_BUILD=1 cargo build --release --bin server
       - name: Build tool
         run: cargo build --release --bin tool
       - name: Upload build artifacts
