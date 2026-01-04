@@ -5,6 +5,7 @@ import './index.css'
 import './i18n'
 import * as Sentry from "@sentry/react";
 import { ErrorBoundary } from './ErrorBoundary.tsx';
+import { ThemeProvider } from './ThemeProvider.tsx';
 
 import {
   createBrowserRouter,
@@ -42,9 +43,11 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <React.Suspense fallback={<div>Loading...</div>}>
-        <RouterProvider router={router} />
-      </React.Suspense>
+      <ThemeProvider>
+        <React.Suspense fallback={<div>Loading...</div>}>
+          <RouterProvider router={router} />
+        </React.Suspense>
+      </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 )
