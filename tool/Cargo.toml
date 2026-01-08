@@ -20,7 +20,7 @@ reqwest = { version = "0.12.12", features = [
     "stream",
     "rustls-tls",
 ], default-features = false }
-sea-orm = { version = "1.0.1", features = [
+sea-orm = { version = "1.1.19", features = [
     "sqlx-sqlite",
     "runtime-tokio-rustls",
     "macros",

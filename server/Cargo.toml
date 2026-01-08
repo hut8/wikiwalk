@@ -7,7 +7,7 @@ edition = "2021"
 wikiwalk = { path = "../wikiwalk" }
 log = "*"
 dirs = "6.0"
-sea-orm = { version = "1.0.1", features = [
+sea-orm = { version = "1.1.19", features = [
   "sqlx-sqlite",
   "runtime-tokio-rustls",
   "macros",
