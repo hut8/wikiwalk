@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, FC } from "react";
 import { SigmaContainer, useLoadGraph, useSetSettings, useSigma } from "@react-sigma/core";
 import EdgeCurveProgram from "@sigma/edge-curve";
 import Graph from "graphology";
-import { Box } from "@mui/material";
+import { Box, useTheme } from "@mui/material";
 import { Edge, Vertex, PagePaths, pathsGraph } from "./service";
 import "@react-sigma/core/lib/style.css";
 
@@ -23,6 +23,7 @@ const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
     const loadGraph = useLoadGraph();
     const sigma = useSigma();
     const setSettings = useSetSettings();
+    const theme = useTheme();
 
     // Load graph data
     useEffect(() => {
@@ -62,16 +63,16 @@ const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
         loadGraph(graph);
     }, [loadGraph, vertexes, edges]);
 
-    // Configure Sigma settings
+    // Configure Sigma settings with theme-aware label color
     useEffect(() => {
         setSettings({
             renderEdgeLabels: false,
-            labelColor: { color: '#ffffff' },
+            labelColor: { color: theme.palette.mode === 'dark' ? '#ffffff' : '#000000' },
             labelSize: 14,
             labelWeight: 'normal',
             labelRenderedSizeThreshold: 0,
         });
-    }, [setSettings]);
+    }, [setSettings, theme.palette.mode]);
 
     // Set initial camera position
     useEffect(() => {
@@ -88,6 +89,7 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
     const [edges, setEdges] = useState<Edge[]>([]);
     const [graphHeight, setGraphHeight] = useState<number>(600);
     const containerRef = useRef<HTMLDivElement>(null);
+    const theme = useTheme();
 
     useEffect(() => {
         const graph = pathsGraph(paths);
@@ -125,7 +127,11 @@ export function PathNetworkGraph({ paths }: { paths: PagePaths }) {
         <Box ref={containerRef} sx={{ height: `${graphHeight}px`, width: '100%', marginBottom: '20px' }}>
             {vertexes.length > 0 && (
                 <SigmaContainer
-                    style={{ height: '100%', width: '100%' }}
+                    style={{
+                        height: '100%',
+                        width: '100%',
+                        backgroundColor: theme.palette.background.default
+                    }}
                     settings={{
                         edgeProgramClasses: {
                             curved: EdgeCurveProgram,
