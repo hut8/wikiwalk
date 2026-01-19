@@ -10,6 +10,7 @@ i18n
   .init({
     fallbackLng: 'en',
     defaultNS: 'common',
+    ns: ['common'],
     load: 'languageOnly',
     debug: false,
 

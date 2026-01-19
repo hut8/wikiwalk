@@ -23,6 +23,7 @@ import { StatusPanel } from "./StatusPanel";
 import { IconButton, Link } from "@mui/material";
 import DeviceSwitch from "./DeviceSwitch";
 import LanguageSwitcher from "./LanguageSwitcher";
+import DarkModeToggle from "./DarkModeToggle";
 
 const queryClient = new QueryClient();
 
@@ -112,6 +113,7 @@ export default function App() {
                                 </>
                             } />
                         <Box sx={{ flexGrow: 0, marginLeft: 3 }}>
+                            <DarkModeToggle />
                             <LanguageSwitcher />
                             <IconButton onClick={() => openGitHub()} sx={{ p: 0 }}>
                                 <GitHubIcon sx={{ color: "white" }} />
