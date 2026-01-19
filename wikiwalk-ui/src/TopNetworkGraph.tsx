@@ -45,12 +45,14 @@ const GraphLoader: FC<GraphLoaderProps> = ({ vertexes, edges }) => {
     useEffect(() => {
         const graph = new Graph();
 
-        // Add nodes without pre-calculated positions (let ForceAtlas2 calculate them)
+        // Add nodes with random initial positions (ForceAtlas2 will adjust them)
         // Only set label for top nodes
         vertexes.forEach(vertex => {
             const showLabel = vertex.top;
             graph.addNode(vertex.id, {
                 label: showLabel ? vertex.title : undefined,
+                x: Math.random() * 100,
+                y: Math.random() * 100,
                 size: 5, // Slightly larger than 1px for better visibility
                 color: vertex.color || '#666',
                 rank: vertex.rank || 0,
