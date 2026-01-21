@@ -1553,7 +1553,7 @@ dependencies = [
  "gix-chunk",
  "gix-features",
  "gix-hash",
- "memmap2 0.9.8",
+ "memmap2 0.9.9",
  "thiserror 1.0.69",
 ]
 
@@ -1716,7 +1716,7 @@ dependencies = [
  "hashbrown 0.14.5",
  "itoa",
  "libc",
- "memmap2 0.9.8",
+ "memmap2 0.9.9",
  "rustix 0.38.44",
  "smallvec",
  "thiserror 1.0.69",
@@ -1796,7 +1796,7 @@ dependencies = [
  "gix-hashtable",
  "gix-object",
  "gix-path",
- "memmap2 0.9.8",
+ "memmap2 0.9.9",
  "smallvec",
  "thiserror 1.0.69",
 ]
@@ -1843,7 +1843,7 @@ dependencies = [
  "gix-tempfile",
  "gix-utils",
  "gix-validate 0.8.5",
- "memmap2 0.9.8",
+ "memmap2 0.9.9",
  "thiserror 1.0.69",
  "winnow 0.6.26",
 ]
@@ -2671,9 +2671,9 @@ dependencies = [
 
 [[package]]
 name = "memmap2"
-version = "0.9.8"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843a98750cd611cc2965a8213b53b43e715f13c37a9e096c6408e69990961db7"
+checksum = "744133e4a0e0a658e1374cf3bf8e415c4052a15a111acd372764c55b4177d490"
 dependencies = [
  "libc",
 ]
@@ -4611,7 +4611,7 @@ dependencies = [
  "itertools",
  "log",
  "lrumap",
- "memmap2 0.9.8",
+ "memmap2 0.9.9",
  "num_cpus",
  "parse-mediawiki-sql 0.10.0 (git+https://github.com/hut8/parse-mediawiki-sql?branch=hut8%2Ffix-pagelinks-definition)",
  "rayon",
@@ -5085,7 +5085,7 @@ dependencies = [
  "futures",
  "itertools",
  "log",
- "memmap2 0.9.8",
+ "memmap2 0.9.9",
  "num_cpus",
  "parse-mediawiki-sql 0.10.0 (git+https://github.com/hut8/parse-mediawiki-sql?rev=6e08f0d)",
  "sea-orm",
