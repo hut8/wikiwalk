@@ -6,16 +6,14 @@ fn main() {
     let ui_dir = PathBuf::from("../wikiwalk-ui")
         .canonicalize()
         .expect("wikiwalk-ui directory should exist");
+    let ui_dist = ui_dir.join("dist");
     
     if std::env::var("WIKIWALK_SKIP_FRONTEND_BUILD").is_ok() {
-        let ui_dist = ui_dir.join("dist");
         static_files::resource_dir(ui_dist)
             .build()
             .unwrap();
         return;
     }
-    
-    let ui_dist = ui_dir.join("dist");
     
     NpmBuild::new(ui_dir)
         .install()
