@@ -1,18 +1,28 @@
 use static_files::NpmBuild;
+use std::path::PathBuf;
 
 fn main() {
+    // Get absolute path to wikiwalk-ui
+    let ui_dir = PathBuf::from("../wikiwalk-ui")
+        .canonicalize()
+        .expect("wikiwalk-ui directory should exist");
+    
     if std::env::var("WIKIWALK_SKIP_FRONTEND_BUILD").is_ok() {
-        static_files::resource_dir("../wikiwalk-ui/dist")
+        let ui_dist = ui_dir.join("dist");
+        static_files::resource_dir(ui_dist)
             .build()
             .unwrap();
         return;
     }
-    NpmBuild::new("../wikiwalk-ui")
+    
+    let ui_dist = ui_dir.join("dist");
+    
+    NpmBuild::new(ui_dir)
         .install()
         .unwrap() // runs npm install
         .run("build")
         .unwrap() // runs npm run build
-        .target("../wikiwalk-ui/dist")
+        .target(ui_dist)
         .change_detection()
         .to_resource_dir()
         .build()
