@@ -26,7 +26,7 @@ fern = { version = "0.7.1", features = ["chrono", "colored"] }
 actix-files = "0.6.10"
 actix-cors = "0.7.0"
 mime = "0.3.17"
-rand = "0.9"
+rand = "0.10"
 
 [build-dependencies]
 static-files = "0.3.1"
