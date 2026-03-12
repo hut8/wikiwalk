@@ -25,7 +25,7 @@ tokio = { version = "1", features = ["full"] }
 chrono = "0.4.43"
 dirs = "6.0.0"
 thiserror = "2.0.18"
-anyhow = "1.0.101"
+anyhow = "1.0.102"
 
 [build-dependencies]
 vergen = { version = "8.3.2", features = ["gitoxide", "git"] }
